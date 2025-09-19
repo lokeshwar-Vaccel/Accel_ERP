@@ -17,6 +17,7 @@ interface Customer {
   email?: string;
   phone?: string;
   panNumber?: string;
+  notes?: string;
   addresses: Array<{
     id: number;
     address: string;
@@ -26,8 +27,10 @@ interface Customer {
     isPrimary: boolean;
     gstNumber?: string;
     contactPersonName?: string;
+    designation?: string;
     email?: string;
     phone?: string;
+    tehsil?: string;
     registrationStatus: 'registered' | 'non_registered';
   }>;
 }
@@ -60,8 +63,10 @@ interface Address {
   gstNumber?: string;
   notes?: string;
   contactPersonName?: string;
+  designation?: string;
   email?: string;
   phone?: string;
+  tehsil?: string;
   registrationStatus: 'registered' | 'non_registered';
 }
 
@@ -77,16 +82,16 @@ interface EnquiryFormData {
   plannedFollowUpDate: string;
   sourceFrom: string;
   numberOfFollowUps: string;
-  
+
   // Customer Information
   customerName: string;
+  corporateName: string;
   alice?: string;
-  designation?: string;
   panNumber: string;
-  
+
   // Address Information
   addresses: Address[];
-  
+
   // DG Requirements
   kva: string;
   phase: string;
@@ -96,7 +101,7 @@ interface EnquiryFormData {
   dgOwnership: string;
   financeRequired: boolean;
   financeCompany: string;
-  
+
   // Employee Information
   assignedEmployeeCode: string;
   assignedEmployeeName: string;
@@ -104,7 +109,7 @@ interface EnquiryFormData {
   referenceEmployeeName: string;
   referenceEmployeeMobileNumber: string;
   referredBy: string;
-  
+
   // Additional Information
   events: string;
   remarks: string;
@@ -123,6 +128,7 @@ interface EnquiryFormErrors {
   sourceFrom?: string;
   numberOfFollowUps?: string;
   customerName?: string;
+  corporateName?: string;
   panNumber?: string;
   addresses?: string | Record<number, string>;
   addressFields?: Record<number, {
@@ -152,13 +158,13 @@ const initialFormData: EnquiryFormData = {
   plannedFollowUpDate: '',
   sourceFrom: '',
   numberOfFollowUps: '0',
-  
+
   // Customer Information
   customerName: '',
+  corporateName: '',
   alice: '',
-  designation: '',
   panNumber: '',
-  
+
   // Address Information
   addresses: [{
     id: 1,
@@ -170,11 +176,13 @@ const initialFormData: EnquiryFormData = {
     gstNumber: '',
     notes: '',
     contactPersonName: '',
+    designation: '',
     email: '',
     phone: '',
+    tehsil: '',
     registrationStatus: 'non_registered' as 'registered' | 'non_registered'
   }],
-  
+
   // DG Requirements
   kva: '',
   phase: 'three_phase',
@@ -184,7 +192,7 @@ const initialFormData: EnquiryFormData = {
   dgOwnership: 'first_time_buyer',
   financeRequired: false,
   financeCompany: '',
-  
+
   // Employee Information
   assignedEmployeeCode: '',
   assignedEmployeeName: '',
@@ -192,7 +200,7 @@ const initialFormData: EnquiryFormData = {
   referenceEmployeeName: '',
   referenceEmployeeMobileNumber: '',
   referredBy: '',
-  
+
   // Additional Information
   events: '',
   remarks: '',
@@ -224,54 +232,95 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
   useEffect(() => {
     if (initialData && mode === 'edit') {
       console.log('Edit mode - initial data:', initialData);
+
+      // Handle customer data - check for nested customer object or direct fields
+      const customerName = initialData.customerName || 
+                          initialData.customer?.name || 
+                          initialData.corporateName || 
+                          '';
       
+      const customerPanNumber = initialData.panNumber || 
+                               initialData.customer?.panNumber || 
+                               '';
+      
+      const customerAlice = initialData.alice || 
+                           initialData.customer?.alice || 
+                           '';
+      
+      const customerNotes = initialData.notes || 
+                           initialData.customer?.notes || 
+                           '';
+
       // Handle edit mode data population
       const editFormData = {
         ...initialFormData,
         ...initialData,
+        // Customer information
+        customerName: customerName,
+        corporateName: initialData.corporateName || '',
+        panNumber: customerPanNumber,
+        alice: customerAlice,
+        notes: customerNotes,
+        financeRequired: (() => {
+          const value = initialData.financeRequired;
+          console.log('Finance Required Debug - Value:', value, 'Type:', typeof value);
+          
+          // Only set to true if explicitly true or string 'true'
+          if (value === true || value === 'true') {
+            console.log('Finance Required Debug - Setting to TRUE');
+            return true;
+          } else {
+            console.log('Finance Required Debug - Setting to FALSE');
+            return false;
+          }
+        })(),
         // Handle addresses properly for edit mode
-        addresses: initialData.addresses && initialData.addresses.length > 0 
+        addresses: initialData.addresses && initialData.addresses.length > 0
           ? initialData.addresses.map((addr: any, index: number) => ({
-              id: addr.id || index + 1,
-              address: addr.address || '',
-              state: addr.state || '',
-              district: addr.district || '',
-              pincode: addr.pincode || '',
-              isPrimary: addr.isPrimary || index === 0,
-              gstNumber: addr.gstNumber || '',
-              notes: addr.notes || '',
-              contactPersonName: addr.contactPersonName || '',
-              email: addr.email || '',
-              phone: addr.phone || '',
-              registrationStatus: addr.registrationStatus || 'non_registered'
-            }))
+            id: addr.id || index + 1,
+            address: addr.address || '',
+            state: addr.state || '',
+            district: addr.district || '',
+            pincode: addr.pincode || '',
+            isPrimary: addr.isPrimary || index === 0,
+            gstNumber: addr.gstNumber || '',
+            notes: addr.notes || '',
+            contactPersonName: addr.contactPersonName || '',
+            designation: addr.designation || '',
+            email: addr.email || '',
+            phone: addr.phone || '',
+            tehsil: addr.tehsil || '',
+            registrationStatus: addr.registrationStatus || 'non_registered'
+          }))
           : [{
-              id: 1,
-              address: initialData.address || '',
-              state: initialData.state || '',
-              district: initialData.district || '',
-              pincode: initialData.pincode || '',
-              isPrimary: true,
-              gstNumber: '',
-              notes: '',
-              contactPersonName: '',
-              email: '',
-              phone: '',
-              registrationStatus: 'non_registered'
-            }],
+            id: 1,
+            address: initialData.address || '',
+            state: initialData.state || '',
+            district: initialData.district || '',
+            pincode: initialData.pincode || '',
+            isPrimary: true,
+            gstNumber: '',
+            notes: '',
+            contactPersonName: '',
+            designation: '',
+            email: '',
+            phone: '',
+            tehsil: '',
+            registrationStatus: 'non_registered'
+          }],
         // Ensure required fields have fallback values
         enquiryStatus: (initialData.enquiryStatus || 'open').toLowerCase(),
         enquiryType: (initialData.enquiryType || 'hot').toLowerCase(),
         enquiryStage: (initialData.enquiryStage || 'prospecting').toLowerCase().replace(/-/g, '_'),
         source: initialData.source || '',
-        eoPoDate: initialData.eoPoDate ? 
-          (typeof initialData.eoPoDate === 'string' ? 
-            initialData.eoPoDate.split('T')[0] : 
+        eoPoDate: initialData.eoPoDate ?
+          (typeof initialData.eoPoDate === 'string' ?
+            initialData.eoPoDate.split('T')[0] :
             new Date(initialData.eoPoDate).toISOString().split('T')[0]
           ) : '',
-        plannedFollowUpDate: initialData.plannedFollowUpDate ? 
-          (typeof initialData.plannedFollowUpDate === 'string' ? 
-            initialData.plannedFollowUpDate.split('T')[0] : 
+        plannedFollowUpDate: initialData.plannedFollowUpDate ?
+          (typeof initialData.plannedFollowUpDate === 'string' ?
+            initialData.plannedFollowUpDate.split('T')[0] :
             new Date(initialData.plannedFollowUpDate).toISOString().split('T')[0]
           ) : '',
         sourceFrom: initialData.sourceFrom || '',
@@ -285,17 +334,16 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
         kva: String(initialData.kva || ''),
         quantity: String(initialData.quantity || '1'),
         // Handle enquiry date properly for HTML date input
-        enquiryDate: initialData.enquiryDate ? 
-          (typeof initialData.enquiryDate === 'string' ? 
-            initialData.enquiryDate.split('T')[0] : 
+        enquiryDate: initialData.enquiryDate ?
+          (typeof initialData.enquiryDate === 'string' ?
+            initialData.enquiryDate.split('T')[0] :
             new Date(initialData.enquiryDate).toISOString().split('T')[0]
-          ) : 
+          ) :
           new Date().toISOString().split('T')[0]
       };
-      
+
       console.log('Edit mode - processed form data:', editFormData);
-      console.log('Initial enquiryDate:', initialData.enquiryDate, 'type:', typeof initialData.enquiryDate);
-      console.log('Processed enquiryDate:', editFormData.enquiryDate, 'type:', typeof editFormData.enquiryDate);
+      console.log('Customer Name:', customerName);
       setFormData(editFormData);
     } else {
       setFormData(initialFormData);
@@ -351,7 +399,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
 
     // Customer Information Validation
     if (!formData.customerName.trim()) {
-      newErrors.customerName = 'Customer name is required';
+      newErrors.customerName = 'Corporate name is required';
     }
 
     // PAN Number Validation
@@ -376,7 +424,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
       let hasAddressErrors = false;
       let hasGstErrors = false;
       let hasFieldErrors = false;
-      
+
       formData.addresses.forEach((addr, index) => {
         const addrErrors: string[] = [];
         const fieldErrors: {
@@ -385,7 +433,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
           district?: string;
           pincode?: string;
         } = {};
-        
+
         if (!addr.address.trim()) {
           addrErrors.push('Address is required');
           fieldErrors.address = 'Address is required';
@@ -405,7 +453,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
           addrErrors.push('Pincode must be exactly 6 digits');
           fieldErrors.pincode = 'Pincode must be exactly 6 digits';
         }
-        
+
         // GST Number Validation
         if (addr.gstNumber && addr.gstNumber.trim()) {
           if (!validateGST(addr.gstNumber.trim())) {
@@ -413,18 +461,18 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
             hasGstErrors = true;
           }
         }
-        
+
         if (addrErrors.length > 0) {
           addressErrors[index] = addrErrors.join(', ');
           hasAddressErrors = true;
         }
-        
+
         if (Object.keys(fieldErrors).length > 0) {
           addressFieldErrors[addr.id] = fieldErrors;
           hasFieldErrors = true;
         }
       });
-      
+
       if (hasAddressErrors) {
         newErrors.addresses = addressErrors;
       }
@@ -477,9 +525,9 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (loading) return;
-    
+
     if (!validateForm()) {
       toast.error('Please fix the errors before submitting');
       return;
@@ -499,13 +547,17 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
         plannedFollowUpDate: formData.plannedFollowUpDate ? new Date(formData.plannedFollowUpDate) : undefined,
         sourceFrom: formData.sourceFrom.trim(),
         numberOfFollowUps: parseInt(formData.numberOfFollowUps) || 0,
-        customerName: formData.customerName.trim(),
+        customerName: formData.corporateName.trim(), // Use corporateName as the main customer name
+        corporateName: formData.corporateName.trim(),
         kva: parseInt(formData.kva) || 0,
         quantity: parseInt(formData.quantity) || 1,
         phase: formData.phase || 'three_phase',
         dgOwnership: formData.dgOwnership || 'first_time_buyer',
         financeRequired: Boolean(formData.financeRequired),
         numberOfDG: 1,
+        // Include customer selection information
+        selectedCustomerId: selectedCustomer?._id || null,
+        isExistingCustomer: !!selectedCustomer,
         addresses: formData.addresses.map(addr => ({
           id: addr.id,
           address: addr.address.trim(),
@@ -517,17 +569,16 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
           ...(addr.gstNumber?.trim() && { gstNumber: addr.gstNumber.trim() }),
           ...(addr.notes?.trim() && { notes: addr.notes.trim() }),
           ...(addr.contactPersonName?.trim() && { contactPersonName: addr.contactPersonName.trim() }),
+          ...(addr.designation?.trim() && { designation: addr.designation.trim() }),
           ...(addr.email?.trim() && { email: addr.email.trim() }),
-          ...(addr.phone?.trim() && { phone: addr.phone.trim() })
+          ...(addr.phone?.trim() && { phone: addr.phone.trim() }),
+          ...(addr.tehsil?.trim() && { tehsil: addr.tehsil.trim() })
         }))
       };
 
       // Add optional fields only if they have values
       if (formData.alice?.trim()) {
         payload.alice = formData.alice.trim();
-      }
-      if (formData.designation?.trim()) {
-        payload.designation = formData.designation.trim();
       }
       if (formData.panNumber?.trim()) {
         payload.panNumber = formData.panNumber.trim();
@@ -578,7 +629,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
       console.log('employeeStatus type:', typeof payload.employeeStatus, 'value:', payload.employeeStatus);
 
       let response;
-      
+
       if (mode === 'create') {
         console.log('Creating new DG Enquiry...');
         response = await apiClient.dgSales.enquiries.create(payload);
@@ -589,15 +640,15 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
         console.log('Updating existing DG Enquiry...');
         console.log('Enquiry ID:', initialData?._id);
         console.log('Update payload:', payload);
-        
+
         if (!initialData?._id) {
           throw new Error('Enquiry ID is required for update');
         }
-        
+
         try {
           response = await apiClient.dgSales.enquiries.update(initialData._id, payload);
           console.log('Update response:', response);
-          
+
           if (response.success) {
             toast.success('Enquiry updated successfully!');
           } else {
@@ -612,10 +663,10 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
 
       onSuccess();
       onClose();
-      
+
     } catch (error: any) {
       console.error('Error saving enquiry:', error);
-      
+
       if (error.response) {
         toast.error(error.response.message);
       } else {
@@ -631,7 +682,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
       ...prev,
       [field]: value
     }));
-    
+
     // Clear error when user starts typing - only for fields that exist in errors
     if (errors[field as keyof EnquiryFormErrors]) {
       setErrors(prev => ({
@@ -643,35 +694,67 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
 
   const handleCustomerSelect = (customer: Customer) => {
     setSelectedCustomer(customer);
-    
+    console.log("=== CUSTOMER SELECT DEBUG ===");
+    console.log("Full customer object:", customer);
+    console.log("Available customer fields:", Object.keys(customer));
+    console.log("customer.panNumber:", customer.panNumber);
+    console.log("customer.alice:", customer.alice);
+    console.log("customer.designation:", customer.designation);
+    console.log("customer.notes:", customer.notes);
+    console.log("customer.name:", customer.name);
+
+    // Get primary address for designation and other details
+    const primaryAddress = customer.addresses.find(addr => addr.isPrimary) || customer.addresses[0];
+    console.log("primaryAddress:", primaryAddress);
+    console.log("primaryAddress.designation:", primaryAddress?.designation);
+    console.log("primaryAddress.contactPersonName:", primaryAddress?.contactPersonName);
+    console.log("primaryAddress.email:", primaryAddress?.email);
+    console.log("primaryAddress.phone:", primaryAddress?.phone);
+
     // Auto-fill customer details
-    setFormData(prev => ({
-      ...prev,
-      customerName: customer.name,
-      alice: customer.alice || '',
-      designation: customer.designation || '',
-      panNumber: customer.panNumber || '',
-      // Update addresses with customer's addresses
-      addresses: customer.addresses.length > 0 ? customer.addresses.map((addr, index) => ({
-        id: addr.id || index + 1,
-        address: addr.address || '',
-        state: addr.state || '',
-        district: addr.district || '',
-        pincode: addr.pincode || '',
-        isPrimary: addr.isPrimary || index === 0,
-        gstNumber: addr.gstNumber || '',
-        notes: '',
-        contactPersonName: addr.contactPersonName || '',
-        email: addr.email || '',
-        phone: addr.phone || '',
-        registrationStatus: addr.registrationStatus || 'non_registered'
-      })) : prev.addresses
-    }));
+    setFormData(prev => {
+      console.log("About to set panNumber:", customer.panNumber);
+      console.log("panNumber || '':", customer.panNumber || '');
+      
+      const updatedData = {
+        ...prev,
+        customerName: customer.addresses.find(addr => addr.isPrimary)?.contactPersonName?.trim() || customer.name,
+        corporateName: customer.name, // Set corporateName to the customer name when customer is selected
+        alice: customer.alice || '',
+        panNumber: customer.panNumber || '', // This will be empty if customer doesn't have PAN number
+        notes: customer.notes || '',
+        // Update addresses with customer's addresses
+        addresses: customer.addresses.length > 0 ? customer.addresses.map((addr, index) => ({
+          id: addr.id || index + 1,
+          address: addr.address || '',
+          state: addr.state || '',
+          district: addr.district || '',
+          pincode: addr.pincode || '',
+          isPrimary: addr.isPrimary || index === 0,
+          gstNumber: addr.gstNumber || '',
+          contactPersonName: addr.contactPersonName || '',
+          designation: addr.designation || '',
+          email: addr.email || '',
+          phone: addr.phone || '',
+          tehsil: addr.tehsil || '',
+          registrationStatus: addr.registrationStatus || 'non_registered'
+        })) : prev.addresses
+      };
+      
+      // Debug: Log the updated form data
+      console.log("Updated formData after customer select:", {
+        panNumber: updatedData.panNumber,
+        notes: updatedData.notes,
+        addresses: updatedData.addresses
+      });
+      
+      return updatedData;
+    });
   };
 
   const handleSalesEngineerSelect = (salesEngineer: SalesEngineer) => {
     setSelectedSalesEngineer(salesEngineer);
-    
+
     // Auto-fill employee details
     setFormData(prev => ({
       ...prev,
@@ -694,6 +777,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
       contactPersonName: '',
       email: '',
       phone: '',
+      tehsil: '',
       registrationStatus: 'non_registered'
     };
     setFormData(prev => ({
@@ -795,11 +879,10 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`px-4 py-3 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap ${
-                    activeTab === tab.id
+                  className={`px-4 py-3 text-sm font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === tab.id
                       ? 'bg-blue-50 text-blue-700 border-b-2 border-blue-700'
                       : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                  }`}
+                    }`}
                 >
                   <IconComponent className="w-4 h-4 inline mr-2" />
                   {tab.label}
@@ -837,7 +920,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
               </div>
             </div>
           )}
-          
+
           <div className="p-6">
             {/* Basic Information Tab */}
             {activeTab === 'basic' && (
@@ -988,24 +1071,24 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                   {/* Left: Basic Information */}
                   <div className="w-full lg:w-1/2 border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col p-6">
                     <div className="flex items-center justify-between mb-6">
-                  <div>
+                      <div>
                         <h3 className="text-xl font-bold text-gray-800">Basic Information</h3>
                         <p className="text-sm text-gray-600 mt-1">Customer details and contact information</p>
-                  </div>
+                      </div>
                     </div>
-                  <div>
+                    <div>
                       {/* Customer Name */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Name *
-                    </label>
+                         Corporate Name *
+                        </label>
                         <CustomerSearchDropdown
-                      value={formData.customerName}
-                          onChange={(value) => handleInputChange('customerName', value)}
+                          value={formData.corporateName}
+                          onChange={(value) => handleInputChange('corporateName', value)}
                           onCustomerSelect={handleCustomerSelect}
                           placeholder="Search customers or enter new name"
-                      error={errors.customerName}
-                    />
+                          error={errors.corporateName}
+                        />
                         {selectedCustomer && (
                           <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
                             <div className="flex items-center justify-between">
@@ -1015,7 +1098,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                                   Customer selected: {selectedCustomer.name}
                                   {selectedCustomer.alice && ` (${selectedCustomer.alice})`}
                                 </span>
-                  </div>
+                              </div>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -1023,8 +1106,8 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                                   setFormData(prev => ({
                                     ...prev,
                                     customerName: '',
+                                    corporateName: '',
                                     alice: '',
-                                    designation: '',
                                     panNumber: '',
                                     addresses: [{
                                       id: 1,
@@ -1036,8 +1119,10 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                                       gstNumber: '',
                                       notes: '',
                                       contactPersonName: '',
+                                      designation: '',
                                       email: '',
                                       phone: '',
+                                      tehsil: '',
                                       registrationStatus: 'non_registered'
                                     }]
                                   }));
@@ -1046,34 +1131,21 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                               >
                                 <X className="h-4 w-4" />
                               </button>
-                  </div>
+                            </div>
                           </div>
                         )}
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4 mt-4">
-                      {/* Designation */}
-                  <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Designation
-                    </label>
-                    <Input
-                      value={formData.designation}
-                      onChange={(e) => handleInputChange('designation', e.target.value)}
-                      placeholder="Enter designation"
-                    />
-                  </div>
-                    </div>
                     <div className="mt-4">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         PAN Number
-                    </label>
-                    <Input
+                      </label>
+                      <Input
                         value={formData.panNumber || ''}
                         onChange={(e) => {
                           const value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
                           handleInputChange('panNumber', value);
-                          
+
                           // Real-time validation
                           if (value.length === 10 && !validatePAN(value)) {
                             setErrors(prev => ({
@@ -1094,32 +1166,32 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                       {formData.panNumber && formData.panNumber.length === 10 && !errors.panNumber && (
                         <p className="mt-1 text-sm text-green-600">✓ Valid PAN format</p>
                       )}
-                  </div>
+                    </div>
 
                     <div className='mt-4'>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Notes
-                    </label>
+                      </label>
                       <textarea
                         value={formData.notes}
                         onChange={(e) => handleInputChange('notes', e.target.value)}
                         rows={3}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         placeholder="Additional notes"
-                    />
-                  </div>
+                      />
+                    </div>
 
                     {/* Alice (Alias) Field */}
                     <div className="mt-4">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Alice
-                    </label>
-                    <Input
+                      </label>
+                      <Input
                         value={formData.alice || ''}
                         onChange={(e) => handleInputChange('alice', e.target.value)}
                         placeholder="Enter customer alias/short name"
-                    />
-                  </div>
+                      />
+                    </div>
 
                   </div>
 
@@ -1129,17 +1201,17 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                       <div className="flex items-center justify-between mb-2">
                         <h3 className="text-lg font-semibold text-gray-800">Addresses</h3>
                         <button
-                    type="button"
-                    onClick={addAddress}
+                          type="button"
+                          onClick={addAddress}
                           className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-                  >
-                    Add Address
+                        >
+                          Add Address
                         </button>
-                </div>
+                      </div>
 
                       {/* Scrollable container for address list */}
                       <div className="max-h-[600px] overflow-y-auto pr-1 space-y-2">
-                {formData.addresses.map((address, index) => (
+                        {formData.addresses.map((address, index) => (
                           <div
                             key={address.id}
                             className="border rounded px-3 pb-3 pt-2 bg-white flex justify-between"
@@ -1149,31 +1221,30 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                   Address {index + 1} *{' '}
                                   {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
-                        </label>
+                                </label>
                                 {!address.isPrimary && (
                                   <button
-                            type="button"
+                                    type="button"
                                     onClick={() => setPrimaryAddress(address.id)}
                                     className="px-2 py-1 mb-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs"
-                          >
+                                  >
                                     Set as Primary
                                   </button>
-                        )}
-                      </div>
-                        <textarea
-                          value={address.address}
-                          onChange={(e) => updateAddress(address.id, 'address', e.target.value)}
-                                className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${
-                                  errors.addressFields && errors.addressFields[address.id]?.address 
-                                    ? 'border-red-300' 
+                                )}
+                              </div>
+                              <textarea
+                                value={address.address}
+                                onChange={(e) => updateAddress(address.id, 'address', e.target.value)}
+                                className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${errors.addressFields && errors.addressFields[address.id]?.address
+                                    ? 'border-red-300'
                                     : 'border-gray-300'
-                                }`}
+                                  }`}
                                 placeholder="Enter full address"
-                          rows={3}
-                        />
-                        {errors.addressFields && errors.addressFields[address.id]?.address && (
-                          <p className="text-red-500 text-xs mt-1">{errors.addressFields[address.id].address}</p>
-                        )}
+                                rows={3}
+                              />
+                              {errors.addressFields && errors.addressFields[address.id]?.address && (
+                                <p className="text-red-500 text-xs mt-1">{errors.addressFields[address.id].address}</p>
+                              )}
                               {/* Registration Status per address */}
                               <div className="mt-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Registration Status *</label>
@@ -1185,7 +1256,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                                   <option value="registered">Registered</option>
                                   <option value="non_registered">Non Registered</option>
                                 </select>
-                      </div>
+                              </div>
                               {/* GST Number per address */}
                               <div className="mt-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1197,7 +1268,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                                   onChange={(e) => {
                                     const value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15);
                                     updateAddress(address.id, 'gstNumber', value);
-                                    
+
                                     // Real-time validation
                                     if (value.length === 15 && !validateGST(value)) {
                                       console.log('GST validation failed for address', address.id, 'value:', value);
@@ -1238,11 +1309,10 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                                       });
                                     }
                                   }}
-                                  className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${
-                                    errors.gstNumber && (errors.gstNumber as Record<number, string>)?.[address.id] 
-                                      ? 'border-red-300' 
+                                  className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${errors.gstNumber && (errors.gstNumber as Record<number, string>)?.[address.id]
+                                      ? 'border-red-300'
                                       : 'border-gray-300'
-                                  }`}
+                                    }`}
                                   placeholder="GST Number (e.g., 33AABCT3518Q1Z2)"
                                   maxLength={15}
                                 />
@@ -1258,7 +1328,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                               </div>
                               {/* Per-address contact details */}
                               <div className="grid grid-cols-1 gap-2 mt-2">
-                      <div>
+                                <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
                                   <input
                                     type="text"
@@ -1266,6 +1336,16 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                                     onChange={(e) => updateAddress(address.id, 'contactPersonName', e.target.value)}
                                     className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
                                     placeholder="Contact person"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
+                                  <input
+                                    type="text"
+                                    value={address.designation || ''}
+                                    onChange={(e) => updateAddress(address.id, 'designation', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    placeholder="Designation"
                                   />
                                 </div>
                                 <div>
@@ -1293,67 +1373,64 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                               <div className="grid grid-cols-3 gap-2 mt-2">
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                          State *
-                        </label>
+                                    State *
+                                  </label>
                                   <input
                                     type="text"
-                          value={address.state}
-                          onChange={(e) => updateAddress(address.id, 'state', e.target.value)}
-                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${
-                                      errors.addressFields && errors.addressFields[address.id]?.state 
-                                        ? 'border-red-300' 
+                                    value={address.state}
+                                    onChange={(e) => updateAddress(address.id, 'state', e.target.value)}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${errors.addressFields && errors.addressFields[address.id]?.state
+                                        ? 'border-red-300'
                                         : 'border-gray-300'
-                                    }`}
+                                      }`}
                                     placeholder="State"
-                        />
-                        {errors.addressFields && errors.addressFields[address.id]?.state && (
-                          <p className="text-red-500 text-xs mt-1">{errors.addressFields[address.id].state}</p>
-                        )}
-                      </div>
-                      <div>
+                                  />
+                                  {errors.addressFields && errors.addressFields[address.id]?.state && (
+                                    <p className="text-red-500 text-xs mt-1">{errors.addressFields[address.id].state}</p>
+                                  )}
+                                </div>
+                                <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                          District *
-                        </label>
+                                    District *
+                                  </label>
                                   <input
                                     type="text"
-                          value={address.district}
-                          onChange={(e) => updateAddress(address.id, 'district', e.target.value)}
-                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${
-                                      errors.addressFields && errors.addressFields[address.id]?.district 
-                                        ? 'border-red-300' 
+                                    value={address.district}
+                                    onChange={(e) => updateAddress(address.id, 'district', e.target.value)}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${errors.addressFields && errors.addressFields[address.id]?.district
+                                        ? 'border-red-300'
                                         : 'border-gray-300'
-                                    }`}
+                                      }`}
                                     placeholder="District"
-                        />
-                        {errors.addressFields && errors.addressFields[address.id]?.district && (
-                          <p className="text-red-500 text-xs mt-1">{errors.addressFields[address.id].district}</p>
-                        )}
-                      </div>
-                      <div>
+                                  />
+                                  {errors.addressFields && errors.addressFields[address.id]?.district && (
+                                    <p className="text-red-500 text-xs mt-1">{errors.addressFields[address.id].district}</p>
+                                  )}
+                                </div>
+                                <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Pincode *
-                        </label>
+                                  </label>
                                   <input
                                     type="text"
-                          value={address.pincode}
+                                    value={address.pincode}
                                     onChange={(e) => {
                                       const value = e.target.value.replace(/\D/g, '').slice(0, 6);
                                       updateAddress(address.id, 'pincode', value);
                                     }}
-                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${
-                                      errors.addressFields && errors.addressFields[address.id]?.pincode 
-                                        ? 'border-red-300' 
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${errors.addressFields && errors.addressFields[address.id]?.pincode
+                                        ? 'border-red-300'
                                         : 'border-gray-300'
-                                    }`}
+                                      }`}
                                     placeholder="Pincode"
                                     pattern="[0-9]{6}"
                                     maxLength={6}
-                        />
-                        {errors.addressFields && errors.addressFields[address.id]?.pincode && (
-                          <p className="text-red-500 text-xs mt-1">{errors.addressFields[address.id].pincode}</p>
-                        )}
-                      </div>
-                      </div>
+                                  />
+                                  {errors.addressFields && errors.addressFields[address.id]?.pincode && (
+                                    <p className="text-red-500 text-xs mt-1">{errors.addressFields[address.id].pincode}</p>
+                                  )}
+                                </div>
+                              </div>
                               {formData.addresses.length > 1 && (
                                 <div className="mt-2">
                                   <button
@@ -1366,9 +1443,9 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                                   </button>
                                 </div>
                               )}
-                    </div>
-                  </div>
-                ))}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -1500,11 +1577,11 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
             {activeTab === 'employee' && (
               <div className="space-y-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Employee Information</h3>
-                
+
                 {/* Sales Engineer Selection */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select Sales Engineer *
+                    Select Sales Engineer 
                   </label>
                   <SalesEngineerSearchDropdown
                     value={formData.assignedEmployeeName}
@@ -1681,17 +1758,16 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-3 py-1 text-xs rounded-full ${
-                  activeTab === tab.id
+                className={`px-3 py-1 text-xs rounded-full ${activeTab === tab.id
                     ? 'bg-blue-100 text-blue-700'
                     : 'bg-gray-100 text-gray-600'
-                }`}
+                  }`}
               >
                 {index + 1}
               </button>
             ))}
           </div>
-          
+
           <div className="flex space-x-3">
             <Button
               variant="outline"
@@ -1714,7 +1790,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
             //   className={Object.keys(errors).length > 0 ? 'opacity-50 cursor-not-allowed' : ''}
             >
               <Save className="w-4 h-4 mr-2" />
-              {mode === 'create' ? 'Create Enquiry & Customer' : 'Update Enquiry'}
+              {mode === 'create' ? (selectedCustomer ? 'Create Enquiry (Update Customer)' : 'Create Enquiry & Customer') : 'Update Enquiry'}
               {Object.keys(errors).length > 0 && (
                 <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
                   {Object.keys(errors).length} error{Object.keys(errors).length > 1 ? 's' : ''}

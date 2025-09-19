@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthenticatedRequest } from '../types';
+import { AuthenticatedRequest, APIResponse } from '../types';
 import { AppError } from '../errors/AppError';
 import { DGQuotation } from '../models/DGQuotation';
 import { DGEnquiry } from '../models/DGEnquiry';
@@ -457,6 +457,128 @@ export const getQuotationsByEnquiry = async (
       success: true,
       data: quotations
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Helper function to validate payment method details
+const validatePaymentMethodDetails = (paymentMethod: string, paymentMethodDetails: any): string | null => {
+  if (!paymentMethodDetails) return null;
+
+  switch (paymentMethod) {
+    case 'cheque':
+      if (!paymentMethodDetails.cheque?.chequeNumber) return 'Cheque number is required';
+      if (!paymentMethodDetails.cheque?.bankName) return 'Bank name is required';
+      if (!paymentMethodDetails.cheque?.issueDate) return 'Issue date is required';
+      break;
+    case 'bank_transfer':
+      if (!paymentMethodDetails.bankTransfer?.bankName) return 'Bank name is required';
+      if (!paymentMethodDetails.bankTransfer?.accountNumber) return 'Account number is required';
+      if (!paymentMethodDetails.bankTransfer?.ifscCode) return 'IFSC code is required';
+      if (!paymentMethodDetails.bankTransfer?.transactionId) return 'Transaction ID is required';
+      if (!paymentMethodDetails.bankTransfer?.transferDate) return 'Transfer date is required';
+      break;
+    case 'upi':
+      if (!paymentMethodDetails.upi?.upiId) return 'UPI ID is required';
+      if (!paymentMethodDetails.upi?.transactionId) return 'Transaction ID is required';
+      break;
+    case 'card':
+      if (!paymentMethodDetails.card?.cardType) return 'Card type is required';
+      if (!paymentMethodDetails.card?.cardNetwork) return 'Card network is required';
+      if (!paymentMethodDetails.card?.lastFourDigits) return 'Last 4 digits are required';
+      if (!paymentMethodDetails.card?.transactionId) return 'Transaction ID is required';
+      break;
+    case 'other':
+      if (!paymentMethodDetails.other?.methodName) return 'Method name is required';
+      break;
+  }
+  return null;
+};
+
+// @desc    Update DG quotation payment
+// @route   PUT /api/v1/dg-quotations/:id/payment
+// @access  Private
+export const updateDGQuotationPayment = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { 
+      paidAmount, 
+      paymentMethod, 
+      paymentMethodDetails,
+      paymentDate, 
+      notes,
+      paymentStatus: newPaymentStatus
+    } = req.body;
+
+    // Validate required fields
+    if (paidAmount === undefined || paidAmount < 0) {
+      return next(new AppError('Valid payment amount is required', 400));
+    }
+
+    if (!paymentMethod) {
+      return next(new AppError('Payment method is required', 400));
+    }
+
+    // Validate payment method details if provided
+    if (paymentMethodDetails) {
+      const validationError = validatePaymentMethodDetails(paymentMethod, paymentMethodDetails);
+      if (validationError) {
+        return next(new AppError(validationError, 400));
+      }
+    }
+
+    // Find the DG quotation
+    const dgQuotation = await DGQuotation.findById(id);
+    if (!dgQuotation) {
+      return next(new AppError('DG Quotation not found', 404));
+    }
+
+    // Calculate new total paid amount (existing + new payment)
+    const existingPaidAmount = dgQuotation.paidAmount || 0;
+    const newTotalPaidAmount = existingPaidAmount + paidAmount;
+    
+    // Calculate remaining amount
+    const totalAmount = dgQuotation.grandTotal || 0;
+    const newRemainingAmount = Math.max(0, totalAmount - newTotalPaidAmount);
+
+    // Determine payment status
+    let finalPaymentStatus: 'Pending' | 'Partial' | 'Paid' | 'Overdue';
+    if (newPaymentStatus === 'gst_pending') {
+      finalPaymentStatus = 'Partial'; // GST Pending is treated as Partial for quotations
+    } else if (newTotalPaidAmount === 0) {
+      finalPaymentStatus = 'Pending';
+    } else if (newTotalPaidAmount >= totalAmount) {
+      finalPaymentStatus = 'Paid';
+    } else {
+      finalPaymentStatus = 'Partial';
+    }
+
+    // Prepare update data
+    const updateData: any = {
+      paidAmount: newTotalPaidAmount,
+      remainingAmount: newRemainingAmount,
+      paymentStatus: finalPaymentStatus
+    };
+
+    // Update quotation
+    const updatedQuotation = await DGQuotation.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true, runValidators: true }
+    ).populate('dgEnquiry');
+
+    const response: APIResponse = {
+      success: true,
+      message: 'DG Quotation payment updated successfully',
+      data: updatedQuotation
+    };
+
+    res.status(200).json(response);
   } catch (error) {
     next(error);
   }

@@ -209,10 +209,10 @@ const OEMManagement: React.FC<OEMManagementProps> = ({
             onChange={handleSearch}
             className="flex-1"
           />
-          <Button variant="outline">
+          {/* <Button variant="outline">
             <Filter className="h-4 w-4 mr-2" />
             Filter
-          </Button>
+          </Button> */}
         </div>
       )}
 

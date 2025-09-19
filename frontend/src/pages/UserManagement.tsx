@@ -93,6 +93,7 @@ export const UserManagement: React.FC = () => {
   const [limit, setLimit] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
   const [totalDatas, setTotalDatas] = useState(0);
+  const [totalAdmins, setTotalAdmins] = useState(0);
 
   // Modal states
   const [showUserModal, setShowUserModal] = useState(false);
@@ -265,12 +266,13 @@ export const UserManagement: React.FC = () => {
       }));
 
       setUsers(mappedUsers);
-      
+      setTotalAdmins(usersData.totalAdmin || 0);
       // Set pagination data
       setCurrentPage(paginationData.page || 1);
       setLimit(paginationData.limit || 10);
       setTotalDatas(paginationData.total || 0);
       setTotalPages(paginationData.pages || 0);
+
     } catch (err) {
       console.error('Error fetching users:', err);
       setError('Failed to fetch users');
@@ -840,7 +842,7 @@ export const UserManagement: React.FC = () => {
             <div>
               <p className="text-xs text-gray-600">Active Users</p>
               <p className="text-xl font-bold text-gray-900">
-                {users.filter((u: UserDisplay) => u.status !== 'deleted').length}
+                {totalDatas || users.filter((u: UserDisplay) => u.status !== 'deleted').length}
               </p>
             </div>
             <Users className="w-6 h-6 text-blue-600" />
@@ -851,7 +853,7 @@ export const UserManagement: React.FC = () => {
             <div>
               <p className="text-xs text-gray-600">Online</p>
               <p className="text-xl font-bold text-green-600">
-                {users.filter((u: UserDisplay) => u.status === 'active').length}
+                {totalDatas || users.filter((u: UserDisplay) => u.status === 'active').length}
               </p>
             </div>
             <div className="w-6 h-6 bg-green-100 rounded-lg flex items-center justify-center">
@@ -877,7 +879,7 @@ export const UserManagement: React.FC = () => {
             <div>
               <p className="text-xs text-gray-600">Admins</p>
               <p className="text-xl font-bold text-purple-600">
-                {users.filter((u: UserDisplay) => u.role.toLowerCase().includes('admin') && u.status !== 'deleted').length}
+                {totalAdmins || users.filter((u: UserDisplay) => u.role.toLowerCase().includes('admin') && u.status !== 'deleted').length}
               </p>
             </div>
             <div className="w-6 h-6 bg-purple-100 rounded-lg flex items-center justify-center">

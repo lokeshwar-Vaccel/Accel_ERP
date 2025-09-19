@@ -20,6 +20,7 @@ import DGEnquiryViewModal from '../components/ui/DGEnquiryViewModal';
 import DGQuotationForm from '../components/ui/DGQuotationForm';
 import OEMManagement from '../components/ui/OEMManagement';
 import DGQuotationViewModal from '../components/ui/DGQuotationViewModal';
+import UpdatePaymentModal from '../components/UpdatePaymentModal';
 import {
   Filter,
   Download,
@@ -47,13 +48,15 @@ import {
   Star,
   Edit,
   Trash2,
-  ViewIcon
+  ViewIcon,
+  Wallet
 } from 'lucide-react';
 import apiClient from '../utils/api';
 import { toast } from 'react-hot-toast';
 import { email } from 'zod/v4';
 import PageHeader from 'components/ui/PageHeader';
 import OEMOrderManagement from './OEMOrderManagement';
+import DGQuotationManagement from './DGQuotationManagement';
 
 export default function DGSales() {
   const navigate = useNavigate();
@@ -78,7 +81,7 @@ export default function DGSales() {
   const [selectedEnquiry, setSelectedEnquiry] = useState<any>(null);
   const [showEnquiryViewModal, setShowEnquiryViewModal] = useState(false);
 
-  console.log("enquiries:", enquiries);
+  console.log("selectedEnquiry12:", selectedEnquiry);
 
 
   // Preview modal state
@@ -99,6 +102,8 @@ export default function DGSales() {
   const [dgQuotationFormMode, setDgQuotationFormMode] = useState<'create' | 'edit'>('create');
   const [selectedDGQuotation, setSelectedDGQuotation] = useState<any>(null);
   const [showDGQuotationViewModal, setShowDGQuotationViewModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [submittingPayment, setSubmittingPayment] = useState(false);
   const [dgQuotationData, setDgQuotationData] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
 
@@ -133,26 +138,26 @@ export default function DGSales() {
 
   // Define workflow steps (removed Prospective Customer Base)
   const workflowSteps = [
-    { step: 1, title: "Enquiries - Excel Upload", icon: Upload, description: "Import enquiries from M&M Portal" },
-    { step: 2, title: "Quotation to Customer", icon: FileText, description: "Create and manage quotations" },
-    { step: 3, title: "Purchase Order from Customer", icon: ShoppingCart, description: "Manage customer purchase orders" },
+    { step: 1, title: "Enquiries", icon: Upload, description: "Import enquiries from M&M Portal" },
+    { step: 2, title: "Quotation", icon: FileText, description: "Create and manage quotations" },
+    { step: 3, title: "PO from Customer", icon: ShoppingCart, description: "Manage customer purchase orders" },
     { step: 4, title: "Proforma", icon: FileSpreadsheet, description: "Generate proformas for customers" },
-    { step: 5, title: "Final Invoice", icon: FileText, description: "Create final invoices and delivery tracking" },
-    { step: 6, title: "List of OEMs", icon: Building, description: "Manage OEM suppliers and products" },
+    { step: 5, title: "Invoice", icon: FileText, description: "Create final invoices and delivery tracking" },
+    { step: 6, title: "OEMs List", icon: Building, description: "Manage OEM suppliers and products" },
     { step: 7, title: "PO to OEM", icon: ShoppingCart, description: "Purchase orders to OEM suppliers" },
     // { step: 8, title: "OEM Payment Tracking", icon: CreditCard, description: "Track payments to OEM suppliers" },
     // { step: 10, title: "DG Movement Tracking", icon: Truck, description: "Track delivery, installation & commissioning" },
-    { step: 11, title: "Profit & Loss Reports", icon: BarChart3, description: "Financial analytics and reporting" },
-    { step: 12, title: "Old DG Buyback Enquiry", icon: Upload, description: "Old DG buyback enquiries" },
+    { step: 11, title: "Profit & Loss", icon: BarChart3, description: "Financial analytics and reporting" },
+    { step: 12, title: "Old DG Buyback", icon: Upload, description: "Old DG buyback enquiries" },
     // { step: 13, title: "Old DG Evaluation", icon: Eye, description: "Evaluate old DG condition and pricing" },
     // { step: 15, title: "Old DG Purchase Agreement", icon: FileText, description: "Purchase agreements for old DG" },
     // { step: 16, title: "Old DG Payment", icon: CreditCard, description: "Payment processing for old DG" },
     // { step: 17, title: "Old DG Collection", icon: Truck, description: "Collection and transportation" },
     // { step: 18, title: "Old DG Refurbishment", icon: Building, description: "Refurbishment and testing" },
     // { step: 19, title: "Old DG Resale", icon: ShoppingCart, description: "Resale of refurbished DG" },
-    { step: 20, title: "Lost/Won Customer Analysis", icon: BarChart3, description: "Customer conversion analysis" },
-    { step: 21, title: "Executive Performance", icon: BarChart3, description: "Sales team performance monitoring" },
-    { step: 22, title: "Comprehensive Reports", icon: BarChart3, description: "Complete business analytics dashboard" }
+    { step: 20, title: "Lost/Won", icon: BarChart3, description: "Customer conversion analysis" },
+    { step: 21, title: "Executive", icon: BarChart3, description: "Sales team performance monitoring" },
+    { step: 22, title: "Reports", icon: BarChart3, description: "Complete business analytics dashboard" }
   ];
 
   // Load data based on active step
@@ -265,7 +270,7 @@ export default function DGSales() {
               const totalCount = enquiriesResponse.data?.length || 0;
               setTotalItems(totalCount);
               setTotalPages(Math.ceil(totalCount / itemsPerPage) || 1);
-              setCurrentPage(1);
+              // Don't reset currentPage to 1, keep the current page
             }
           } catch (err) {
             console.error('Failed to load enquiries:', err);
@@ -276,7 +281,7 @@ export default function DGSales() {
           break;
         case 2: // Quotations
           try {
-            const quotationsResponse: any = await apiClient.dgSales.quotations.getAll(params);
+            const quotationsResponse: any = await apiClient.dgSales.dgQuotations.getAll(params);
             setDgQuotations(quotationsResponse.data || []);
             
             // Set pagination data from response
@@ -743,10 +748,10 @@ export default function DGSales() {
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="w-64"
                     />
-                    <Button variant="outline">
+                    {/* <Button variant="outline">
                       <Filter className="h-4 w-4 mr-2" />
                       Filter
-                    </Button>
+                    </Button> */}
                     <Button 
                       onClick={() => {
                         setSelectedEnquiry(null);
@@ -762,10 +767,52 @@ export default function DGSales() {
               </div>
 
               {(() => {
-                const pagedEnquiries = enquiries.slice(
-                  (currentPage - 1) * itemsPerPage,
-                  currentPage * itemsPerPage
-                );
+                // Check if we need client-side pagination (when server doesn't provide pagination)
+                // If totalPages is calculated from data length, we need client-side pagination
+                const needsClientSidePagination = totalPages > 0 && enquiries.length > itemsPerPage && totalItems === enquiries.length;
+                const pagedEnquiries = needsClientSidePagination 
+                  ? enquiries.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                  : enquiries;
+
+                // Create skeleton data for loading state
+                const skeletonData = Array.from({ length: itemsPerPage }, (_, index) => ({
+                  enquiryNo: <div className="h-4 bg-gray-200 rounded animate-pulse w-20"></div>,
+                  enquiryDate: <div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div>,
+                  customerType: <div className="h-4 bg-gray-200 rounded animate-pulse w-16"></div>,
+                  corporateName: <div className="h-4 bg-gray-200 rounded animate-pulse w-32"></div>,
+                  customerName: <div className="h-4 bg-gray-200 rounded animate-pulse w-28"></div>,
+                  phoneNumber: <div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div>,
+                  email: <div className="h-4 bg-gray-200 rounded animate-pulse w-36"></div>,
+                  customerStatus: <div className="h-6 bg-gray-200 rounded animate-pulse w-16"></div>,
+                  kva: <div className="h-4 bg-gray-200 rounded animate-pulse w-12"></div>,
+                  phase: <div className="h-4 bg-gray-200 rounded animate-pulse w-20"></div>,
+                  quantity: <div className="h-4 bg-gray-200 rounded animate-pulse w-8"></div>,
+                  enquiryStatus: <div className="h-6 bg-gray-200 rounded animate-pulse w-16"></div>,
+                  enquiryType: <div className="h-4 bg-gray-200 rounded animate-pulse w-12"></div>,
+                  enquiryStage: <div className="h-4 bg-gray-200 rounded animate-pulse w-20"></div>,
+                  source: <div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div>,
+                  segment: <div className="h-4 bg-gray-200 rounded animate-pulse w-20"></div>,
+                  subSegment: <div className="h-4 bg-gray-200 rounded animate-pulse w-16"></div>,
+                  dgOwnership: <div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div>,
+                  financeRequired: <div className="h-4 bg-gray-200 rounded animate-pulse w-8"></div>,
+                  assignedEmployeeCode: <div className="h-4 bg-gray-200 rounded animate-pulse w-20"></div>,
+                  assignedEmployeeName: <div className="h-4 bg-gray-200 rounded animate-pulse w-28"></div>,
+                  employeeStatus: <div className="h-4 bg-gray-200 rounded animate-pulse w-16"></div>,
+                  panNumber: <div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div>,
+                  address: <div className="h-4 bg-gray-200 rounded animate-pulse w-40"></div>,
+                  district: <div className="h-4 bg-gray-200 rounded animate-pulse w-20"></div>,
+                  state: <div className="h-4 bg-gray-200 rounded animate-pulse w-16"></div>,
+                  pincode: <div className="h-4 bg-gray-200 rounded animate-pulse w-16"></div>,
+                  gstNumber: <div className="h-4 bg-gray-200 rounded animate-pulse w-24"></div>,
+                  notes: <div className="h-4 bg-gray-200 rounded animate-pulse w-32"></div>,
+                  actions: (
+                    <div className="flex space-x-2">
+                      <div className="h-8 bg-gray-200 rounded animate-pulse w-16"></div>
+                      <div className="h-8 bg-gray-200 rounded animate-pulse w-16"></div>
+                      <div className="h-8 bg-gray-200 rounded animate-pulse w-20"></div>
+                    </div>
+                  )
+                }));
 
                 return (
                   <Table
@@ -802,7 +849,7 @@ export default function DGSales() {
                       { key: 'notes', title: 'Notes' },
                       { key: 'actions', title: 'Actions' }
                     ]}
-                    data={pagedEnquiries.map(enquiry => {
+                    data={loading ? skeletonData : pagedEnquiries.map(enquiry => {
                       // Debug: Log the raw enquiry data
                       console.log('Processing enquiry:', enquiry);
                       
@@ -810,9 +857,9 @@ export default function DGSales() {
                         enquiryNo: enquiry.enquiryNo || enquiry.enquiryId || enquiry._id || 'N/A',
                         enquiryDate: enquiry.enquiryDate ? 
                           new Date(enquiry.enquiryDate).toLocaleDateString('en-IN') : 'N/A',
-                        customerType: enquiry.customerType || 'N/A',
-                        corporateName: enquiry.customerName || 'N/A',
-                        customerName: enquiry.contactPersonName || 'N/A',
+                        customerType: enquiry.customerType.toUpperCase() || 'N/A',
+                        corporateName: enquiry.corporateName || 'N/A',
+                        customerName: enquiry.customerName || 'N/A',
                         // contactPersonName: enquiry.contactPersonName || 'N/A',
                         phoneNumber: enquiry.phoneNumber || 'N/A',
                         email: enquiry.email || 'N/A',
@@ -836,7 +883,7 @@ export default function DGSales() {
                           }
                         })(),
                         kva: enquiry.kva || 'N/A',
-                        phase: enquiry.phase || 'N/A',
+                        phase: enquiry.phase.toUpperCase() || 'N/A',
                         quantity: enquiry.quantity || 'N/A',
                         enquiryStatus: (() => {
                           const status = enquiry.enquiryStatus || enquiry.status || 'Open';
@@ -860,7 +907,7 @@ export default function DGSales() {
                         source: enquiry.source || 'N/A',
                         segment: enquiry.segment || 'N/A',
                         subSegment: enquiry.subSegment || 'N/A',
-                        dgOwnership: enquiry.dgOwnership || 'N/A',
+                        dgOwnership: enquiry.dgOwnership.toUpperCase() || 'N/A',
                         financeRequired: enquiry.financeRequired === 'true' ? 'Yes' : 'No',
                         assignedEmployeeCode: enquiry.assignedEmployeeCode || 'N/A',
                         assignedEmployeeName: enquiry.assignedEmployeeName || 'N/A',
@@ -944,7 +991,7 @@ export default function DGSales() {
                         )
                       };
                     })}
-                    loading={loading}
+                    loading={false}
                     pagination={{
                       page: currentPage,
                       pages: totalPages,
@@ -990,242 +1037,7 @@ export default function DGSales() {
         );
 
       case 2: // DG Quotations
-        return (
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-6 border-b border-gray-200">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium">DG Quotations</h3>
-                  <div className="flex space-x-3">
-                    <Input
-                      placeholder="Search quotations..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-64"
-                    />
-                    {/* <Button variant="outline">
-                      <Filter className="h-4 w-4 mr-2" />
-                      Filter
-                    </Button> */}
-                    <Button onClick={() => setShowDGQuotationForm(true)}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      New DG Quotation
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <Table
-                  columns={[
-                    { key: 'quotationNumber', title: 'Quotation No.', sortable: true, width: '120px' },
-                    // { key: 'revisionNo', title: 'Rev.', width: '60px' },
-                    { key: 'customerInfo', title: 'Customer Details', width: '200px' },
-                    { key: 'dgSpecs', title: 'DG Specifications', width: '150px' },
-                    { key: 'salesEngineer', title: 'Sales Engineer', width: '150px' },
-                    { key: 'enquiryInfo', title: 'Enquiry Details', width: '150px' },
-                    { key: 'dates', title: 'Dates', width: '120px' },
-                    { key: 'financial', title: 'Financial', width: '150px' },
-                    { key: 'terms', title: 'Terms', width: '120px' },
-                    { key: 'status', title: 'Status', width: '100px' },
-                    { key: 'actions', title: 'Actions', width: '120px' }
-                  ]}
-                data={dgQuotations.map((quotation: any) => ({
-                  quotationNumber: (
-                    <div className="font-medium text-blue-600">
-                      {quotation.quotationNumber || 'N/A'}
-                    </div>
-                  ),
-                  // revisionNo: (
-                  //   <div className="text-sm text-gray-600">
-                  //     {quotation.quotationRevisionNo || '01'}
-                  //   </div>
-                  // ),
-                  customerInfo: (
-                    <div className="space-y-1">
-                      <div className="font-medium text-gray-900">
-                        {quotation.customer?.name || 'N/A'}
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {quotation.customer?.email || 'No email'}
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {quotation.customer?.phone || 'No phone'}
-                      </div>
-                      {quotation.customer?.pan && (
-                        <div className="text-xs text-gray-500">
-                          PAN: {quotation.customer.pan}
-                        </div>
-                      )}
-                    </div>
-                  ),
-                  dgSpecs: (
-                    <div className="space-y-1">
-                      <div className="text-sm font-medium">
-                        {quotation.dgSpecifications?.kva || 'N/A'} KVA
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {quotation.dgSpecifications?.phase || 'N/A'} 
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        Qty: {quotation.dgSpecifications?.quantity || 'N/A'}
-                      </div>
-                      {/* {quotation.dgModel && (
-                        <div className="text-xs text-gray-500">
-                          {quotation.dgModel}
-                        </div>
-                      )} */}
-                    </div>
-                  ),
-                  salesEngineer: (
-                    <div className="space-y-1">
-                      {quotation.salesEngineer ? (
-                        <>
-                          <div className="text-sm font-medium">
-                            {quotation.salesEngineer.fullName || 
-                             `${quotation.salesEngineer.firstName || ''} ${quotation.salesEngineer.lastName || ''}`.trim()}
-                          </div>
-                          {/* <div className="text-xs text-gray-600">
-                            {quotation.salesEngineer.salesEmployeeCode || 'N/A'}
-                          </div> */}
-                          <div className="text-xs text-gray-500">
-                            {quotation.salesEngineer.phone || 'No phone'}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="text-sm text-gray-500">Not assigned</div>
-                      )}
-                    </div>
-                  ),
-                  enquiryInfo: (
-                    <div className="space-y-1">
-                      {quotation.enquiryDetails ? (
-                        <>
-                          <div className="text-sm font-medium">
-                            Enquiry No: {quotation.enquiryDetails.enquiryNo || 'N/A'}
-                          </div>
-                          <div className="text-xs text-gray-600">
-                            {quotation.enquiryDetails.enquiryType || 'N/A'}
-                          </div>
-                          <div className="text-xs">
-                            <Badge 
-                              variant={
-                                quotation.enquiryDetails.enquiryStatus === 'Active' ? 'success' :
-                                quotation.enquiryDetails.enquiryStatus === 'Closed' ? 'danger' : 'info'
-                              }
-                              size="sm"
-                            >
-                              {quotation.enquiryDetails.enquiryStatus || 'N/A'}
-                            </Badge>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="text-sm text-gray-500">No enquiry</div>
-                      )}
-                    </div>
-                  ),
-                  dates: (
-                    <div className="space-y-1">
-                      <div className="text-sm">
-                        <span className="text-gray-600">Issue:</span><br/>
-                        {quotation.issueDate ? new Date(quotation.issueDate).toLocaleDateString() : 'N/A'}
-                      </div>
-                      <div className="text-sm">
-                        <span className="text-gray-600">Valid Until:</span><br/>
-                        {quotation.validUntil ? new Date(quotation.validUntil).toLocaleDateString() : 'N/A'}
-                      </div>
-                    </div>
-                  ),
-                  financial: (
-                    <div className="space-y-1">
-                      <div className="text-sm font-medium text-green-600">
-                        ₹{quotation.grandTotal ? quotation.grandTotal.toLocaleString() : '0'}
-                      </div>
-                      <div className="text-xs text-gray-600">
-                        Subtotal: ₹{quotation.subtotal ? quotation.subtotal.toLocaleString() : '0'}
-                      </div>
-                      <div className="text-xs text-gray-600">
-                        Tax: ₹{quotation.totalTax ? quotation.totalTax.toLocaleString() : '0'}
-                      </div>
-                      {quotation.totalDiscount > 0 && (
-                        <div className="text-xs text-red-600">
-                          Discount: ₹{quotation.totalDiscount.toLocaleString()}
-                        </div>
-                      )}
-                    </div>
-                  ),
-                  terms: (
-                    <div className="space-y-1">
-                      {/* <div className="text-xs">
-                        <span className="text-gray-600">Delivery:</span><br/>
-                        {quotation.deliveryPeriod || quotation.deliveryTerms || 'N/A'}
-                      </div>
-                      <div className="text-xs">
-                        <span className="text-gray-600">Payment:</span><br/>
-                        {quotation.paymentTerms || 'N/A'}
-                      </div> */}
-                      <div className="text-xs">
-                        <span className="text-gray-600">Validity:</span><br/>
-                        {quotation.validityDays || quotation.validity || '30'} days
-                      </div>
-                    </div>
-                  ),
-                  status: (() => {
-                    const status = quotation.status || 'Draft';
-                    switch (status.toLowerCase()) {
-                      case 'draft':
-                        return <Badge variant="info">Draft</Badge>;
-                      case 'sent':
-                        return <Badge variant="warning">Sent</Badge>;
-                      case 'accepted':
-                        return <Badge variant="success">Accepted</Badge>;
-                      case 'rejected':
-                        return <Badge variant="danger">Rejected</Badge>;
-                      case 'expired':
-                        return <Badge variant="danger">Expired</Badge>;
-                      default:
-                        return <Badge variant="info">{status}</Badge>;
-                    }
-                  })(),
-                  actions: (
-                    <div className="flex space-x-2">
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => {
-                          setSelectedDGQuotation(quotation);
-                          setShowDGQuotationViewModal(true);
-                        }}
-                      >
-                        <ViewIcon className="w-4 h-4" />
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={() => {
-                          setSelectedDGQuotation(quotation);
-                          setDgQuotationFormMode('edit');
-                          setShowDGQuotationForm(true);
-                        }}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  )
-                }))}
-                loading={loading}
-                pagination={{
-                  page: currentPage,
-                  pages: totalPages,
-                  total: totalItems,
-                  limit: itemsPerPage
-                }}
-                onPageChange={setCurrentPage}
-              />
-              </div>
-            </div>
-          </div>
-        );
+        return <DGQuotationManagement />;
 
       case 3: // Purchase Orders
         return <DGPurchaseOrderManagement />;
@@ -1535,7 +1347,7 @@ export default function DGSales() {
                   title={step.description}
                 >
                   <IconComponent className="h-4 w-4 mx-auto mb-1" />
-                  <div className="truncate"> {step.title.split(' ')[0]}</div>
+                  <div className="truncate"> {step.title}</div>
                 </button>
               );
             })}
@@ -1921,7 +1733,7 @@ export default function DGSales() {
           quotation={selectedDGQuotation}
           onStatusUpdate={async (newStatus) => {
             try {
-              const response = await apiClient.dgSales.quotations.update(selectedDGQuotation._id, { status: newStatus });
+              const response = await apiClient.dgSales.dgQuotations.update(selectedDGQuotation._id, { status: newStatus });
               if (response.success) {
                 toast.success(`Quotation status updated to ${newStatus}`);
                 setSelectedDGQuotation({ ...selectedDGQuotation, status: newStatus });
@@ -1934,7 +1746,52 @@ export default function DGSales() {
         />
       )}
 
+      {/* Payment Modal */}
+      {showPaymentModal && selectedDGQuotation && (
+        <UpdatePaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => {
+            setShowPaymentModal(false);
+            setSelectedDGQuotation(null);
+          }}
+          item={selectedDGQuotation}
+          itemType="quotation"
+          onSubmit={async (paymentData: any) => {
+            try {
+              setSubmittingPayment(true);
+              
+              // Create a separate payment record instead of updating quotation directly
+              const paymentRecord = {
+                quotationId: selectedDGQuotation._id,
+                quotationNumber: selectedDGQuotation.quotationNumber,
+                customerId: selectedDGQuotation.customer?._id,
+                amount: paymentData.paidAmount,
+                currency: 'INR',
+                paymentMethod: paymentData.paymentMethod,
+                paymentMethodDetails: paymentData.paymentMethodDetails,
+                paymentDate: paymentData.paymentDate,
+                notes: paymentData.notes,
+                receiptNumber: paymentData.receiptNumber || `RCP-${Date.now()}`
+              };
 
+              const response = await apiClient.dgSales.dgQuotationPayments.create(paymentRecord);
+              
+              if (response.success) {
+                toast.success('Payment created successfully');
+                setShowPaymentModal(false);
+                setSelectedDGQuotation(null);
+                if (activeStep === 2) loadStepData(2); // Refresh the quotation list
+              }
+            } catch (error: any) {
+              console.error('Error creating payment:', error);
+              toast.error(error.message || 'Failed to create payment');
+            } finally {
+              setSubmittingPayment(false);
+            }
+          }}
+          submitting={submittingPayment}
+        />
+      )}
 
       {showProformaForm && (
         <ProformaInvoiceForm

@@ -472,7 +472,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
 
   const fetchQuotations = async () => {
     try {
-      const response = await apiClient.dgSales.quotations.getAll({
+      const response = await apiClient.dgSales.dgQuotations.getAll({
         limit: 100,
         page: 1
       });
@@ -793,7 +793,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
 
     // Fetch full quotation details to get items
     try {
-      const response = await apiClient.dgSales.quotations.getById(quotationId) as any;
+      const response = await apiClient.dgSales.dgQuotations.getById(quotationId) as any;
       console.log('DG Quotation response:', response); // Debug log
       if (response && response.success) {
         const quotationData = response.data;

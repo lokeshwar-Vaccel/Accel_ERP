@@ -9,7 +9,8 @@ import {
   resetPassword,
   getUserStats,
   getFieldEngineers,
-  getSalesEngineers
+  getSalesEngineers,
+  getAllUsersForDropdown
 } from '../controllers/userController';
 import { protect, restrictTo, checkModuleAccess, checkPermission } from '../middleware/auth';
 import { UserRole } from '../types';
@@ -38,6 +39,12 @@ router.get('/field-engineers',
 router.get('/sales-engineers', 
   checkPermission('read'), 
   getSalesEngineers
+);
+
+// Get all users for dropdown
+router.get('/dropdown', 
+  checkPermission('read'), 
+  getAllUsersForDropdown
 );
 
 // CRUD operations

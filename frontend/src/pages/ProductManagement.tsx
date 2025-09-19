@@ -56,7 +56,7 @@ interface ProductFormData {
 const ProductManagement: React.FC = () => {
   // Active tab state
   const [activeTab, setActiveTab] = useState<'spare' | 'dg'>('spare');
-  
+
   // Spare Products State
   const [products, setProducts] = useState<Product[]>([]); // paginated for table
   const [allProductsForAvg, setAllProductsForAvg] = useState<Product[]>([]); // all for avg price
@@ -92,6 +92,21 @@ const ProductManagement: React.FC = () => {
   // Form dropdown states
   const [showFormCategoryDropdown, setShowFormCategoryDropdown] = useState(false);
   const [showFormUomDropdown, setShowFormUomDropdown] = useState(false);
+  const [showFormLocationDropdown, setShowFormLocationDropdown] = useState(false);
+  const [showFormRoomDropdown, setShowFormRoomDropdown] = useState(false);
+  const [showFormRackDropdown, setShowFormRackDropdown] = useState(false);
+
+  // Search states for enhanced dropdowns
+  const [categorySearchTerm, setCategorySearchTerm] = useState('');
+  const [uomSearchTerm, setUomSearchTerm] = useState('');
+
+  // Keyboard navigation states
+  const [highlightedCategoryIndex, setHighlightedCategoryIndex] = useState(-1);
+  const [highlightedUomIndex, setHighlightedUomIndex] = useState(-1);
+
+  // Refs for enhanced dropdowns
+  const categoryInputRef = React.useRef<HTMLInputElement>(null);
+  const uomInputRef = React.useRef<HTMLInputElement>(null);
 
   // Modal states
   const [showProductModal, setShowProductModal] = useState(false);
@@ -122,7 +137,9 @@ const ProductManagement: React.FC = () => {
     minStockLevel: 0,
     maxStockLevel: 0,
     isActive: true,
-
+    location: '',
+    room: '',
+    rack: '',
     hsnNumber: '',
     productType1: '',
     productType2: '',
@@ -192,6 +209,55 @@ const ProductManagement: React.FC = () => {
     }
   }, [dgCurrentPage, dgLimit, dgSort, dgSearchTerm, dgStatusFilter]);
 
+  // Filter rooms and racks based on selected location and room
+  useEffect(() => {
+    console.log('Filtering rooms - formData.location:', formData.location);
+    console.log('All rooms:', rooms);
+    
+    if (formData.location) {
+      const filtered = rooms.filter(room => {
+        console.log('Room location:', room.location, 'Selected location:', formData.location);
+        // Handle both populated location object and location ID string
+        const roomLocationId = typeof room.location === 'object' && room.location?._id 
+          ? room.location._id 
+          : room.location;
+        return roomLocationId === formData.location;
+      });
+      console.log('Filtered rooms:', filtered);
+      setFilteredRooms(filtered);
+      // Reset room and rack when location changes
+      if (formData.room && !filtered.find(room => room._id === formData.room)) {
+        setFormData(prev => ({ ...prev, room: '', rack: '' }));
+      }
+    } else {
+      setFilteredRooms(rooms);
+    }
+  }, [formData.location, rooms]);
+
+  useEffect(() => {
+    console.log('Filtering racks - formData.room:', formData.room);
+    console.log('All racks:', racks);
+    
+    if (formData.room) {
+      const filtered = racks.filter(rack => {
+        console.log('Rack room:', rack.room, 'Selected room:', formData.room);
+        // Handle both populated room object and room ID string
+        const rackRoomId = typeof rack.room === 'object' && rack.room?._id 
+          ? rack.room._id 
+          : rack.room;
+        return rackRoomId === formData.room;
+      });
+      console.log('Filtered racks:', filtered);
+      setFilteredRacks(filtered);
+      // Reset rack when room changes
+      if (formData.rack && !filtered.find(rack => rack._id === formData.rack)) {
+        setFormData(prev => ({ ...prev, rack: '' }));
+      }
+    } else {
+      setFilteredRacks(racks);
+    }
+  }, [formData.room, racks]);
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -199,6 +265,16 @@ const ProductManagement: React.FC = () => {
       if (!target.closest('.dropdown-container')) {
         setShowCategoryDropdown(false);
         setShowStatusDropdown(false);
+        setShowFormCategoryDropdown(false);
+        setShowFormUomDropdown(false);
+        setShowFormLocationDropdown(false);
+        setShowFormRoomDropdown(false);
+        setShowFormRackDropdown(false);
+        // Reset search terms and highlights when closing dropdowns
+        setCategorySearchTerm('');
+        setUomSearchTerm('');
+        setHighlightedCategoryIndex(-1);
+        setHighlightedUomIndex(-1);
       }
     };
 
@@ -212,6 +288,11 @@ const ProductManagement: React.FC = () => {
   const openAddProductModal = () => {
     setIsEditing(false);
     setSelectedProduct(null);
+    // Reset search terms and highlights
+    setCategorySearchTerm('');
+    setUomSearchTerm('');
+    setHighlightedCategoryIndex(-1);
+    setHighlightedUomIndex(-1);
     setFormData({
       name: '',
       description: '',
@@ -223,6 +304,9 @@ const ProductManagement: React.FC = () => {
       minStockLevel: 0,
       maxStockLevel: 0,
       isActive: true,
+      location: '',
+      room: '',
+      rack: '',
       hsnNumber: '',
       productType1: '',
       productType2: '',
@@ -249,6 +333,11 @@ const ProductManagement: React.FC = () => {
   const openEditProductModal = (product: Product) => {
     setIsEditing(true);
     setSelectedProduct(product);
+    // Reset search terms and highlights
+    setCategorySearchTerm('');
+    setUomSearchTerm('');
+    setHighlightedCategoryIndex(-1);
+    setHighlightedUomIndex(-1);
     setFormData({
       name: product.name,
       description: product.description || '',
@@ -260,7 +349,9 @@ const ProductManagement: React.FC = () => {
       minStockLevel: product.minStockLevel,
       maxStockLevel: product.maxStockLevel || 0,
       isActive: product.isActive ?? true,
-
+      location: product.location || '',
+      room: product.room || '',
+      rack: product.rack || '',
       hsnNumber: product.hsnNumber || '',
       productType1: product.productType1 || '',
       productType2: product.productType2 || '',
@@ -296,6 +387,14 @@ const ProductManagement: React.FC = () => {
     // Close all form dropdowns
     setShowFormCategoryDropdown(false);
     setShowFormUomDropdown(false);
+    setShowFormLocationDropdown(false);
+    setShowFormRoomDropdown(false);
+    setShowFormRackDropdown(false);
+    // Reset search terms and highlights
+    setCategorySearchTerm('');
+    setUomSearchTerm('');
+    setHighlightedCategoryIndex(-1);
+    setHighlightedUomIndex(-1);
     setFormData({
       name: '',
       description: '',
@@ -307,6 +406,9 @@ const ProductManagement: React.FC = () => {
       minStockLevel: 0,
       maxStockLevel: 0,
       isActive: true,
+      location: '',
+      room: '',
+      rack: '',
       hsnNumber: '',
       productType1: '',
       productType2: '',
@@ -360,7 +462,7 @@ const ProductManagement: React.FC = () => {
         await apiClient.dgProducts.create(productData);
         toast.success('DG Product created successfully');
       }
-      
+
       await fetchDGProducts();
       closeDGProductModal();
     } catch (error: any) {
@@ -384,18 +486,18 @@ const ProductManagement: React.FC = () => {
     try {
       setDgLoading(true);
       const response = await apiClient.dgProducts.getAll(params);
-      
+
       // Handle new pagination structure
       if (response.success && response.data) {
         const responseData = response.data as any;
         const { products, pagination, stats } = responseData;
-        
+
         // Update pagination state
         setDgCurrentPage(pagination.currentPage);
         setDgLimit(pagination.limit);
         setDgTotalDatas(pagination.totalCount);
         setDgTotalPages(pagination.totalPages);
-        
+
         // Update active count from stats
         if (stats && typeof stats.activeCount === 'number') {
           setDgActiveCount(stats.activeCount);
@@ -404,7 +506,7 @@ const ProductManagement: React.FC = () => {
           const activeCount = Array.isArray(products) ? products.filter(p => p.isActive).length : 0;
           setDgActiveCount(activeCount);
         }
-        
+
         // Update products
         if (Array.isArray(products)) {
           setDgProducts(products);
@@ -417,7 +519,7 @@ const ProductManagement: React.FC = () => {
         setDgLimit(response.pagination?.limit || 10);
         setDgTotalDatas(response.pagination?.total || 0);
         setDgTotalPages(response.pagination?.pages || 0);
-        
+
         let products: any[] = [];
         if (response.data) {
           if (Array.isArray(response.data)) {
@@ -467,7 +569,17 @@ const ProductManagement: React.FC = () => {
       errors.category = 'Category is required';
     }
 
+    if (!formData.location.trim()) {
+      errors.location = 'Location is required';
+    }
 
+    if (!formData.room.trim()) {
+      errors.room = 'Room is required';
+    }
+
+    if (!formData.rack.trim()) {
+      errors.rack = 'Rack is required';
+    }
 
     if (!formData.uom.trim()) {
       errors.uom = 'Unit of Measure (UOM) is required';
@@ -529,7 +641,10 @@ const ProductManagement: React.FC = () => {
           case 'name': return 'Product Name';
           case 'partNo': return 'Part Number';
           case 'category': return 'Category';
-              case 'uom': return 'Unit of Measure';
+          case 'location': return 'Location';
+          case 'room': return 'Room';
+          case 'rack': return 'Rack';
+          case 'uom': return 'Unit of Measure';
           case 'price': return 'Unit Price';
           case 'gndp': return 'GNDP Price';
           case 'minStockLevel': return 'Min Stock Level';
@@ -655,6 +770,136 @@ const ProductManagement: React.FC = () => {
     }
   };
 
+  // Enhanced dropdown handlers
+  const handleCategorySelect = (categoryValue: string) => {
+    setFormData(prev => ({
+      ...prev,
+      category: categoryValue
+    }));
+    setShowFormCategoryDropdown(false);
+    setCategorySearchTerm('');
+    setHighlightedCategoryIndex(-1);
+
+    // Clear error for this field
+    if (formErrors.category) {
+      setFormErrors(prev => ({
+        ...prev,
+        category: ''
+      }));
+    }
+  };
+
+  const handleUomSelect = (uomValue: string) => {
+    setFormData(prev => ({
+      ...prev,
+      uom: uomValue
+    }));
+    setShowFormUomDropdown(false);
+    setUomSearchTerm('');
+    setHighlightedUomIndex(-1);
+
+    // Clear error for this field
+    if (formErrors.uom) {
+      setFormErrors(prev => ({
+        ...prev,
+        uom: ''
+      }));
+    }
+  };
+
+  // Keyboard navigation handlers
+  const handleCategoryKeyDown = (e: React.KeyboardEvent) => {
+    const filteredCategories = formCategoryOptions.filter(option =>
+      option.label.toLowerCase().includes(categorySearchTerm.toLowerCase()) ||
+      option.value.toLowerCase().includes(categorySearchTerm.toLowerCase())
+    );
+
+    switch (e.key) {
+      case 'Tab':
+        e.preventDefault();
+        if (highlightedCategoryIndex >= 0 && filteredCategories[highlightedCategoryIndex]) {
+          handleCategorySelect(filteredCategories[highlightedCategoryIndex].value);
+        } else {
+          setShowFormCategoryDropdown(false);
+          setCategorySearchTerm('');
+          setHighlightedCategoryIndex(-1);
+          setTimeout(() => {
+            uomInputRef.current?.focus();
+          }, 50);
+        }
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        setHighlightedCategoryIndex(prev =>
+          prev < filteredCategories.length - 1 ? prev + 1 : prev
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setHighlightedCategoryIndex(prev => prev > 0 ? prev - 1 : -1);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (highlightedCategoryIndex >= 0 && filteredCategories[highlightedCategoryIndex]) {
+          handleCategorySelect(filteredCategories[highlightedCategoryIndex].value);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setShowFormCategoryDropdown(false);
+        setCategorySearchTerm('');
+        setHighlightedCategoryIndex(-1);
+        break;
+    }
+  };
+
+  const handleUomKeyDown = (e: React.KeyboardEvent) => {
+    const filteredUoms = formUomOptions.filter(option =>
+      option.label.toLowerCase().includes(uomSearchTerm.toLowerCase()) ||
+      option.value.toLowerCase().includes(uomSearchTerm.toLowerCase())
+    );
+
+    switch (e.key) {
+      case 'Tab':
+        e.preventDefault();
+        if (highlightedUomIndex >= 0 && filteredUoms[highlightedUomIndex]) {
+          handleUomSelect(filteredUoms[highlightedUomIndex].value);
+        } else {
+          setShowFormUomDropdown(false);
+          setUomSearchTerm('');
+          setHighlightedUomIndex(-1);
+          setTimeout(() => {
+            // Focus next field after UOM
+            const nextField = document.querySelector('input[name="brand"]') as HTMLInputElement;
+            nextField?.focus();
+          }, 50);
+        }
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        setHighlightedUomIndex(prev =>
+          prev < filteredUoms.length - 1 ? prev + 1 : prev
+        );
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        setHighlightedUomIndex(prev => prev > 0 ? prev - 1 : -1);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (highlightedUomIndex >= 0 && filteredUoms[highlightedUomIndex]) {
+          handleUomSelect(filteredUoms[highlightedUomIndex].value);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setShowFormUomDropdown(false);
+        setUomSearchTerm('');
+        setHighlightedUomIndex(-1);
+        break;
+    }
+  };
+
   // Prepare dropdown options for form
   const formCategoryOptions = category.map(cat => ({
     value: cat,
@@ -688,7 +933,9 @@ const ProductManagement: React.FC = () => {
 
   const fetchLocations = async () => {
     try {
+      console.log('Fetching locations...');
       const response = await apiClient.stock.getLocations();
+      console.log('Locations response:', response);
       // Handle response format from backend - locations are nested in data.locations
       let locationsData: any[] = [];
       if (response.data) {
@@ -698,6 +945,7 @@ const ProductManagement: React.FC = () => {
           locationsData = (response.data as any).locations;
         }
       }
+      console.log('Locations data:', locationsData);
       setLocations(locationsData);
     } catch (error) {
       console.error('Error fetching locations:', error);
@@ -707,39 +955,48 @@ const ProductManagement: React.FC = () => {
 
   const fetchRooms = async () => {
     try {
+      console.log('Fetching rooms...');
       const response = await apiClient.stock.getRooms();
-      // Handle response format from backend - locations are nested in data.locations
+      console.log('Rooms response:', response);
+      
       let roomsData: any[] = [];
       if (response.data) {
-        if (Array.isArray(response.data)) {
-          roomsData = response.data;
-        } else if ((response.data as any).rooms && Array.isArray((response.data as any).rooms)) {
+        // Backend returns: { data: { rooms: [...] } }
+        if ((response.data as any).rooms && Array.isArray((response.data as any).rooms)) {
           roomsData = (response.data as any).rooms;
+        } else if (Array.isArray(response.data)) {
+          roomsData = response.data;
         }
       }
-
+      console.log('Rooms data:', roomsData);
+      console.log('Sample room:', roomsData[0]);
       setRooms(roomsData);
     } catch (error) {
-      console.error('Error fetching locations:', error);
+      console.error('Error fetching rooms:', error);
       setRooms([]);
     }
   };
 
   const fetchRacks = async () => {
     try {
+      console.log('Fetching racks...');
       const response = await apiClient.stock.getRacks();
-      // Handle response format from backend - locations are nested in data.locations
+      console.log('Racks response:', response);
+      
       let racksData: any[] = [];
       if (response.data) {
-        if (Array.isArray(response.data)) {
-          racksData = response.data;
-        } else if ((response.data as any).racks && Array.isArray((response.data as any).racks)) {
+        // Backend returns: { data: { racks: [...] } }
+        if ((response.data as any).racks && Array.isArray((response.data as any).racks)) {
           racksData = (response.data as any).racks;
+        } else if (Array.isArray(response.data)) {
+          racksData = response.data;
         }
       }
+      console.log('Racks data:', racksData);
+      console.log('Sample rack:', racksData[0]);
       setRacks(racksData);
     } catch (error) {
-      console.error('Error fetching locations:', error);
+      console.error('Error fetching racks:', error);
       setRacks([]);
     }
   };
@@ -896,12 +1153,12 @@ const ProductManagement: React.FC = () => {
             <span className="text-sm">Add DG Product</span>
           </button>}
           {activeTab === 'dg' && <button
-                onClick={() => setShowImportModal(true)}
-                className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
-              >
-                <Upload className="w-4 h-4" />
-                <span className="text-sm">Import Excel</span>
-              </button>}
+            onClick={() => setShowImportModal(true)}
+            className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+          >
+            <Upload className="w-4 h-4" />
+            <span className="text-sm">Import Excel</span>
+          </button>}
         </div>
       </PageHeader>
 
@@ -911,11 +1168,10 @@ const ProductManagement: React.FC = () => {
           <nav className="-mb-px flex space-x-8 px-6">
             <button
               onClick={() => setActiveTab('spare')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'spare'
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'spare'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               <div className="flex items-center space-x-2">
                 <Package className="w-4 h-4" />
@@ -924,11 +1180,10 @@ const ProductManagement: React.FC = () => {
             </button>
             <button
               onClick={() => setActiveTab('dg')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
-                activeTab === 'dg'
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'dg'
                   ? 'border-orange-500 text-orange-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
+                }`}
             >
               <div className="flex items-center space-x-2">
                 <Zap className="w-4 h-4" />
@@ -937,7 +1192,7 @@ const ProductManagement: React.FC = () => {
             </button>
           </nav>
         </div>
-        
+
         <div className="p-6">
           {activeTab === 'spare' ? (
             <SpareProductsTab
@@ -951,6 +1206,7 @@ const ProductManagement: React.FC = () => {
               setStatusFilter={setStatusFilter}
               currentPage={currentPage}
               totalPages={totalPages}
+              locations={locations}
               totalDatas={totalDatas}
               filteredProducts={filteredProducts}
               openEditProductModal={openEditProductModal}
@@ -1079,35 +1335,86 @@ const ProductManagement: React.FC = () => {
                           <label className="block text-xs font-medium text-gray-700 mb-1">
                             Category *
                           </label>
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setShowFormCategoryDropdown(!showFormCategoryDropdown);
-                                setShowFormUomDropdown(false);
+                          <div className="relative dropdown-container">
+                            <input
+                              ref={categoryInputRef}
+                              type="text"
+                              value={categorySearchTerm || (formData.category ? formCategoryOptions.find(opt => opt.value === formData.category)?.label : '')}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setCategorySearchTerm(value);
+
+                                // If input is cleared, clear the category selection
+                                if (value === '') {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    category: ''
+                                  }));
+                                }
+
+                                if (!showFormCategoryDropdown) setShowFormCategoryDropdown(true);
+                                setHighlightedCategoryIndex(-1);
                               }}
-                              className={`flex items-center justify-between w-full px-2 py-1.5 text-left border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm ${formErrors.category ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'}`}
-                            >
-                              <span className={`text-gray-700 truncate mr-1 ${!formData.category ? 'text-gray-500' : ''}`}>
-                                {formData.category ? formCategoryOptions.find(opt => opt.value === formData.category)?.label : 'Select Category'}
-                              </span>
-                              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showFormCategoryDropdown ? 'rotate-180' : ''}`} />
-                            </button>
+                              onFocus={() => {
+                                setShowFormCategoryDropdown(true);
+                                setHighlightedCategoryIndex(-1);
+                                // Don't clear search term in edit mode
+                                if (!categorySearchTerm && formData.category && !isEditing) {
+                                  setCategorySearchTerm('');
+                                }
+                              }}
+                              onKeyDown={handleCategoryKeyDown}
+                              placeholder="Search category or press ↓ to open"
+                              className={`w-full px-2 py-1.5 pr-10 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm ${formErrors.category ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'}`}
+                              data-field="category"
+                            />
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                              {formData.category && !categorySearchTerm && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      category: ''
+                                    }));
+                                    setCategorySearchTerm('');
+                                    setShowFormCategoryDropdown(false);
+                                    setHighlightedCategoryIndex(-1);
+                                    categoryInputRef.current?.focus();
+                                  }}
+                                  className="p-1 hover:bg-gray-100 rounded-full transition-colors mr-1"
+                                  title="Clear category"
+                                >
+                                  <X className="w-3 h-3 text-gray-400 hover:text-gray-600" />
+                                </button>
+                              )}
+                              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${showFormCategoryDropdown ? 'rotate-180' : ''} pointer-events-none`} />
+                            </div>
                             {showFormCategoryDropdown && (
-                              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                                {formCategoryOptions.map((option) => (
-                                  <button
-                                    key={option.value}
-                                    type="button"
-                                    onClick={() => {
-                                      handleDropdownChange('category', option.value);
-                                      setShowFormCategoryDropdown(false);
-                                    }}
-                                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${formData.category === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                                  >
-                                    {option.label}
-                                  </button>
-                                ))}
+                              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                                <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                                  <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                                  <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                                  <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                                </div>
+                                {formCategoryOptions
+                                  .filter(option =>
+                                    option.label.toLowerCase().includes(categorySearchTerm.toLowerCase()) ||
+                                    option.value.toLowerCase().includes(categorySearchTerm.toLowerCase())
+                                  )
+                                  .map((option, index) => (
+                                    <button
+                                      key={option.value}
+                                      type="button"
+                                      onClick={() => handleCategorySelect(option.value)}
+                                      className={`w-full px-3 py-1.5 text-left transition-colors text-sm ${formData.category === option.value ? 'bg-blue-100 text-blue-800' :
+                                        highlightedCategoryIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                          'text-gray-700 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                      <div className="font-medium text-gray-900">{option.label}</div>
+                                    </button>
+                                  ))}
                               </div>
                             )}
                           </div>
@@ -1247,7 +1554,7 @@ const ProductManagement: React.FC = () => {
 
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">
-                        Unit Price (₹) *
+                          Unit Price (₹) *
                         </label>
                         <input
                           type="number"
@@ -1270,35 +1577,86 @@ const ProductManagement: React.FC = () => {
                         <label className="block text-xs font-medium text-gray-700 mb-1">
                           Unit of Measure (UOM) *
                         </label>
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowFormUomDropdown(!showFormUomDropdown);
-                              setShowFormCategoryDropdown(false);
+                        <div className="relative dropdown-container">
+                          <input
+                            ref={uomInputRef}
+                            type="text"
+                            value={uomSearchTerm || (formData.uom ? formUomOptions.find(opt => opt.value === formData.uom)?.label : '')}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setUomSearchTerm(value);
+
+                              // If input is cleared, clear the UOM selection
+                              if (value === '') {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  uom: ''
+                                }));
+                              }
+
+                              if (!showFormUomDropdown) setShowFormUomDropdown(true);
+                              setHighlightedUomIndex(-1);
                             }}
-                            className={`flex items-center justify-between w-full px-2 py-1.5 text-left border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm ${formErrors.uom ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'}`}
-                          >
-                            <span className={`text-gray-700 truncate mr-1 ${!formData.uom ? 'text-gray-500' : ''}`}>
-                              {formData.uom ? formUomOptions.find(opt => opt.value === formData.uom)?.label : 'Select UOM'}
-                            </span>
-                            <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showFormUomDropdown ? 'rotate-180' : ''}`} />
-                          </button>
+                            onFocus={() => {
+                              setShowFormUomDropdown(true);
+                              setHighlightedUomIndex(-1);
+                              // Don't clear search term in edit mode
+                              if (!uomSearchTerm && formData.uom && !isEditing) {
+                                setUomSearchTerm('');
+                              }
+                            }}
+                            onKeyDown={handleUomKeyDown}
+                            placeholder="Search UOM or press ↓ to open"
+                            className={`w-full px-2 py-1.5 pr-10 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm ${formErrors.uom ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'}`}
+                            data-field="uom"
+                          />
+                          <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                            {formData.uom && !uomSearchTerm && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    uom: ''
+                                  }));
+                                  setUomSearchTerm('');
+                                  setShowFormUomDropdown(false);
+                                  setHighlightedUomIndex(-1);
+                                  uomInputRef.current?.focus();
+                                }}
+                                className="p-1 hover:bg-gray-100 rounded-full transition-colors mr-1"
+                                title="Clear UOM"
+                              >
+                                <X className="w-3 h-3 text-gray-400 hover:text-gray-600" />
+                              </button>
+                            )}
+                            <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${showFormUomDropdown ? 'rotate-180' : ''} pointer-events-none`} />
+                          </div>
                           {showFormUomDropdown && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                              {formUomOptions.map((option) => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  onClick={() => {
-                                    handleDropdownChange('uom', option.value);
-                                    setShowFormUomDropdown(false);
-                                  }}
-                                  className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${formData.uom === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                              <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                                <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                                <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                                <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                              </div>
+                              {formUomOptions
+                                .filter(option =>
+                                  option.label.toLowerCase().includes(uomSearchTerm.toLowerCase()) ||
+                                  option.value.toLowerCase().includes(uomSearchTerm.toLowerCase())
+                                )
+                                .map((option, index) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => handleUomSelect(option.value)}
+                                    className={`w-full px-3 py-1.5 text-left transition-colors text-sm ${formData.uom === option.value ? 'bg-blue-100 text-blue-800' :
+                                      highlightedUomIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                        'text-gray-700 hover:bg-gray-50'
+                                      }`}
+                                  >
+                                    <div className="font-medium text-gray-900">{option.label}</div>
+                                  </button>
+                                ))}
                             </div>
                           )}
                         </div>
@@ -1309,6 +1667,140 @@ const ProductManagement: React.FC = () => {
                           </p>
                         )}
                       </div>
+                      {/* <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Location *
+                        </label>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowFormLocationDropdown(!showFormLocationDropdown);
+                              setShowFormRoomDropdown(false);
+                              setShowFormRackDropdown(false);
+                            }}
+                            className={`flex items-center justify-between w-full px-2 py-1.5 text-left border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm ${formErrors.location ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'}`}
+                          >
+                            <span className={`text-gray-700 truncate mr-1 ${!formData.location ? 'text-gray-500' : ''}`}>
+                              {formData.location ? locations.find((loc: any) => loc._id === formData.location)?.name : 'Select Location'}
+                            </span>
+                            <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showFormLocationDropdown ? 'rotate-180' : ''}`} />
+                          </button>
+                          {showFormLocationDropdown && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                              {locations.map((location) => (
+                                <button
+                                  key={location._id}
+                                  type="button"
+                                  onClick={() => {
+                                    handleDropdownChange('location', location._id);
+                                    setShowFormLocationDropdown(false);
+                                  }}
+                                  className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${formData.location === location._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                >
+                                  {location.name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {formErrors.location && (
+                          <p className="text-red-500 text-xs mt-1 flex items-center">
+                            <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
+                            {formErrors.location}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Room
+                        </label>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowFormRoomDropdown(!showFormRoomDropdown);
+                              setShowFormLocationDropdown(false);
+                              setShowFormRackDropdown(false);
+                            }}
+                            disabled={!formData.location}
+                            className={`flex items-center justify-between w-full px-2 py-1.5 text-left border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm ${formErrors.room ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'} ${!formData.location ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                          >
+                            <span className={`text-gray-700 truncate mr-1 ${!formData.room ? 'text-gray-500' : ''}`}>
+                              {formData.room ? filteredRooms.find((room: any) => room._id === formData.room)?.name : 'Select Room'}
+                            </span>
+                            <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showFormRoomDropdown ? 'rotate-180' : ''}`} />
+                          </button>
+                          {showFormRoomDropdown && formData.location && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                              {filteredRooms.map((room) => (
+                                <button
+                                  key={room._id}
+                                  type="button"
+                                  onClick={() => {
+                                    handleDropdownChange('room', room._id);
+                                    setShowFormRoomDropdown(false);
+                                  }}
+                                  className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${formData.room === room._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                >
+                                  {room.name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {formErrors.room && (
+                          <p className="text-red-500 text-xs mt-1 flex items-center">
+                            <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
+                            {formErrors.room}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Rack
+                        </label>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowFormRackDropdown(!showFormRackDropdown);
+                              setShowFormLocationDropdown(false);
+                              setShowFormRoomDropdown(false);
+                            }}
+                            disabled={!formData.room}
+                            className={`flex items-center justify-between w-full px-2 py-1.5 text-left border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm ${formErrors.rack ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'} ${!formData.room ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                          >
+                            <span className={`text-gray-700 truncate mr-1 ${!formData.rack ? 'text-gray-500' : ''}`}>
+                              {formData.rack ? filteredRacks.find((rack: any) => rack._id === formData.rack)?.name : 'Select Rack'}
+                            </span>
+                            <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showFormRackDropdown ? 'rotate-180' : ''}`} />
+                          </button>
+                          {showFormRackDropdown && formData.room && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                              {filteredRacks.map((rack) => (
+                                <button
+                                  key={rack._id}
+                                  type="button"
+                                  onClick={() => {
+                                    handleDropdownChange('rack', rack._id);
+                                    setShowFormRackDropdown(false);
+                                  }}
+                                  className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${formData.rack === rack._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                >
+                                  {rack.name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {formErrors.rack && (
+                          <p className="text-red-500 text-xs mt-1 flex items-center">
+                            <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
+                            {formErrors.rack}
+                          </p>
+                        )}
+                      </div> */}
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">
                           CPCB Number
@@ -1363,6 +1855,136 @@ const ProductManagement: React.FC = () => {
                             placeholder="e.g., 18"
                           />
                         </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+
+              {/* Location Information Section */}
+              <div className="flex-1 border-t border-gray-200 p-6">
+                <div className="flex items-center space-x-2 mb-6">
+                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <MapPin className="w-4 h-4 text-purple-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Location Information</h3>
+                </div>
+
+                {/* Location Information Section */}
+                <div className="mb-8">
+                  {/* <h3 className="text-lg font-semibold text-gray-900">Location Information</h3> */}
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Location *</label>
+                        <select
+                          name="location"
+                          value={formData.location}
+                          onChange={handleInputChange}
+                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                            formErrors.location ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                          }`}
+                        >
+                          <option value="">Select Location</option>
+                          {locations.map(location => (
+                            <option key={location._id} value={location._id}>
+                              {location.name}
+                            </option>
+                          ))}
+                        </select>
+                        {formErrors.location && (
+                          <p className="text-red-500 text-xs mt-1 flex items-center">
+                            <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
+                            {formErrors.location}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Room *
+                          {!formData.location && (
+                            <span className="text-xs text-gray-500 ml-1">(Select location first)</span>
+                          )}
+                        </label>
+                        <select
+                          name="room"
+                          value={formData.room}
+                          onChange={handleInputChange}
+                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                            formErrors.room 
+                              ? 'border-red-500 bg-red-50' 
+                              : !formData.location 
+                                ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed' 
+                                : 'border-gray-300'
+                          }`}
+                          disabled={!formData.location}
+                        >
+                          <option value="">
+                            {!formData.location ? 'Select location first' : 'Select Room'}
+                          </option>
+                          {filteredRooms.length > 0 ? filteredRooms.map(room => {
+                            console.log('Rendering room:', room);
+                            return typeof room === 'object' && room._id && room.name ? (
+                              <option key={room._id} value={room._id}>
+                                {room.name}
+                              </option>
+                            ) : null;
+                          }) : formData.location ? (
+                            <option disabled value="">No rooms available for this location</option>
+                          ) : null}
+                        </select>
+                        {formErrors.room && (
+                          <p className="text-red-500 text-xs mt-1 flex items-center">
+                            <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
+                            {formErrors.room}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Rack *
+                          {!formData.room && (
+                            <span className="text-xs text-gray-500 ml-1">(Select room first)</span>
+                          )}
+                        </label>
+                        <select
+                          name="rack"
+                          value={formData.rack}
+                          onChange={handleInputChange}
+                          disabled={!formData.room}
+                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                            formErrors.rack 
+                              ? 'border-red-500 bg-red-50' 
+                              : !formData.room 
+                                ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed' 
+                                : 'border-gray-300'
+                          }`}
+                        >
+                          <option value="">
+                            {!formData.room ? 'Select room first' : 'Select Rack'}
+                          </option>
+                          {filteredRacks.length > 0 ? (
+                            filteredRacks.map(rack => {
+                              console.log('Rendering rack:', rack);
+                              return (
+                                <option key={rack._id} value={rack._id}>
+                                  {rack.name}
+                                </option>
+                              );
+                            })
+                          ) : formData.room ? (
+                            <option disabled value="">
+                              No racks available for this room
+                            </option>
+                          ) : null}
+                        </select>
+                        {formErrors.rack && (
+                          <p className="text-red-500 text-xs mt-1 flex items-center">
+                            <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
+                            {formErrors.rack}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1425,6 +2047,7 @@ const ProductManagement: React.FC = () => {
                   </div>
                 </div>
               </div>
+
 
               {/* Footer with Action Buttons */}
               <div className="flex justify-end gap-4 items-center p-4 border-t border-gray-200">
@@ -1513,13 +2136,13 @@ const ProductManagement: React.FC = () => {
               {/* Basic Information */}
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Basic Information</h3>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs text-gray-500 uppercase tracking-wide font-medium">Subject</label>
                     <p className="text-sm text-gray-900 font-medium">{viewingProduct.subject}</p>
                   </div>
-                  
+
                   <div>
                     <label className="text-xs text-gray-500 uppercase tracking-wide font-medium">Status</label>
                     <div className="flex items-center space-x-2">
@@ -1555,11 +2178,10 @@ const ProductManagement: React.FC = () => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Phase</label>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
-                      viewingProduct.phase === 'single' 
-                        ? 'bg-green-100 text-green-800' 
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${viewingProduct.phase === 'single'
+                        ? 'bg-green-100 text-green-800'
                         : 'bg-blue-100 text-blue-800'
-                    }`}>
+                      }`}>
                       {viewingProduct.phase} Phase
                     </span>
                   </div>
@@ -1654,10 +2276,10 @@ const ProductManagement: React.FC = () => {
               </h3>
               <p className="text-gray-600 text-center mb-6">
                 Are you sure you want to delete <strong>{
-                  'name' in productToDelete && productToDelete.name 
-                    ? productToDelete.name 
-                    : 'subject' in productToDelete && productToDelete.subject 
-                      ? productToDelete.subject 
+                  'name' in productToDelete && productToDelete.name
+                    ? productToDelete.name
+                    : 'subject' in productToDelete && productToDelete.subject
+                      ? productToDelete.subject
                       : 'DG Product'
                 }</strong>?
                 This action cannot be undone.
@@ -1715,6 +2337,7 @@ const SpareProductsTab: React.FC<{
   setShowFilters: (show: boolean) => void;
   sortField: string;
   setSortField: (field: string) => void;
+  locations: any[];
   sortOrder: string;
   setSortOrder: (order: string) => void;
   categoryOptions: { value: string; label: string }[];
@@ -1733,6 +2356,7 @@ const SpareProductsTab: React.FC<{
   categoryFilter,
   setCategoryFilter,
   statusFilter,
+  locations,
   setStatusFilter,
   currentPage,
   totalPages,
@@ -1755,292 +2379,295 @@ const SpareProductsTab: React.FC<{
   handlePageChange,
   limit
 }) => {
-  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
-  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+    const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+    const [showStatusDropdown, setShowStatusDropdown] = useState(false);
 
-  const categories = Array.isArray(products) ? [...new Set(products.map(p => p.category))] : [];
+    const categories = Array.isArray(products) ? [...new Set(products.map(p => p.category))] : [];
 
-  return (
-    <div className="space-y-4">
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">Total Spare Products</p>
-              <p className="text-xl font-bold text-gray-900">{totalDatas}</p>
-            </div>
-            <Package className="w-6 h-6 text-blue-600" />
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">Active Products</p>
-              <p className="text-xl font-bold text-green-600">{totalDatas}</p>
-            </div>
-            <TrendingUp className="w-6 h-6 text-green-600" />
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">Categories</p>
-              <p className="text-xl font-bold text-purple-600">{categories.length}</p>
-            </div>
-            <Package className="w-6 h-6 text-purple-600" />
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">Avg Price</p>
-              <p className="text-xl font-bold text-orange-600">
-                ₹{products.length > 0
-                  ? (products.reduce((acc, p) => acc + (p.price || 0), 0) / products.length).toFixed(2)
-                  : 0}
-              </p>
-            </div>
-            <IndianRupee className="w-6 h-6 text-orange-600" />
-          </div>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
-        <div className="p-3 border-b border-gray-100">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 relative">
-              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search spare products..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="pl-8 pr-3 py-1.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors border border-blue-200 text-xs font-medium flex items-center gap-1.5"
-            >
-              <Filter className="w-3.5 h-3.5" />
-              Filters
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-            </button>
-          </div>
-        </div>
-        
-        {showFilters && (
-          <div className="px-6 py-6 bg-gray-50">
-            <div className="grid grid-cols-5 gap-4 mb-6">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Sort By</label>
-                <select
-                  value={sortField}
-                  onChange={e => setSortField(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-colors"
-                >
-                  <option value="all">Select Field</option>
-                  <option value="name">Product Name</option>
-                  <option value="partNo">Part Number</option>
-                  <option value="price">Unit Price</option>
-                </select>
+    return (
+      <div className="space-y-4">
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-600">Total Spare Products</p>
+                <p className="text-xl font-bold text-gray-900">{totalDatas}</p>
               </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Sort Order</label>
-                <select
-                  value={sortOrder}
-                  onChange={e => setSortOrder(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-colors"
-                >
-                  <option value="asc">Ascending (A-Z)</option>
-                  <option value="desc">Descending (Z-A)</option>
-                </select>
+              <Package className="w-6 h-6 text-blue-600" />
+            </div>
+          </div>
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-600">Active Products</p>
+                <p className="text-xl font-bold text-green-600">{totalDatas}</p>
               </div>
+              <TrendingUp className="w-6 h-6 text-green-600" />
+            </div>
+          </div>
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-600">Categories</p>
+                <p className="text-xl font-bold text-purple-600">{categories.length}</p>
+              </div>
+              <Package className="w-6 h-6 text-purple-600" />
+            </div>
+          </div>
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-600">Avg Price</p>
+                <p className="text-xl font-bold text-orange-600">
+                  ₹{products.length > 0
+                    ? (products.reduce((acc, p) => acc + (p.price || 0), 0) / products.length).toFixed(2)
+                    : 0}
+                </p>
+              </div>
+              <IndianRupee className="w-6 h-6 text-orange-600" />
+            </div>
+          </div>
+        </div>
 
-              <div className="space-y-2">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
-                <div className="relative dropdown-container">
-                  <button
-                    onClick={() => {
-                      setShowCategoryDropdown(!showCategoryDropdown);
-                      setShowStatusDropdown(false);
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+        {/* Filters */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+          <div className="p-3 border-b border-gray-100">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 relative">
+                <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search spare products..."
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="pl-8 pr-3 py-1.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors border border-blue-200 text-xs font-medium flex items-center gap-1.5"
+              >
+                <Filter className="w-3.5 h-3.5" />
+                Filters
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+          </div>
+
+          {showFilters && (
+            <div className="px-6 py-6 bg-gray-50">
+              <div className="grid grid-cols-5 gap-4 mb-6">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Sort By</label>
+                  <select
+                    value={sortField}
+                    onChange={e => setSortField(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-colors"
                   >
-                    <span className="text-gray-700 truncate mr-1">{getCategoryLabel(categoryFilter)}</span>
-                    <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showCategoryDropdown ? 'rotate-180' : ''}`} />
+                    <option value="all">Select Field</option>
+                    <option value="name">Product Name</option>
+                    <option value="partNo">Part Number</option>
+                    <option value="price">Unit Price</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Sort Order</label>
+                  <select
+                    value={sortOrder}
+                    onChange={e => setSortOrder(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-colors"
+                  >
+                    <option value="asc">Ascending (A-Z)</option>
+                    <option value="desc">Descending (Z-A)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+                  <div className="relative dropdown-container">
+                    <button
+                      onClick={() => {
+                        setShowCategoryDropdown(!showCategoryDropdown);
+                        setShowStatusDropdown(false);
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2 text-sm text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    >
+                      <span className="text-gray-700 truncate mr-1">{getCategoryLabel(categoryFilter)}</span>
+                      <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showCategoryDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showCategoryDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                        {categoryOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => {
+                              setCategoryFilter(option.value);
+                              setShowCategoryDropdown(false);
+                            }}
+                            className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${categoryFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                  <div className="relative dropdown-container">
+                    <button
+                      onClick={() => {
+                        setShowStatusDropdown(!showStatusDropdown);
+                        setShowCategoryDropdown(false);
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2 text-sm text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    >
+                      <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
+                      <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showStatusDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                        {statusOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => {
+                              setStatusFilter(option.value);
+                              setShowStatusDropdown(false);
+                            }}
+                            className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-end">
+                  <button
+                    onClick={clearAllFilters}
+                    disabled={!hasActiveFilters}
+                    className={`w-full px-4 py-2 text-sm font-medium rounded-lg transition-colors ${hasActiveFilters
+                        ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'
+                        : 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                      }`}
+                  >
+                    Clear All Filters
                   </button>
-                  {showCategoryDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                      {categoryOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => {
-                            setCategoryFilter(option.value);
-                            setShowCategoryDropdown(false);
-                          }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${categoryFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
-              
-              <div className="space-y-2">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
-                <div className="relative dropdown-container">
-                  <button
-                    onClick={() => {
-                      setShowStatusDropdown(!showStatusDropdown);
-                      setShowCategoryDropdown(false);
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  >
-                    <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
-                    <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-                  {showStatusDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                      {statusOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => {
-                            setStatusFilter(option.value);
-                            setShowStatusDropdown(false);
-                          }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              <div className="flex items-end">
-                <button
-                  onClick={clearAllFilters}
-                  disabled={!hasActiveFilters}
-                  className={`w-full px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                    hasActiveFilters
-                      ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'
-                      : 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
-                  }`}
-                >
-                  Clear All Filters
-                </button>
-              </div>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* Products Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part No</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Min Stock</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Max Stock</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UOM</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GNDP</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CPCB No</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {loading ? (
+        {/* Products Table */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
                 <tr>
-                  <td colSpan={12} className="px-6 py-8 text-center text-gray-500">Loading spare products...</td>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part No</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Min Stock</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Max Stock</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UOM</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GNDP</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CPCB No</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
-              ) : filteredProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={12} className="px-6 py-8 text-center text-gray-500">No spare products found</td>
-                </tr>
-              ) : (
-                filteredProducts.map((product) => (
-                  <tr key={product._id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 whitespace-nowrap uppercase">
-                      <div>
-                        <div className="text-xs font-medium text-gray-900">{product.name}</div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{product.partNo}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 uppercase">{product.category}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 uppercase">{product.brand || 'N/A'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-900">
-                      ₹{product?.price?.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                      {product.minStockLevel}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                      {product.maxStockLevel}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                      {product?.uom || 'N/A'}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                      ₹{product.gndp?.toFixed(2) || 'N/A'}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                      {product.cpcbNo || 'N/A'}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap uppercase">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${product.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                        {product.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs font-medium">
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => openEditProductModal(product)}
-                          className="text-blue-600 hover:text-blue-900 p-2 rounded-lg hover:bg-blue-50 transition-colors"
-                          title="Edit Product"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => openDeleteConfirm(product)}
-                          className="text-red-600 hover:text-red-900 p-2 rounded-lg hover:bg-red-50 transition-colors"
-                          title="Delete Product"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {loading ? (
+                  <tr>
+                    <td colSpan={13} className="px-6 py-8 text-center text-gray-500">Loading spare products...</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : filteredProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan={13} className="px-6 py-8 text-center text-gray-500">No spare products found</td>
+                  </tr>
+                ) : (
+                  filteredProducts.map((product) => (
+                    <tr key={product._id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 whitespace-nowrap uppercase">
+                        <div>
+                          <div className="text-xs font-medium text-gray-900">{product.name}</div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{product.partNo}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 uppercase">{product.category}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 uppercase">{product.brand || 'N/A'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                        {product.location ? locations.find((loc: any) => loc._id === product.location)?.name || 'N/A' : 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-900">
+                        ₹{product?.price?.toFixed(2)}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                        {product.minStockLevel}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                        {product.maxStockLevel}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                        {product?.uom || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                        ₹{product.gndp?.toFixed(2) || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                        {product.cpcbNo || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap uppercase">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${product.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                          {product.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-xs font-medium">
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => openEditProductModal(product)}
+                            className="text-blue-600 hover:text-blue-900 p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                            title="Edit Product"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => openDeleteConfirm(product)}
+                            className="text-red-600 hover:text-red-900 p-2 rounded-lg hover:bg-red-50 transition-colors"
+                            title="Delete Product"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
 
-      <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={handlePageChange}
-        totalItems={totalDatas}
-        itemsPerPage={limit}
-      />
-    </div>
-  );
-};
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={handlePageChange}
+          totalItems={totalDatas}
+          itemsPerPage={limit}
+        />
+      </div>
+    );
+  };
 
 // DG Products Tab Component
 const DGProductsTab: React.FC<{
@@ -2078,55 +2705,55 @@ const DGProductsTab: React.FC<{
   setShowImportModal,
   dgActiveCount
 }) => {
-  const filteredDGProducts = dgProducts.filter(product => {
-    const matchesSearch = (product.description && product.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (product.subject && product.subject.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (product.kva && product.kva.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (product.dgModel && product.dgModel.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesStatus = statusFilter === 'all' ||
-      (statusFilter === 'active' && product.isActive) ||
-      (statusFilter === 'inactive' && !product.isActive);
+    const filteredDGProducts = dgProducts.filter(product => {
+      const matchesSearch = (product.description && product.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (product.subject && product.subject.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (product.kva && product.kva.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (product.dgModel && product.dgModel.toLowerCase().includes(searchTerm.toLowerCase()));
+      const matchesStatus = statusFilter === 'all' ||
+        (statusFilter === 'active' && product.isActive) ||
+        (statusFilter === 'inactive' && !product.isActive);
 
-    return matchesSearch && matchesStatus;
-  });
+      return matchesSearch && matchesStatus;
+    });
 
-  const dgStatusOptions = [
-    { value: 'all', label: 'All Status' },
-    { value: 'active', label: 'Active' },
-    { value: 'inactive', label: 'Inactive' }
-  ];
+    const dgStatusOptions = [
+      { value: 'all', label: 'All Status' },
+      { value: 'active', label: 'Active' },
+      { value: 'inactive', label: 'Inactive' }
+    ];
 
-  const getDGStatusLabel = (value: string) => {
-    const option = dgStatusOptions.find(opt => opt.value === value);
-    return option ? option.label : 'All Status';
-  };
+    const getDGStatusLabel = (value: string) => {
+      const option = dgStatusOptions.find(opt => opt.value === value);
+      return option ? option.label : 'All Status';
+    };
 
-  return (
-    <div className="space-y-4">
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">Total DG Products</p>
-              <p className="text-xl font-bold text-gray-900">{totalDatas}</p>
+    return (
+      <div className="space-y-4">
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-600">Total DG Products</p>
+                <p className="text-xl font-bold text-gray-900">{totalDatas}</p>
+              </div>
+              <Zap className="w-6 h-6 text-orange-600" />
             </div>
-            <Zap className="w-6 h-6 text-orange-600" />
           </div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">Active DG Products</p>
-              <p className="text-xl font-bold text-green-600">
-                {dgActiveCount}
-              </p>
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-gray-600">Active DG Products</p>
+                <p className="text-xl font-bold text-green-600">
+                  {dgActiveCount}
+                </p>
+              </div>
+              <TrendingUp className="w-6 h-6 text-green-600" />
             </div>
-            <TrendingUp className="w-6 h-6 text-green-600" />
           </div>
-        </div>
 
-        {/* <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+          {/* <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-gray-600">Avg Price</p>
@@ -2139,194 +2766,194 @@ const DGProductsTab: React.FC<{
             <IndianRupee className="w-6 h-6 text-orange-600" />
           </div>
         </div> */}
-      </div>
+        </div>
 
-      {/* Search and Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex-1 relative">
-            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Search DG products..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="pl-8 pr-3 py-1.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-          <div className="flex space-x-2">
-            <select
-              value={statusFilter}
-              onChange={e => setStatusFilter(e.target.value)}
-              className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-            >
-              {dgStatusOptions.map(option => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+        {/* Search and Filters */}
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 relative">
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search DG products..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="pl-8 pr-3 py-1.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div className="flex space-x-2">
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              >
+                {dgStatusOptions.map(option => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* DG Products Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Zap className="w-5 h-5 text-orange-600" />
-              <h3 className="text-lg font-semibold text-gray-900">DG Products</h3>
-              <span className="px-2 py-1 text-xs font-medium bg-orange-100 text-orange-800 rounded-full">
-                {filteredDGProducts.length} {filteredDGProducts.length === 1 ? 'product' : 'products'}
-              </span>
-            </div>
-            <div className="flex items-center space-x-3">
-              
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
-                <span>Showing</span>
-                <span className="font-medium text-gray-900">{filteredDGProducts.length}</span>
-                <span>of</span>
-                <span className="font-medium text-gray-900">{totalDatas}</span>
-                <span>DG products</span>
+        {/* DG Products Table */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Zap className="w-5 h-5 text-orange-600" />
+                <h3 className="text-lg font-semibold text-gray-900">DG Products</h3>
+                <span className="px-2 py-1 text-xs font-medium bg-orange-100 text-orange-800 rounded-full">
+                  {filteredDGProducts.length} {filteredDGProducts.length === 1 ? 'product' : 'products'}
+                </span>
+              </div>
+              <div className="flex items-center space-x-3">
+
+                <div className="flex items-center space-x-2 text-sm text-gray-600">
+                  <span>Showing</span>
+                  <span className="font-medium text-gray-900">{filteredDGProducts.length}</span>
+                  <span>of</span>
+                  <span className="font-medium text-gray-900">{totalDatas}</span>
+                  <span>DG products</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        <div className="overflow-x-auto">
-          <table className="min-w-full border border-gray-300">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-16">
-                  S.No
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-48">
-                  Subject
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-32">
-                  Annexure Rating
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-24">
-                  KVA
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-20">
-                  Phase
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-32">
-                  Model & Cylinder
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-64">
-                  Product Description
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-24">
-                  Model
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-28">
-                  Cylinders
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-32">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {loading ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full border border-gray-300">
+              <thead className="bg-gray-100">
                 <tr>
-                  <td colSpan={10} className="px-6 py-8 text-center text-gray-500">Loading DG products...</td>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-16">
+                    S.No
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-48">
+                    Subject
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-32">
+                    Annexure Rating
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-24">
+                    KVA
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-20">
+                    Phase
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-32">
+                    Model & Cylinder
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-64">
+                    Product Description
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-24">
+                    Model
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-28">
+                    Cylinders
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-32">
+                    Actions
+                  </th>
                 </tr>
-              ) : filteredDGProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="px-6 py-8 text-center text-gray-500">No DG products found</td>
-                </tr>
-              ) : (
-                filteredDGProducts.map((product, index) => (
-                  <tr key={product._id} className="hover:bg-gray-50">
-                    <td className="px-3 py-3 border border-gray-300 text-xs font-medium text-gray-900 text-center">
-                      {(currentPage - 1) * limit + index + 1}
-                    </td>
-                    <td className="px-3 py-3 border border-gray-300">
-                      <div className="text-xs text-gray-900 font-medium leading-tight">
-                        Offer for the Supply of {product.kva} kVA ({product.phase === 'single' ? '1P' : '3P'}) Genset confirming to latest CPCB IV+ emission norms.
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 border border-gray-300">
-                      <div className="text-xs text-gray-900 font-medium leading-tight">
-                        {product.kva} Kva ({product.phase === 'single' ? '1P' : '3P'})
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 border border-gray-300">
-                      <div className="text-xs text-gray-900 font-medium text-center">
-                        {product.kva}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 border border-gray-300">
-                      <div className="text-xs text-gray-900 font-medium text-center">
-                        {product.phase === 'single' ? '1P' : '3P'}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 border border-gray-300">
-                      <div className="text-xs text-gray-900 font-medium leading-tight">
-                        {product.dgModel} & CYL-{product.numberOfCylinders}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 border border-gray-300">
-                      <div className="text-xs text-gray-900 leading-tight max-w-xs">
-                        {product.description || `Supply of ${product.kva} kVA ${product.phase === 'single' ? '1 phase' : '3 phase'}, Mahindra CPCB IV+ compliant, Prime Rated, radiator cooled, powered by Mahindra engine, electronic ${product.numberOfCylinders} cylinder engine, model ${product.dgModel}, coupled with ${product.kva} KVA alternator, Standard control panel with ASAS Controller with battery charger, Silencer, Anti-Vibration mountings, exhaust flexible connector, Batteries with cables, fuel tank.`}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 border border-gray-300">
-                      <div className="text-xs text-gray-900 font-medium text-center">
-                        {product.dgModel}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 border border-gray-300">
-                      <div className="text-xs text-gray-900 font-medium text-center">
-                        {product.numberOfCylinders}
-                      </div>
-                    </td>
-                    <td className="px-3 py-3 border border-gray-300">
-                      <div className="flex items-center space-x-1">
-                        <button
-                          onClick={() => openViewProductModal(product)}
-                          className="text-green-600 hover:text-green-900 p-1.5 rounded hover:bg-green-50 transition-colors"
-                          title="View Product"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => openEditProductModal(product)}
-                          className="text-blue-600 hover:text-blue-900 p-1.5 rounded hover:bg-blue-50 transition-colors"
-                          title="Edit Product"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => openDeleteConfirm(product)}
-                          className="text-red-600 hover:text-red-900 p-1.5 rounded hover:bg-red-50 transition-colors"
-                          title="Delete Product"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {loading ? (
+                  <tr>
+                    <td colSpan={10} className="px-6 py-8 text-center text-gray-500">Loading DG products...</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : filteredDGProducts.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} className="px-6 py-8 text-center text-gray-500">No DG products found</td>
+                  </tr>
+                ) : (
+                  filteredDGProducts.map((product, index) => (
+                    <tr key={product._id} className="hover:bg-gray-50">
+                      <td className="px-3 py-3 border border-gray-300 text-xs font-medium text-gray-900 text-center">
+                        {(currentPage - 1) * limit + index + 1}
+                      </td>
+                      <td className="px-3 py-3 border border-gray-300">
+                        <div className="text-xs text-gray-900 font-medium leading-tight">
+                          Offer for the Supply of {product.kva} kVA ({product.phase === 'single' ? '1P' : '3P'}) Genset confirming to latest CPCB IV+ emission norms.
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 border border-gray-300">
+                        <div className="text-xs text-gray-900 font-medium leading-tight">
+                          {product.kva} Kva ({product.phase === 'single' ? '1P' : '3P'})
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 border border-gray-300">
+                        <div className="text-xs text-gray-900 font-medium text-center">
+                          {product.kva}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 border border-gray-300">
+                        <div className="text-xs text-gray-900 font-medium text-center">
+                          {product.phase === 'single' ? '1P' : '3P'}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 border border-gray-300">
+                        <div className="text-xs text-gray-900 font-medium leading-tight">
+                          {product.dgModel} & CYL-{product.numberOfCylinders}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 border border-gray-300">
+                        <div className="text-xs text-gray-900 leading-tight max-w-xs">
+                          {product.description || `Supply of ${product.kva} kVA ${product.phase === 'single' ? '1 phase' : '3 phase'}, Mahindra CPCB IV+ compliant, Prime Rated, radiator cooled, powered by Mahindra engine, electronic ${product.numberOfCylinders} cylinder engine, model ${product.dgModel}, coupled with ${product.kva} KVA alternator, Standard control panel with ASAS Controller with battery charger, Silencer, Anti-Vibration mountings, exhaust flexible connector, Batteries with cables, fuel tank.`}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 border border-gray-300">
+                        <div className="text-xs text-gray-900 font-medium text-center">
+                          {product.dgModel}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 border border-gray-300">
+                        <div className="text-xs text-gray-900 font-medium text-center">
+                          {product.numberOfCylinders}
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 border border-gray-300">
+                        <div className="flex items-center space-x-1">
+                          <button
+                            onClick={() => openViewProductModal(product)}
+                            className="text-green-600 hover:text-green-900 p-1.5 rounded hover:bg-green-50 transition-colors"
+                            title="View Product"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => openEditProductModal(product)}
+                            className="text-blue-600 hover:text-blue-900 p-1.5 rounded hover:bg-blue-50 transition-colors"
+                            title="Edit Product"
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => openDeleteConfirm(product)}
+                            className="text-red-600 hover:text-red-900 p-1.5 rounded hover:bg-red-50 transition-colors"
+                            title="Delete Product"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
 
-      <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={handlePageChange}
-        totalItems={totalDatas}
-        itemsPerPage={limit}
-      />
-    </div>
-  );
-};
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={handlePageChange}
+          totalItems={totalDatas}
+          itemsPerPage={limit}
+        />
+      </div>
+    );
+  };
 
 export default ProductManagement; 

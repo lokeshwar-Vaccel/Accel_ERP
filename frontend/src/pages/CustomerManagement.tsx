@@ -119,6 +119,7 @@ interface Customer {
     alternatorMake?: string;
     alternatorSerialNumber?: string;
     dgMake: string;
+    oemMake?: string;
     engineSerialNumber: string;
     dgModel: string;
     dgRatingKVA: number;
@@ -205,6 +206,7 @@ interface CustomerFormData {
     alternatorMake?: string;
     alternatorSerialNumber?: string;
     dgMake: string;
+    oemMake?: string;
     engineSerialNumber: string;
     dgModel: string;
     dgRatingKVA: number;
@@ -343,6 +345,7 @@ const CustomerManagement: React.FC = () => {
       dgSerialNumbers: '',
       alternatorMake: '',
       alternatorSerialNumber: '',
+      oemMake: '',
       dgMake: '',
       engineSerialNumber: '',
       dgModel: '',
@@ -1070,24 +1073,50 @@ const CustomerManagement: React.FC = () => {
   //   return matchesSearch && matchesStatus && matchesType;
   // }) : [];
 
+  // Helper function to check if DG details should be required
+  const isDGDetailRequired = (dgDetail: any): boolean => {
+    return !!(dgDetail.dgSerialNumbers?.trim() || dgDetail.engineSerialNumber?.trim());
+  };
+
+  // Helper function to check if a specific field should show required asterisk
+  const isFieldRequired = (dgDetail: any, fieldName: string): boolean => {
+    const hasSerialNumber = dgDetail.dgSerialNumbers?.trim() || dgDetail.engineSerialNumber?.trim();
+    if (!hasSerialNumber) return false;
+    
+    // For serial number fields, show required if the other one is filled
+    if (fieldName === 'dgSerialNumbers') {
+      return !!dgDetail.engineSerialNumber?.trim();
+    }
+    if (fieldName === 'engineSerialNumber') {
+      return !!dgDetail.dgSerialNumbers?.trim();
+    }
+    
+    // For all other fields, show required if any serial number is filled
+    return true;
+  };
+
   const validateCustomerForm = (): boolean => {
     const errors: Record<string, any> = {};
     const missingFields: string[] = [];
     const addressErrors: string[] = [];
+    const addressFieldErrors: string[] = [];
+    const stateErrors: string[] = [];
+    const districtErrors: string[] = [];
+    const pincodeErrors: string[] = [];
     const gstErrors: string[] = [];
   
     // Top-level field checks
     if (!customerFormData.name.trim()) {
-      errors.name = `${entityLabel} name is required`;
-      missingFields.push(`${entityLabel} Name`);
+      errors.name = `Corporate name is required`;
+      missingFields.push(`Corporate Name`);
     } else {
       const isDuplicateName = allCustomers.some(customer =>
         customer.name.trim().toLowerCase() === customerFormData.name.trim().toLowerCase() &&
         (!editingCustomer || customer._id !== editingCustomer._id)
       );
       if (isDuplicateName) {
-        errors.name = `${entityLabel} name already exists. Please use a unique name.`;
-        missingFields.push(`Unique ${entityLabel} Name`);
+        errors.name = `Corporate name already exists. Please use a unique name.`;
+        missingFields.push(`Unique Corporate Name`);
       }
     }
   
@@ -1107,11 +1136,32 @@ const CustomerManagement: React.FC = () => {
       customerFormData.addresses.forEach((addr, index) => {
         const addrMissing: string[] = [];
   
-        if (!addr.address.trim()) addrMissing.push('address');
-        if (!addr.state.trim()) addrMissing.push('state');
-        if (!addr.district.trim()) addrMissing.push('district');
-        if (!addr.pincode.trim()) addrMissing.push('pincode');
-        else if (!/^\d{6}$/.test(addr.pincode)) addrMissing.push('valid 6-digit pincode');
+        // Address field validation
+        if (!addr.address.trim()) {
+          addressFieldErrors[index] = 'Address is required';
+          addrMissing.push('address');
+        }
+        
+        // State validation
+        if (!addr.state.trim()) {
+          stateErrors[index] = 'State is required';
+          addrMissing.push('state');
+        }
+        
+        // District validation
+        if (!addr.district.trim()) {
+          districtErrors[index] = 'District is required';
+          addrMissing.push('district');
+        }
+        
+        // Pincode validation
+        if (!addr.pincode.trim()) {
+          pincodeErrors[index] = 'Pincode is required';
+          addrMissing.push('pincode');
+        } else if (!/^\d{6}$/.test(addr.pincode)) {
+          pincodeErrors[index] = 'Pincode must be exactly 6 digits';
+          addrMissing.push('valid 6-digit pincode');
+        }
   
         if (addr.gstNumber && addr.gstNumber.trim() !== '') {
           if (!isValidGSTIN(addr.gstNumber)) {
@@ -1143,8 +1193,89 @@ const CustomerManagement: React.FC = () => {
       if (addressErrors.length > 0) {
         errors.address = addressErrors;
       }
+      if (addressFieldErrors.length > 0) {
+        errors.addressField = addressFieldErrors;
+      }
+      if (stateErrors.length > 0) {
+        errors.state = stateErrors;
+      }
+      if (districtErrors.length > 0) {
+        errors.district = districtErrors;
+      }
+      if (pincodeErrors.length > 0) {
+        errors.pincode = pincodeErrors;
+      }
       if (gstErrors.length > 0) {
         errors.gst = gstErrors;
+      }
+    }
+
+    // DG Details validation (only for customer type)
+    if (customerTypeTab === 'customer' && customerFormData.dgDetails && customerFormData.dgDetails.length > 0) {
+      const dgDetailsErrors: Record<number, Record<string, string>> = {};
+      
+      customerFormData.dgDetails.forEach((dgDetail, index) => {
+        const dgErrors: Record<string, string> = {};
+        
+        // Check if any DG detail has been started (either serial number field has content)
+        const hasSerialNumber = dgDetail.dgSerialNumbers.trim() || dgDetail.engineSerialNumber.trim();
+        
+        // Only validate if user has started filling DG details
+        if (hasSerialNumber) {
+          // Special validation: Either DG Serial Number OR Engine Serial Number required
+          if (!dgDetail.dgSerialNumbers.trim() && !dgDetail.engineSerialNumber.trim()) {
+            dgErrors.dgSerialNumbers = 'DG Serial Number is required';
+            dgErrors.engineSerialNumber = 'Engine Serial Number is required';
+            missingFields.push(`DG Details #${index + 1} - Serial Number`);
+          } else if (dgDetail.dgSerialNumbers.trim() && !dgDetail.engineSerialNumber.trim()) {
+            // If DG Serial Number is filled but Engine Serial Number is empty, show error for Engine Serial Number
+            dgErrors.engineSerialNumber = 'Engine Serial Number is required';
+            missingFields.push(`DG Details #${index + 1} - Engine Serial Number`);
+          } else if (!dgDetail.dgSerialNumbers.trim() && dgDetail.engineSerialNumber.trim()) {
+            // If Engine Serial Number is filled but DG Serial Number is empty, show error for DG Serial Number
+            dgErrors.dgSerialNumbers = 'DG Serial Number is required';
+            missingFields.push(`DG Details #${index + 1} - DG Serial Number`);
+          }
+          
+          // Standard mandatory field validations
+          if (!dgDetail.dgMake.trim()) {
+            dgErrors.dgMake = 'DG Make is required';
+            missingFields.push(`DG Details #${index + 1} - DG Make`);
+          }
+          
+          if (!dgDetail.dgModel.trim()) {
+            dgErrors.dgModel = 'DG Model is required';
+            missingFields.push(`DG Details #${index + 1} - DG Model`);
+          }
+          
+          if (!dgDetail.dgRatingKVA || dgDetail.dgRatingKVA <= 0) {
+            dgErrors.dgRatingKVA = 'DG Rating (KVA) must be greater than 0';
+            missingFields.push(`DG Details #${index + 1} - DG Rating`);
+          }
+          
+          if (!dgDetail.warrantyStatus) {
+            dgErrors.warrantyStatus = 'Warranty Status is required';
+            missingFields.push(`DG Details #${index + 1} - Warranty Status`);
+          }
+          
+          if (!dgDetail.cluster.trim()) {
+            dgErrors.cluster = 'Service Cluster is required';
+            missingFields.push(`DG Details #${index + 1} - Service Cluster`);
+          }
+          
+          if (!(dgDetail as any).locationAddress) {
+            dgErrors.locationAddress = 'DG Location (Address) is required';
+            missingFields.push(`DG Details #${index + 1} - DG Location`);
+          }
+        }
+        
+        if (Object.keys(dgErrors).length > 0) {
+          dgDetailsErrors[index] = dgErrors;
+        }
+      });
+      
+      if (Object.keys(dgDetailsErrors).length > 0) {
+        errors.dgDetails = dgDetailsErrors;
       }
     }
   
@@ -1401,6 +1532,7 @@ const CustomerManagement: React.FC = () => {
             alternatorMake: dg.alternatorMake || '',
             alternatorSerialNumber: dg.alternatorSerialNumber || '',
             dgMake: dg.dgMake || '',
+            oemMake: dg.oemMake || '',
             engineSerialNumber: dg.engineSerialNumber || '',
             dgModel: dg.dgModel || '',
             dgRatingKVA: dg.dgRatingKVA || 0,
@@ -1423,6 +1555,7 @@ const CustomerManagement: React.FC = () => {
             alternatorMake: '',
             alternatorSerialNumber: '',
             dgMake: '',
+            oemMake: '',
             engineSerialNumber: '',
             dgModel: '',
             dgRatingKVA: 0,
@@ -2083,9 +2216,9 @@ const CustomerManagement: React.FC = () => {
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {customerTypeTab === 'oem' ? 'Company Name' : 
-                   customerTypeTab === 'customer' ? 'Customer Name' :
+                   customerTypeTab === 'customer' ? 'Corporate Name' :
                    customerTypeTab === 'dg_customer' ? 'DG Customer Name' :
-                   'Supplier Name'}
+                   'Corporate Name'}
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Contact Person Name
@@ -2114,6 +2247,9 @@ const CustomerManagement: React.FC = () => {
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   GST Details
                 </th>
+                {customerTypeTab === 'customer' && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  No of DG's
+                </th>}
 
                 {/* Status - Only show for non-suppliers */}
                 {customerTypeTab !== 'supplier' && (
@@ -2276,6 +2412,11 @@ const CustomerManagement: React.FC = () => {
                         return 'N/A';
                       })()}
                     </td>
+
+                    {/* No of DG's Column */}
+                    {customerTypeTab === 'customer' && <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                      {customerTypeTab === 'customer' && customer.dgDetails?.length || 'N/A'}
+                    </td>}
                     
 
                     
@@ -2800,7 +2941,7 @@ const CustomerManagement: React.FC = () => {
                       {/* Customer Name */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Name *
+                        Corporate Name <span className="text-red-500">*</span>
                         </label>
                         <input
                           type="text"
@@ -2932,7 +3073,7 @@ const CustomerManagement: React.FC = () => {
                             <div className='flex-1'>
                               <div className="flex justify-between my-1">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                                  Address {index + 1} *{' '}
+                                  Address {index + 1} <span className="text-red-500">*</span>{' '}
                                   {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
                                 </label>
                                 {!address.isPrimary && (
@@ -2948,9 +3089,13 @@ const CustomerManagement: React.FC = () => {
                               <textarea
                                 value={address.address}
                                 onChange={(e) => updateAddress(address.id, 'address', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                className={`w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${Array.isArray(formErrors.addressField) && formErrors.addressField[index] ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                 placeholder="Enter full address"
                               />
+                              {Array.isArray(formErrors.addressField) && formErrors.addressField[index] && (
+                                <p className="text-red-500 text-xs mt-1">{formErrors.addressField[index]}</p>
+                              )}
                               {/* Registration Status per address */}
                               <div className="mt-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Registration Status *</label>
@@ -3030,31 +3175,39 @@ const CustomerManagement: React.FC = () => {
                               <div className="grid grid-cols-3 gap-2 mt-2">
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    State *
+                                    State <span className="text-red-500">*</span>
                                   </label>
                                   <input
                                     type="text"
                                     value={address.state}
                                     onChange={(e) => updateAddress(address.id, 'state', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${Array.isArray(formErrors.state) && formErrors.state[index] ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="State"
                                   />
+                                  {/* {Array.isArray(formErrors.state) && formErrors.state[index] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.state[index]}</p>
+                                  )} */}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    District *
+                                    District <span className="text-red-500">*</span>
                                   </label>
                                   <input
                                     type="text"
                                     value={address.district}
                                     onChange={(e) => updateAddress(address.id, 'district', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${Array.isArray(formErrors.district) && formErrors.district[index] ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="District"
                                   />
+                                  {/* {Array.isArray(formErrors.district) && formErrors.district[index] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.district[index]}</p>
+                                  )} */}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Pincode *
+                                    Pincode <span className="text-red-500">*</span>
                                   </label>
                                   <input
                                     type="text"
@@ -3063,11 +3216,15 @@ const CustomerManagement: React.FC = () => {
                                       const value = e.target.value.replace(/\D/g, '').slice(0, 6);
                                       updateAddress(address.id, 'pincode', value);
                                     }}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${Array.isArray(formErrors.pincode) && formErrors.pincode[index] ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="Pincode"
                                     pattern="[0-9]{6}"
                                     maxLength={6}
                                   />
+                                  {/* {Array.isArray(formErrors.pincode) && formErrors.pincode[index] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.pincode[index]}</p>
+                                  )} */}
                                 </div>
                               </div>
                               {Array.isArray(formErrors.address) && formErrors.address[index] && (
@@ -3152,49 +3309,75 @@ const CustomerManagement: React.FC = () => {
                                 {/* DG Serial Number */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Serial Number *
+                                    DG Serial Number {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
                                     value={dgDetail.dgSerialNumbers}
                                     onChange={(e) => updateDGDetails(index, 'dgSerialNumbers', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.dgSerialNumbers ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="e.g., DG001"
                                   />
+                                  {formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.dgSerialNumbers && (
+                                    <p className="text-red-500 text-xs mt-1">{(formErrors.dgDetails[index] as any).dgSerialNumbers}</p>
+                                  )}
                                 </div>
 
                                 {/* DG Make */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Make *
+                                    DG Make {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
                                     value={dgDetail.dgMake}
                                     onChange={(e) => updateDGDetails(index, 'dgMake', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.dgMake ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="e.g., Cummins, Kirloskar"
+                                  />
+                                  {formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.dgMake && (
+                                    <p className="text-red-500 text-xs mt-1">{(formErrors.dgDetails[index] as any).dgMake}</p>
+                                  )}
+                                </div>
+
+                                {/* OEM Make */}
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    OEM Make
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={dgDetail.oemMake || ''}
+                                    onChange={(e) => updateDGDetails(index, 'oemMake', e.target.value)}
+                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="e.g., OEM manufacturer name"
                                   />
                                 </div>
 
                                 {/* DG Model */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Model *
+                                    DG Model {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
                                     value={dgDetail.dgModel}
                                     onChange={(e) => updateDGDetails(index, 'dgModel', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.dgModel ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="e.g., C1100D5"
                                   />
+                                  {formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.dgModel && (
+                                    <p className="text-red-500 text-xs mt-1">{(formErrors.dgDetails[index] as any).dgModel}</p>
+                                  )}
                                 </div>
 
                                 {/* DG Rating KVA */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Rating (KVA) *
+                                    DG Rating (KVA) {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="number"
@@ -3202,9 +3385,13 @@ const CustomerManagement: React.FC = () => {
                                     step="1"
                                     value={dgDetail.dgRatingKVA}
                                     onChange={(e) => updateDGDetails(index, 'dgRatingKVA', parseFloat(e.target.value))}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.dgRatingKVA ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="e.g., 1000"
                                   />
+                                  {formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.dgRatingKVA && (
+                                    <p className="text-red-500 text-xs mt-1">{(formErrors.dgDetails[index] as any).dgRatingKVA}</p>
+                                  )}
                                 </div>
 
                                 {/* Alternator Make */}
@@ -3238,15 +3425,19 @@ const CustomerManagement: React.FC = () => {
                                 {/* Engine Serial Number */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Engine Serial Number *
+                                    Engine Serial Number {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
                                     value={dgDetail.engineSerialNumber}
                                     onChange={(e) => updateDGDetails(index, 'engineSerialNumber', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.engineSerialNumber ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="e.g., ENG001"
                                   />
+                                  {formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.engineSerialNumber && (
+                                    <p className="text-red-500 text-xs mt-1">{(formErrors.dgDetails[index] as any).engineSerialNumber}</p>
+                                  )}
                                 </div>
 
                                 {/* Sales Dealer Name */}
@@ -3279,18 +3470,22 @@ const CustomerManagement: React.FC = () => {
                                 {/* Warranty Status */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Warranty Status * 
+                                    Warranty Status {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <div className="relative">
                                     <select
                                       value={dgDetail.warrantyStatus}
                                       onChange={(e) => updateDGDetails(index, 'warrantyStatus', e.target.value)}
-                                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50"
+                                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50 ${formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.warrantyStatus ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                       title="Automatically determined: Warranty if commissioned within 2 years, Non-Warranty if older than 2 years"
                                     >
                                       <option value="warranty">Warranty</option>
                                       <option value="non_warranty">Non-Warranty</option>
                                     </select>
+                                    {formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.warrantyStatus && (
+                                      <p className="text-red-500 text-xs mt-1">{(formErrors.dgDetails[index] as any).warrantyStatus}</p>
+                                    )}
                                   </div>
                                 </div>
 
@@ -3298,15 +3493,19 @@ const CustomerManagement: React.FC = () => {
                                 {/* Cluster */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Service Cluster *
+                                    Service Cluster {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
                                     value={dgDetail.cluster}
                                     onChange={(e) => updateDGDetails(index, 'cluster', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.cluster ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="e.g., North Zone, South Zone"
                                   />
+                                  {formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.cluster && (
+                                    <p className="text-red-500 text-xs mt-1">{(formErrors.dgDetails[index] as any).cluster}</p>
+                                  )}
                                 </div>
                                 
                                 {/* Warranty Start Date */}
@@ -3352,7 +3551,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* DG Location (Address) */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Location (Address) *
+                                    DG Location (Address) <span className="text-red-500">*</span>
                                   </label>
                                   <select
                                     value={(dgDetail as any).locationAddress || ''}
@@ -3360,13 +3559,17 @@ const CustomerManagement: React.FC = () => {
                                       const selectedText = e.target.value;
                                       updateDGDetails(index, 'locationAddress' as any, selectedText);
                                     }}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white ${formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.locationAddress ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                   >
                                     <option value="" disabled>Select address</option>
                                     {customerFormData.addresses.map(a => (
                                       <option key={a.id} value={a.address}>{a.address ? a.address.slice(0, 80) : `Address #${a.id}`}</option>
                                     ))}
                                   </select>
+                                  {formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.locationAddress && (
+                                    <p className="text-red-500 text-xs mt-1">{(formErrors.dgDetails[index] as any).locationAddress}</p>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -3454,7 +3657,7 @@ const CustomerManagement: React.FC = () => {
                       {/* Customer Name */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Name *
+                          Corporate Name <span className="text-red-500">*</span>
                         </label>
                         <input
                           type="text"
@@ -3470,34 +3673,6 @@ const CustomerManagement: React.FC = () => {
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4 mt-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Email
-                        </label>
-                        <input
-                          type="email"
-                          value={customerFormData.email}
-                          onChange={(e) => setCustomerFormData({ ...customerFormData, email: e.target.value })}
-                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.email ? 'border-red-500' : 'border-gray-300'
-                            }`}
-                          placeholder="Enter email address"
-                        />
-                        {/* {formErrors.email && (
-                          <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>
-                        )} */}
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Phone Number
-                        </label>
-                        <input
-                          type="tel"
-                          value={customerFormData.phone}
-                          onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
-                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Enter phone number (optional)"
-                        />
-                      </div>
                     </div>
                       <div className="mt-4">
                         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -3619,7 +3794,7 @@ const CustomerManagement: React.FC = () => {
                             <div className='flex-1'>
                               <div className="flex justify-between my-1">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                                  Address {index + 1} *{' '}
+                                  Address {index + 1} <span className="text-red-500">*</span>{' '}
                                   {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
                                 </label>
                                 {!address.isPrimary && (
@@ -3635,9 +3810,13 @@ const CustomerManagement: React.FC = () => {
                               <textarea
                                 value={address.address}
                                 onChange={(e) => updateAddress(address.id, 'address', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                className={`w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${Array.isArray(formErrors.addressField) && formErrors.addressField[index] ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                 placeholder="Enter full address"
                               />
+                              {Array.isArray(formErrors.addressField) && formErrors.addressField[index] && (
+                                <p className="text-red-500 text-xs mt-1">{formErrors.addressField[index]}</p>
+                              )}
                               {/* GST Number per address */}
                               <div className="mt-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -3702,31 +3881,39 @@ const CustomerManagement: React.FC = () => {
                               <div className="grid grid-cols-3 gap-2 mt-2">
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    State *
+                                    State <span className="text-red-500">*</span>
                                   </label>
                                   <input
                                     type="text"
                                     value={address.state}
                                     onChange={(e) => updateAddress(address.id, 'state', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${Array.isArray(formErrors.state) && formErrors.state[index] ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="State"
                                   />
+                                  {/* {Array.isArray(formErrors.state) && formErrors.state[index] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.state[index]}</p>
+                                  )} */}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    District *
+                                    District <span className="text-red-500">*</span>
                                   </label>
                                   <input
                                     type="text"
                                     value={address.district}
                                     onChange={(e) => updateAddress(address.id, 'district', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${Array.isArray(formErrors.district) && formErrors.district[index] ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="District"
                                   />
+                                  {/* {Array.isArray(formErrors.district) && formErrors.district[index] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.district[index]}</p>
+                                  )} */}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Pincode *
+                                    Pincode <span className="text-red-500">*</span>
                                   </label>
                                   <input
                                     type="text"
@@ -3735,11 +3922,15 @@ const CustomerManagement: React.FC = () => {
                                       const value = e.target.value.replace(/\D/g, '').slice(0, 6);
                                       updateAddress(address.id, 'pincode', value);
                                     }}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${Array.isArray(formErrors.pincode) && formErrors.pincode[index] ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="Pincode"
                                     pattern="[0-9]{6}"
                                     maxLength={6}
                                   />
+                                  {/* {Array.isArray(formErrors.pincode) && formErrors.pincode[index] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.pincode[index]}</p>
+                                  )} */}
                                 </div>
                               </div>
                               {Array.isArray(formErrors.address) && formErrors.address[index] && (
@@ -3824,49 +4015,75 @@ const CustomerManagement: React.FC = () => {
                                 {/* DG Serial Number */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Serial Number *
+                                    DG Serial Number {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
                                     value={dgDetail.dgSerialNumbers}
                                     onChange={(e) => updateDGDetails(index, 'dgSerialNumbers', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.dgSerialNumbers ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="e.g., DG001"
                                   />
+                                  {formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.dgSerialNumbers && (
+                                    <p className="text-red-500 text-xs mt-1">{(formErrors.dgDetails[index] as any).dgSerialNumbers}</p>
+                                  )}
                                 </div>
 
                                 {/* DG Make */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Make *
+                                    DG Make {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
                                     value={dgDetail.dgMake}
                                     onChange={(e) => updateDGDetails(index, 'dgMake', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.dgMake ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="e.g., Cummins, Kirloskar"
+                                  />
+                                  {formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.dgMake && (
+                                    <p className="text-red-500 text-xs mt-1">{(formErrors.dgDetails[index] as any).dgMake}</p>
+                                  )}
+                                </div>
+
+                                {/* OEM Make */}
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    OEM Make
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={dgDetail.oemMake || ''}
+                                    onChange={(e) => updateDGDetails(index, 'oemMake', e.target.value)}
+                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="e.g., OEM manufacturer name"
                                   />
                                 </div>
 
                                 {/* DG Model */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Model *
+                                    DG Model {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
                                     value={dgDetail.dgModel}
                                     onChange={(e) => updateDGDetails(index, 'dgModel', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.dgModel ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="e.g., C1100D5"
                                   />
+                                  {formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.dgModel && (
+                                    <p className="text-red-500 text-xs mt-1">{(formErrors.dgDetails[index] as any).dgModel}</p>
+                                  )}
                                 </div>
 
                                 {/* DG Rating KVA */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Rating (KVA) *
+                                    DG Rating (KVA) {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="number"
@@ -3874,9 +4091,13 @@ const CustomerManagement: React.FC = () => {
                                     step="1"
                                     value={dgDetail.dgRatingKVA}
                                     onChange={(e) => updateDGDetails(index, 'dgRatingKVA', parseFloat(e.target.value))}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.dgRatingKVA ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="e.g., 1000"
                                   />
+                                  {formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.dgRatingKVA && (
+                                    <p className="text-red-500 text-xs mt-1">{(formErrors.dgDetails[index] as any).dgRatingKVA}</p>
+                                  )}
                                 </div>
 
                                 {/* Alternator Make */}
@@ -3910,15 +4131,19 @@ const CustomerManagement: React.FC = () => {
                                 {/* Engine Serial Number */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Engine Serial Number *
+                                    Engine Serial Number {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
                                     value={dgDetail.engineSerialNumber}
                                     onChange={(e) => updateDGDetails(index, 'engineSerialNumber', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.engineSerialNumber ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="e.g., ENG001"
                                   />
+                                  {formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.engineSerialNumber && (
+                                    <p className="text-red-500 text-xs mt-1">{(formErrors.dgDetails[index] as any).engineSerialNumber}</p>
+                                  )}
                                 </div>
 
                                 {/* Sales Dealer Name */}
@@ -3951,7 +4176,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* Warranty Status */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Warranty Status * 
+                                    Warranty Status {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                     <span className="text-xs text-gray-500 ml-1">(Auto-calculated)</span>
                                   </label>
                                   <div className="relative">
@@ -3974,15 +4199,19 @@ const CustomerManagement: React.FC = () => {
                                 {/* Cluster */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Service Cluster *
+                                    Service Cluster {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
                                     value={dgDetail.cluster}
                                     onChange={(e) => updateDGDetails(index, 'cluster', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.cluster ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                     placeholder="e.g., North Zone, South Zone"
                                   />
+                                  {formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.cluster && (
+                                    <p className="text-red-500 text-xs mt-1">{(formErrors.dgDetails[index] as any).cluster}</p>
+                                  )}
                                 </div>
                                 
                                 {/* Warranty Start Date */}
@@ -4029,7 +4258,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* DG Location (Address) */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Location (Address) *
+                                    DG Location (Address) <span className="text-red-500">*</span>
                                   </label>
                                   <select
                                     value={(dgDetail as any).locationAddress || ''}
@@ -4037,13 +4266,17 @@ const CustomerManagement: React.FC = () => {
                                       const selectedText = e.target.value;
                                       updateDGDetails(index, 'locationAddress' as any, selectedText);
                                     }}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white ${formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.locationAddress ? 'border-red-500' : 'border-gray-300'
+                            }`}
                                   >
                                     <option value="" disabled>Select address</option>
                                     {customerFormData.addresses.map(a => (
                                       <option key={a.id} value={a.address}>{a.address ? a.address.slice(0, 80) : `Address #${a.id}`}</option>
                                     ))}
                                   </select>
+                                  {formErrors.dgDetails && formErrors.dgDetails[index] && (formErrors.dgDetails[index] as any)?.locationAddress && (
+                                    <p className="text-red-500 text-xs mt-1">{(formErrors.dgDetails[index] as any).locationAddress}</p>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -4542,6 +4775,12 @@ const CustomerManagement: React.FC = () => {
                             <p className="text-xs text-gray-500">DG Make</p>
                             <p className="font-medium text-sm">{dgDetail.dgMake}</p>
                           </div>
+                          {dgDetail.oemMake && (
+                            <div>
+                              <p className="text-xs text-gray-500">OEM Make</p>
+                              <p className="font-medium text-sm">{dgDetail.oemMake}</p>
+                            </div>
+                          )}
                           <div>
                             <p className="text-xs text-gray-500">DG Model</p>
                             <p className="font-medium text-sm">{dgDetail.dgModel}</p>

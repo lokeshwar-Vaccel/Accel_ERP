@@ -39,7 +39,9 @@ export enum CustomerType {
   DG = 'dg',
   JENARAL = 'jenaral',
   JE = 'je',
-  OEM = 'oem'
+  OEM = 'oem',
+  EXISTING_CUSTOMER = 'existing_customer',
+  NEW_CUSTOMER = 'new_customer'
 }
 
 // Customer Main Type (customer or supplier)
@@ -282,6 +284,9 @@ export interface IProduct extends Document {
   isActive: boolean;
   createdBy: string;
   stockUnit?: StockUnit;
+  location?: Types.ObjectId;
+  room?: Types.ObjectId;
+  rack?: Types.ObjectId;
 }
 
 // DG Product Interface
@@ -450,6 +455,7 @@ export interface IDGDetails extends Document {
   alternatorMake?: string;
   alternatorSerialNumber?: string;
   dgMake: string;
+  oemMake?: string;
   engineSerialNumber: string;
   dgModel: string;
   dgRatingKVA: number;

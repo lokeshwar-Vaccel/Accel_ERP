@@ -1,8 +1,9 @@
-import React from 'react';
-import { X, Download, Mail, Printer, Check, X as XIcon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Download, Mail, Printer, Check, X as XIcon, RefreshCw } from 'lucide-react';
 import { Button } from './Botton';
 import { Badge } from './Badge';
 import { downloadDGQuotationPDF } from '../../utils/dgQuotationPdf';
+import { apiClient } from '../../utils/api';
 
 interface DGQuotationViewModalProps {
   isOpen: boolean;
@@ -18,6 +19,10 @@ const DGQuotationViewModal: React.FC<DGQuotationViewModalProps> = ({
   onStatusUpdate
 }) => {
   const [updatingStatus, setUpdatingStatus] = React.useState(false);
+  
+  // Payment history state
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
 
   console.log("quotation:",quotation);
   
@@ -88,6 +93,297 @@ const DGQuotationViewModal: React.FC<DGQuotationViewModalProps> = ({
     }
   };
 
+  // Format currency helper
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 2
+    }).format(amount);
+  };
+
+  // Format date helper
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: '2-digit'
+    });
+  };
+
+  // Fetch payment history for DG quotation
+  const fetchDGQuotationPaymentHistory = async (quotationId: string) => {
+    try {
+      setLoadingPayments(true);
+      const response = await apiClient.dgSales.dgQuotationPayments.getByQuotation(quotationId);
+      console.log('DG Quotation Payment History Response:', response);
+      if (response.success) {
+        // Handle different possible response structures
+        let payments = [];
+        if (Array.isArray(response.data)) {
+          payments = response.data;
+        } else if (response.data?.payments && Array.isArray(response.data.payments)) {
+          payments = response.data.payments;
+        } else if ((response.data as any)?.data && Array.isArray((response.data as any).data)) {
+          payments = (response.data as any).data;
+        }
+        console.log('Processed payments:', payments);
+        setPaymentHistory(payments);
+      } else {
+        setPaymentHistory([]);
+      }
+    } catch (error) {
+      console.error('Error fetching DG quotation payment history:', error);
+      setPaymentHistory([]);
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
+
+  // Helper function to get payment method label
+  const getPaymentMethodLabel = (value: string) => {
+    const options = [
+      { value: '', label: 'Select payment method' },
+      { value: 'cash', label: 'Cash' },
+      { value: 'bank_transfer', label: 'Bank Transfer' },
+      { value: 'cheque', label: 'Cheque' },
+      { value: 'upi', label: 'UPI' },
+      { value: 'card', label: 'Card' },
+      { value: 'other', label: 'Other' }
+    ];
+    return options.find(option => option.value === value)?.label || value;
+  };
+
+  // Helper function to render payment method details
+  const renderPaymentMethodDetails = (method: string, details: any) => {
+    console.log("Payment Method Details Debug:", {
+      method,
+      details,
+      detailsType: typeof details,
+      detailsKeys: details ? Object.keys(details) : 'no details',
+      detailsLength: details ? Object.keys(details).length : 0
+    });
+    
+    if (!details || typeof details !== 'object' || Object.keys(details).length === 0) {
+      console.log("No payment method details to render");
+      return (
+        <div className="text-xs text-gray-500 italic">
+          No additional payment details available
+        </div>
+      );
+    }
+
+    const renderDetail = (label: string, value: any, formatter?: (val: any) => string) => {
+      if (!value) return null;
+      return (
+        <div className="text-xs">
+          <span className="font-medium text-gray-600">{label}:</span> 
+          <span className="ml-1 text-gray-800">{formatter ? formatter(value) : String(value)}</span>
+        </div>
+      );
+    };
+
+    // Handle nested structure where details are inside method-specific objects
+    let actualDetails = details;
+    
+    // Check if details are nested under the payment method key
+    if (method === 'cheque' && details.cheque) {
+      actualDetails = details.cheque;
+    } else if (method === 'bank_transfer' && details.bankTransfer) {
+      actualDetails = details.bankTransfer;
+    } else if (method === 'upi' && details.upi) {
+      actualDetails = details.upi;
+    } else if (method === 'card' && details.card) {
+      actualDetails = details.card;
+    } else if (method === 'cash' && details.cash) {
+      actualDetails = details.cash;
+    } else if (method === 'other' && details.other) {
+      actualDetails = details.other;
+    }
+
+    console.log("Actual Details:", actualDetails);
+
+    switch (method) {
+      case 'bank_transfer':
+        return (
+          <>
+            {renderDetail('Bank', actualDetails.bankName)}
+            {renderDetail('Account Number', actualDetails.accountNumber)}
+            {renderDetail('Transaction ID', actualDetails.transactionId)}
+            {renderDetail('IFSC Code', actualDetails.ifscCode)}
+            {renderDetail('Transfer Date', actualDetails.transferDate, formatDate)}
+            {renderDetail('Reference Number', actualDetails.referenceNumber)}
+          </>
+        );
+      case 'cheque':
+        return (
+          <>
+            {renderDetail('Cheque Number', actualDetails.chequeNumber)}
+            {renderDetail('Bank', actualDetails.bankName)}
+            {renderDetail('Branch', actualDetails.branchName)}
+            {renderDetail('Issue Date', actualDetails.issueDate, formatDate)}
+            {renderDetail('Account Holder', actualDetails.accountHolderName)}
+            {renderDetail('Account Number', actualDetails.accountNumber)}
+          </>
+        );
+      case 'upi':
+        return (
+          <>
+            {renderDetail('UPI ID', actualDetails.upiId)}
+            {renderDetail('Transaction ID', actualDetails.transactionId)}
+            {renderDetail('Transaction Reference', actualDetails.transactionReference)}
+            {renderDetail('Payer Name', actualDetails.payerName)}
+            {renderDetail('Payer Phone', actualDetails.payerPhone)}
+          </>
+        );
+      case 'card':
+        return (
+          <>
+            {renderDetail('Card Type', actualDetails.cardType)}
+            {renderDetail('Card Network', actualDetails.cardNetwork)}
+            {renderDetail('Last 4 Digits', actualDetails.lastFourDigits)}
+            {renderDetail('Transaction ID', actualDetails.transactionId)}
+            {renderDetail('Authorization Code', actualDetails.authorizationCode)}
+            {renderDetail('Card Holder', actualDetails.cardHolderName)}
+          </>
+        );
+      case 'cash':
+        return (
+          <>
+            {renderDetail('Received By', actualDetails.receivedBy)}
+            {renderDetail('Receipt Number', actualDetails.receiptNumber)}
+          </>
+        );
+      case 'other':
+        return (
+          <>
+            {renderDetail('Method Name', actualDetails.methodName)}
+            {renderDetail('Reference Number', actualDetails.referenceNumber)}
+            {actualDetails.additionalDetails && Object.keys(actualDetails.additionalDetails).length > 0 && (
+              <div className="mt-1">
+                <span className="font-medium text-gray-600">Additional Details:</span>
+                {Object.entries(actualDetails.additionalDetails).map(([key, value]) => 
+                  renderDetail(key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1'), value)
+                )}
+              </div>
+            )}
+          </>
+        );
+      default:
+        // For any other payment method or unknown methods, show all available details
+        const entries = Object.entries(actualDetails).filter(([key, value]) => value !== null && value !== undefined && value !== '');
+        if (entries.length === 0) {
+          return (
+            <div className="text-xs text-gray-500 italic">
+              No additional payment details available
+            </div>
+          );
+        }
+        return entries.map(([key, value]) => 
+          renderDetail(key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1'), value)
+        );
+    }
+  };
+
+  // Fetch payment history when component mounts
+  useEffect(() => {
+    if (quotation?._id) {
+      fetchDGQuotationPaymentHistory(quotation._id);
+    }
+  }, [quotation?._id]);
+
+  // Helper function to render payment history
+  const renderPaymentHistory = () => {
+    if (loadingPayments) {
+      return (
+        <div className="flex items-center justify-center py-4">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+          <span className="ml-2 text-sm text-gray-600">Loading payment history...</span>
+        </div>
+      );
+    }
+
+    // Ensure paymentHistory is always an array
+    const payments = Array.isArray(paymentHistory) ? paymentHistory : [];
+
+    console.log("payments123:",payments);
+    
+    if (payments.length === 0) {
+      return (
+        <div className="text-center py-4 text-gray-500">
+          <p className="text-sm">No payment records found</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {payments.map((payment, index) => {
+          console.log("Payment Debug:", {
+            paymentId: payment._id,
+            paymentMethod: payment.paymentMethod,
+            paymentMethodDetails: payment.paymentMethodDetails,
+            hasDetails: payment.paymentMethodDetails && Object.keys(payment.paymentMethodDetails).length > 0
+          });
+          return (
+          <div key={payment._id || index} className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-3">
+                <div className={`w-3 h-3 rounded-full ${payment.paymentStatus === 'completed' ? 'bg-green-500' :
+                    payment.paymentStatus === 'pending' ? 'bg-yellow-500' :
+                      payment.paymentStatus === 'failed' ? 'bg-red-500' :
+                        'bg-gray-500'
+                  }`}></div>
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900">
+                    {getPaymentMethodLabel(payment.paymentMethod)} Payment
+                  </h4>
+                  <p className="text-xs text-gray-500">
+                    {formatDate(payment.paymentDate)} • {payment.paymentStatus}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-3">
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-green-600">
+                    {formatCurrency(payment.amount)}
+                  </p>
+                  {payment.receiptNumber && (
+                    <p className="text-xs text-gray-500">Receipt: {payment.receiptNumber}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Method Details */}
+            {payment.paymentMethodDetails && 
+             typeof payment.paymentMethodDetails === 'object' && 
+             Object.keys(payment.paymentMethodDetails).length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="text-xs font-medium text-gray-700 mb-2">Payment Details:</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {renderPaymentMethodDetails(payment.paymentMethod, payment.paymentMethodDetails)}
+                </div>
+              </div>
+            )}
+
+            {/* Payment Notes */}
+            {payment.notes && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <p className="text-xs text-gray-600">
+                  <span className="font-medium">Notes:</span> {payment.notes}
+                </p>
+              </div>
+            )}
+          </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   if (!isOpen || !quotation) return null;
 
   return (
@@ -105,14 +401,14 @@ const DGQuotationViewModal: React.FC<DGQuotationViewModalProps> = ({
             </Badge>
           </div>
           <div className="flex items-center space-x-2">
-            <Button 
+            {/* <Button 
               variant="outline" 
               size="sm"
               onClick={handleDownloadPDF}
             >
               <Download className="w-4 h-4 mr-2" />
               Download PDF
-            </Button>
+            </Button> */}
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-gray-600"
@@ -567,6 +863,24 @@ const DGQuotationViewModal: React.FC<DGQuotationViewModalProps> = ({
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            </div>
+
+            {/* Payment History */}
+            <div className="bg-gray-50 rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Payment History</h3>
+                <button
+                  onClick={() => fetchDGQuotationPaymentHistory(quotation._id)}
+                  className="text-sm text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                  disabled={loadingPayments}
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingPayments ? 'animate-spin' : ''}`} />
+                  <span>Refresh</span>
+                </button>
+              </div>
+              <div className="bg-white rounded-lg p-4">
+                {renderPaymentHistory()}
               </div>
             </div>
 

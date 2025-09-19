@@ -33,6 +33,7 @@ import CreatePOFromCustomerForm from "pages/CreatePOFromCustomerForm";
 import POFromCustomerManagement from "pages/POFromCustomerManagement";
 import CreateDGProformaForm from "pages/CreateDGProformaForm";
 import CreateDGInvoiceForm from "pages/CreateDGInvoiceForm";
+import DGQuotationManagement from "pages/DGQuotationManagement";
 import OEMOrderManagement from "pages/OEMOrderManagement";
 
 const AppRoutes: React.FC = () => {
@@ -110,6 +111,7 @@ const AppRoutes: React.FC = () => {
             <Route path="/dg-sales" element={<DGSales />} />
             
             {/* DG Quotation Management */}
+            <Route path="/dg-quotation-management" element={<DGQuotationManagement />} />
             <Route path="/dg-quotation/create" element={<DGQuotationForm />} />
             <Route path="/dg-quotation/edit/:id" element={<DGQuotationForm />} />
             

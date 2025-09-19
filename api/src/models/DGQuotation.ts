@@ -127,6 +127,10 @@ export interface IDGQuotation extends Document {
   freight:string;
   validity: string;
   employeeDetails: string;
+  // Payment fields - same structure as Invoice model
+  paidAmount: number;
+  remainingAmount: number;
+  paymentStatus: 'Pending' | 'Partial' | 'Paid' | 'Overdue';
 }
 
 const DGQuotationSchema = new Schema<IDGQuotation>({
@@ -267,8 +271,24 @@ const DGQuotationSchema = new Schema<IDGQuotation>({
   acceptedDate: { type: Date },
   rejectedDate: { type: Date },
   rejectionReason: { type: String },
+  // Payment fields - same structure as Invoice model
+  paidAmount: { type: Number, default: 0, min: 0 },
+  remainingAmount: { type: Number, default: 0, min: 0 },
+  paymentStatus: { 
+    type: String, 
+    enum: ['Pending', 'Partial', 'Paid', 'Overdue'], 
+    default: 'Pending' 
+  },
 }, {
   timestamps: true,
+});
+
+// Pre-save middleware to calculate remaining amount
+DGQuotationSchema.pre('save', function(next) {
+  if (this.grandTotal !== undefined && this.paidAmount !== undefined) {
+    this.remainingAmount = Math.max(0, this.grandTotal - this.paidAmount);
+  }
+  next();
 });
 
 // Index for better query performance
@@ -278,5 +298,6 @@ DGQuotationSchema.index({ 'customer._id': 1 });
 DGQuotationSchema.index({ status: 1 });
 DGQuotationSchema.index({ issueDate: -1 });
 DGQuotationSchema.index({ createdBy: 1 });
+DGQuotationSchema.index({ paymentStatus: 1 });
 
 export const DGQuotation = mongoose.model<IDGQuotation>('DGQuotation', DGQuotationSchema); 

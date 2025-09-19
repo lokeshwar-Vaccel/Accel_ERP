@@ -307,12 +307,51 @@ export const updateProduct = async (
       return next(new AppError('Product not found', 404));
     }
 
+    // Check if location fields are being updated
+    const locationChanged = req.body.location !== undefined && req.body.location !== product.location;
+    const roomChanged = req.body.room !== undefined && req.body.room !== product.room;
+    const rackChanged = req.body.rack !== undefined && req.body.rack !== product.rack;
+
     // Debug: log incoming update payload
     const updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
     ).populate('createdBy', 'firstName lastName email');
+
+    // If location, room, or rack changed, update the stock entry
+    if (locationChanged || roomChanged || rackChanged) {
+      try {
+        // Find existing stock entry for this product
+        const existingStock = await Stock.findOne({ product: req.params.id });
+        
+        if (existingStock) {
+          // Update existing stock entry with new location details
+          const stockUpdateData: any = {};
+          if (locationChanged) stockUpdateData.location = req.body.location;
+          if (roomChanged) stockUpdateData.room = req.body.room;
+          if (rackChanged) stockUpdateData.rack = req.body.rack;
+          
+          await Stock.findByIdAndUpdate(existingStock._id, stockUpdateData);
+        } else if (req.body.location) {
+          // Create new stock entry if none exists but location is provided
+          const stockData = {
+            product: req.params.id,
+            location: req.body.location,
+            room: req.body.room || null,
+            rack: req.body.rack || null,
+            quantity: req.body.quantity || 0,
+            availableQuantity: req.body.quantity || 0,
+            reservedQuantity: 0,
+            lastUpdated: new Date()
+          };
+          await Stock.create(stockData);
+        }
+      } catch (stockError) {
+        console.error('Error updating stock entry:', stockError);
+        // Don't fail product update if stock update fails
+      }
+    }
 
     const response: APIResponse = {
       success: true,

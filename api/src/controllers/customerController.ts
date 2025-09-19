@@ -77,7 +77,7 @@ export const getAllCustomersForDropdown = async (
 
     // Execute query without pagination - get all customers
     const customers = await Customer.find(query)
-      .select('_id name email phone customerId customerType type status contactPersonName addresses')
+      .select('_id name alice panNumber email phone customerId customerType type status contactPersonName notes addresses')
       .sort({ name: 1 }) // Sort by name alphabetically
       .lean();
 

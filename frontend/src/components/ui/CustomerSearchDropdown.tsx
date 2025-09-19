@@ -11,6 +11,7 @@ interface Customer {
   email?: string;
   phone?: string;
   panNumber?: string;
+  notes?: string;
   addresses: Array<{
     id: number;
     address: string;
@@ -20,8 +21,10 @@ interface Customer {
     isPrimary: boolean;
     gstNumber?: string;
     contactPersonName?: string;
+    designation?: string;
     email?: string;
     phone?: string;
+    tehsil?: string;
     registrationStatus: 'registered' | 'non_registered';
   }>;
 }

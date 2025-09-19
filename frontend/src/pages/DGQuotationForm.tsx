@@ -392,7 +392,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
 
   const generateQuotationNumber = async () => {
     try {
-      const response = await apiClient.dgSales.quotations.generateNumber();
+      const response = await apiClient.dgSales.dgQuotations.generateNumber();
       if (response.success) {
         setFormData(prev => ({
           ...prev,
@@ -1493,7 +1493,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
 
       console.log('Payload being sent:', payload);
 
-      const response = await apiClient.dgSales.quotations.create(payload);
+      const response = await apiClient.dgSales.dgQuotations.create(payload);
       if (response.success) {
         toast.success('DG Quotation created successfully');
         navigate('/dg-sales');

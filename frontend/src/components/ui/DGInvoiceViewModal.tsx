@@ -138,44 +138,124 @@ const DGInvoiceViewModal: React.FC<DGInvoiceViewModalProps> = ({
 
   // Helper function to render payment method details
   const renderPaymentMethodDetails = (method: string, details: any) => {
-    if (!details || Object.keys(details).length === 0) return null;
+    console.log("Payment Method Details Debug:", {
+      method,
+      details,
+      detailsType: typeof details,
+      detailsKeys: details ? Object.keys(details) : 'no details',
+      detailsLength: details ? Object.keys(details).length : 0
+    });
+    
+    if (!details || typeof details !== 'object' || Object.keys(details).length === 0) {
+      console.log("No payment method details to render");
+      return (
+        <div className="text-xs text-gray-500 italic">
+          No additional payment details available
+        </div>
+      );
+    }
+
+    const renderDetail = (label: string, value: any, formatter?: (val: any) => string) => {
+      if (!value) return null;
+      return (
+        <div className="text-xs">
+          <span className="font-medium text-gray-600">{label}:</span> 
+          <span className="ml-1 text-gray-800">{formatter ? formatter(value) : String(value)}</span>
+        </div>
+      );
+    };
+
+    // Handle nested structure where details are inside method-specific objects
+    let actualDetails = details;
+    
+    // Check if details are nested under the payment method key
+    if (method === 'cheque' && details.cheque) {
+      actualDetails = details.cheque;
+    } else if (method === 'bank_transfer' && details.bankTransfer) {
+      actualDetails = details.bankTransfer;
+    } else if (method === 'upi' && details.upi) {
+      actualDetails = details.upi;
+    } else if (method === 'credit_card' && details.creditCard) {
+      actualDetails = details.creditCard;
+    } else if (method === 'debit_card' && details.debitCard) {
+      actualDetails = details.debitCard;
+    } else if (method === 'online' && details.online) {
+      actualDetails = details.online;
+    } else if (method === 'cash' && details.cash) {
+      actualDetails = details.cash;
+    }
+
+    console.log("Actual Details:", actualDetails);
 
     switch (method) {
       case 'bank_transfer':
         return (
           <>
-            {details.bankName && <div><span className="font-medium">Bank:</span> {details.bankName}</div>}
-            {details.accountNumber && <div><span className="font-medium">Account:</span> {details.accountNumber}</div>}
-            {details.transactionId && <div><span className="font-medium">Transaction ID:</span> {details.transactionId}</div>}
+            {renderDetail('Bank', actualDetails.bankName)}
+            {renderDetail('Account Number', actualDetails.accountNumber)}
+            {renderDetail('Transaction ID', actualDetails.transactionId)}
+            {renderDetail('IFSC Code', actualDetails.ifscCode)}
+            {renderDetail('Transfer Date', actualDetails.transferDate, formatDate)}
+            {renderDetail('Reference Number', actualDetails.referenceNumber)}
           </>
         );
       case 'cheque':
         return (
           <>
-            {details.chequeNumber && <div><span className="font-medium">Cheque No:</span> {details.chequeNumber}</div>}
-            {details.bankName && <div><span className="font-medium">Bank:</span> {details.bankName}</div>}
-            {details.chequeDate && <div><span className="font-medium">Date:</span> {formatDate(details.chequeDate)}</div>}
+            {renderDetail('Cheque Number', actualDetails.chequeNumber)}
+            {renderDetail('Bank', actualDetails.bankName)}
+            {renderDetail('Branch', actualDetails.branchName)}
+            {renderDetail('Issue Date', actualDetails.issueDate, formatDate)}
+            {renderDetail('Account Holder', actualDetails.accountHolderName)}
+            {renderDetail('Account Number', actualDetails.accountNumber)}
           </>
         );
       case 'upi':
         return (
           <>
-            {details.upiId && <div><span className="font-medium">UPI ID:</span> {details.upiId}</div>}
-            {details.transactionId && <div><span className="font-medium">Transaction ID:</span> {details.transactionId}</div>}
+            {renderDetail('UPI ID', actualDetails.upiId)}
+            {renderDetail('Transaction ID', actualDetails.transactionId)}
+            {renderDetail('UPI Reference', actualDetails.upiReference)}
           </>
         );
       case 'credit_card':
       case 'debit_card':
         return (
           <>
-            {details.cardLastFour && <div><span className="font-medium">Card:</span> ****{details.cardLastFour}</div>}
-            {details.transactionId && <div><span className="font-medium">Transaction ID:</span> {details.transactionId}</div>}
+            {renderDetail('Card Number', actualDetails.cardLastFour, (val) => `****${val}`)}
+            {renderDetail('Transaction ID', actualDetails.transactionId)}
+            {renderDetail('Card Type', actualDetails.cardType)}
+            {renderDetail('Expiry', actualDetails.expiryDate)}
+          </>
+        );
+      case 'online':
+        return (
+          <>
+            {renderDetail('Transaction ID', actualDetails.transactionId)}
+            {renderDetail('Gateway', actualDetails.gateway)}
+            {renderDetail('Reference', actualDetails.reference)}
+          </>
+        );
+      case 'cash':
+        return (
+          <>
+            {renderDetail('Received By', actualDetails.receivedBy)}
+            {renderDetail('Location', actualDetails.location)}
           </>
         );
       default:
-        return Object.entries(details).map(([key, value]) => (
-          <div key={key}><span className="font-medium">{key}:</span> {String(value)}</div>
-        ));
+        // For any other payment method or unknown methods, show all available details
+        const entries = Object.entries(actualDetails).filter(([key, value]) => value !== null && value !== undefined && value !== '');
+        if (entries.length === 0) {
+          return (
+            <div className="text-xs text-gray-500 italic">
+              No additional payment details available
+            </div>
+          );
+        }
+        return entries.map(([key, value]) => 
+          renderDetail(key.charAt(0).toUpperCase() + key.slice(1).replace(/([A-Z])/g, ' $1'), value)
+        );
     }
   };
 
@@ -220,6 +300,8 @@ const DGInvoiceViewModal: React.FC<DGInvoiceViewModalProps> = ({
     // Ensure paymentHistory is always an array
     const payments = Array.isArray(paymentHistory) ? paymentHistory : [];
 
+    console.log("payments123:",payments);
+    
     if (payments.length === 0) {
       return (
         <div className="text-center py-4 text-gray-500">
@@ -230,7 +312,14 @@ const DGInvoiceViewModal: React.FC<DGInvoiceViewModalProps> = ({
 
     return (
       <div className="space-y-3">
-        {payments.map((payment, index) => (
+        {payments.map((payment, index) => {
+          console.log("Payment Debug:", {
+            paymentId: payment._id,
+            paymentMethod: payment.paymentMethod,
+            paymentMethodDetails: payment.paymentMethodDetails,
+            hasDetails: payment.paymentMethodDetails && Object.keys(payment.paymentMethodDetails).length > 0
+          });
+          return (
           <div key={payment._id || index} className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center space-x-3">
@@ -248,6 +337,7 @@ const DGInvoiceViewModal: React.FC<DGInvoiceViewModalProps> = ({
                   </p>
                 </div>
               </div>
+
               <div className="flex items-center space-x-3">
                 <div className="text-right">
                   <p className="text-sm font-semibold text-green-600">
@@ -271,8 +361,11 @@ const DGInvoiceViewModal: React.FC<DGInvoiceViewModalProps> = ({
             </div>
 
             {/* Payment Method Details */}
-            {payment.paymentMethodDetails && Object.keys(payment.paymentMethodDetails).length > 0 && (
+            {payment.paymentMethodDetails && 
+             typeof payment.paymentMethodDetails === 'object' && 
+             Object.keys(payment.paymentMethodDetails).length > 0 && (
               <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="text-xs font-medium text-gray-700 mb-2">Payment Details:</div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {renderPaymentMethodDetails(payment.paymentMethod, payment.paymentMethodDetails)}
                 </div>
@@ -288,7 +381,8 @@ const DGInvoiceViewModal: React.FC<DGInvoiceViewModalProps> = ({
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     );
   };

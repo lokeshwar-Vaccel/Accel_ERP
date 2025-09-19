@@ -171,6 +171,10 @@ export default function DGEnquiryViewModal({ isOpen, onClose, onSuccess, enquiry
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
+                  <label className="block text-sm font-medium text-gray-700">Corporate Name</label>
+                  <p className="mt-1 text-sm text-gray-900 font-semibold">{enquiry.corporateName || 'N/A'}</p>
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-gray-700">Customer Name</label>
                   <p className="mt-1 text-sm text-gray-900 font-semibold">{enquiry.customerName || 'N/A'}</p>
                 </div>

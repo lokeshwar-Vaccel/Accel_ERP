@@ -30,6 +30,12 @@ const dgDetailsSchema = new Schema({
     trim: true,
     maxlength: [100, 'DG make cannot exceed 100 characters']
   },
+  oemMake: {
+    type: String,
+    required: false,
+    trim: true,
+    maxlength: [100, 'OEM make cannot exceed 100 characters']
+  },
   engineSerialNumber: {
     type: String,
     required: [true, 'Engine serial number is required'],

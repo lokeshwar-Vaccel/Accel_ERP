@@ -35,6 +35,7 @@ export interface CreateCustomerInput {
     alternatorMake?: string;
     alternatorSerialNumber?: string;
     dgMake: string;
+    oemMake?: string;
     engineSerialNumber: string;
     dgModel: string;
     dgRatingKVA: number;
@@ -76,6 +77,7 @@ export interface UpdateCustomerInput {
     alternatorMake?: string;
     alternatorSerialNumber?: string;
     dgMake: string;
+    oemMake?: string;
     engineSerialNumber: string;
     dgModel: string;
     dgRatingKVA: number;
@@ -195,6 +197,7 @@ const dgDetailsJoiSchema = Joi.object({
   alternatorMake: Joi.string().trim().max(100).allow('', null),
   alternatorSerialNumber: Joi.string().trim().max(100).allow('', null),
   dgMake: Joi.string().trim().max(100).allow('', null),
+  oemMake: Joi.string().trim().max(100).allow('', null),
   engineSerialNumber: Joi.string().trim().max(100).allow('', null),
   dgModel: Joi.string().trim().max(100).allow('', null),
   dgRatingKVA: Joi.number().min(0).allow('', null),

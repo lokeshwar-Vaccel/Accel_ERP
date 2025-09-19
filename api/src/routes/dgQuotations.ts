@@ -8,7 +8,8 @@ import {
   deleteDGQuotation,
   getDGQuotationStats,
   generateQuotationNumber,
-  getQuotationsByEnquiry
+  getQuotationsByEnquiry,
+  updateDGQuotationPayment
 } from '../controllers/dgQuotationController';
 
 const router = Router();
@@ -31,6 +32,7 @@ router.get('/', checkPermission('read'), getAllDGQuotations);
 router.get('/:id', checkPermission('read'), getDGQuotationById);
 router.post('/', checkPermission('write'), createDGQuotation);
 router.put('/:id', checkPermission('write'), updateDGQuotation);
+router.put('/:id/payment', checkPermission('write'), updateDGQuotationPayment);
 router.delete('/:id', checkPermission('delete'), deleteDGQuotation);
 
 export default router; 

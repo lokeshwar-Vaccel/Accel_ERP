@@ -22,10 +22,12 @@ const addressSchema = Joi.object({
   gstNumber: Joi.string().optional().trim().allow(''),
   notes: Joi.string().optional().trim().allow(''),
   contactPersonName: Joi.string().optional().trim().allow(''),
+  designation: Joi.string().optional().trim().allow(''),
   email: Joi.string().email().optional().allow('').messages({
     'string.email': 'Please provide a valid email address'
   }),
   phone: Joi.string().optional().trim().allow(''),
+  tehsil: Joi.string().optional().trim().allow(''),
   registrationStatus: Joi.string().valid('registered', 'non_registered').default('non_registered')
 });
 
@@ -35,6 +37,7 @@ const dgDetailsSchema = Joi.object({
   alternatorMake: Joi.string().optional().trim().allow(''),
   alternatorSerialNumber: Joi.string().optional().trim().allow(''),
   dgMake: Joi.string().optional().trim().allow(''),
+  oemMake: Joi.string().optional().trim().allow(''),
   engineSerialNumber: Joi.string().optional().trim().allow(''),
   dgModel: Joi.string().optional().trim().allow(''),
   dgRatingKVA: Joi.number().min(0).default(0),
@@ -70,29 +73,29 @@ export const createDGEnquirySchema = Joi.object({
   numberOfFollowUps: Joi.number().integer().min(0).default(0),
   
   // Customer Information
-  customerType: Joi.string().valid('Retail', 'Corporate').default('Retail'),
-  corporateName: Joi.when('customerType', {
-    is: 'Corporate',
-    then: Joi.string().required().trim().messages({
-      'string.empty': 'Corporate name is required for corporate customers',
-      'any.required': 'Corporate name is required for corporate customers'
-    }),
-    otherwise: Joi.string().optional().allow('')
-  }),
+  customerType: Joi.string().valid('new_customer', 'existing_customer').default(''),
+  corporateName: Joi.string().optional().trim().allow(''), // Will be populated from customerName
   customerName: Joi.string().required().trim().messages({
     'string.empty': 'Customer name is required',
     'any.required': 'Customer name is required'
   }),
   alice: Joi.string().optional().trim().allow(''),
+  panNumber: Joi.string().optional().trim().allow(''),
+  
+  // Top-level fields (populated from primary address)
   designation: Joi.string().optional().trim().allow(''),
-  contactPersonName: Joi.string().optional().trim().allow(''),
-  phoneNumber: Joi.string().optional().trim().pattern(/^\+?[1-9]\d{1,14}$/).allow('').messages({
-    'string.pattern.base': 'Please provide a valid phone number'
-  }),
+  phoneNumber: Joi.string().optional().trim().allow(''),
   email: Joi.string().email().optional().allow('').messages({
     'string.email': 'Please provide a valid email address'
   }),
-  panNumber: Joi.string().optional().trim().allow(''),
+  address: Joi.string().optional().trim().allow(''),
+  pinCode: Joi.string().optional().trim().allow(''),
+  district: Joi.string().optional().trim().allow(''),
+  tehsil: Joi.string().optional().trim().allow(''),
+  
+  // Customer Selection Information
+  selectedCustomerId: Joi.string().optional().allow(null),
+  isExistingCustomer: Joi.boolean().optional().default(false),
   
   // Address Information
   addresses: Joi.array().items(addressSchema).min(1).required().messages({
@@ -163,19 +166,26 @@ export const updateDGEnquirySchema = Joi.object({
   numberOfFollowUps: Joi.number().integer().min(0).optional(),
   
   // Customer Information
-  customerType: Joi.string().valid('Retail', 'Corporate').optional(),
+  customerType: Joi.string().valid('new_customer', 'existing_customer').optional(),
   corporateName: Joi.string().optional().allow(''),
   customerName: Joi.string().optional().trim(),
   alice: Joi.string().optional().trim().allow(''),
+  panNumber: Joi.string().optional().trim().allow(''),
+  
+  // Top-level fields (populated from primary address)
   designation: Joi.string().optional().trim().allow(''),
-  contactPersonName: Joi.string().optional().trim().allow(''),
-  phoneNumber: Joi.string().optional().trim().pattern(/^\+?[1-9]\d{1,14}$/).messages({
-    'string.pattern.base': 'Please provide a valid phone number'
-  }),
+  phoneNumber: Joi.string().optional().trim().allow(''),
   email: Joi.string().email().optional().allow('').messages({
     'string.email': 'Please provide a valid email address'
   }),
-  panNumber: Joi.string().optional().trim().allow(''),
+  address: Joi.string().optional().trim().allow(''),
+  pinCode: Joi.string().optional().trim().allow(''),
+  district: Joi.string().optional().trim().allow(''),
+  tehsil: Joi.string().optional().trim().allow(''),
+  
+  // Customer Selection Information
+  selectedCustomerId: Joi.string().optional().allow(null),
+  isExistingCustomer: Joi.boolean().optional().default(false),
   
   // Address Information
   addresses: Joi.array().items(addressSchema).optional(),
@@ -232,6 +242,6 @@ export const getDGEnquiriesQuerySchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).default(10),
   search: Joi.string().optional().allow(''),
   status: Joi.string().valid('open', 'closed', 'decline').optional(),
-  customerType: Joi.string().valid('Retail', 'Corporate').optional(),
+  customerType: Joi.string().valid('new_customer', 'existing_customer').optional(),
   segment: Joi.string().optional()
 }); 

@@ -174,6 +174,9 @@ class ApiClient {
 
     getSalesEngineers: () =>
       this.makeRequest<{ success: boolean; data: { salesEngineers: any[] } }>('/users/sales-engineers'),
+
+    getAllForDropdown: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: any[] }>(`/users/dropdown${params ? `?${new URLSearchParams(params)}` : ''}`),
   };
 
   // Lead Management APIs
@@ -1987,8 +1990,8 @@ class ApiClient {
         }),
     },
 
-    // OEM Orders
-    oemOrders: {
+    // OEM Orders Extended
+    oemOrdersExtended: {
       getAll: (params?: any) =>
         this.makeRequest<{ success: boolean; data: any[]; page: number; limit: number; total: number; totalPages: number }>(`/oem-orders${params ? `?${new URLSearchParams(params)}` : ''}`),
 
@@ -2057,7 +2060,7 @@ class ApiClient {
 
 
     // DG Sales Quotations
-    quotations: {
+    dgQuotations: {
       getAll: (params?: any) =>
         this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/dg-quotations${params ? `?${new URLSearchParams(params)}` : ''}`),
 
@@ -2089,6 +2092,38 @@ class ApiClient {
 
       getByEnquiry: (enquiryId: string) =>
         this.makeRequest<{ success: boolean; data: any[] }>(`/dg-quotations/by-enquiry/${enquiryId}`),
+
+      updatePayment: (id: string, paymentData: any) =>
+        this.makeRequest<{ success: boolean; data: any; message: string }>(`/dg-quotations/${id}/payment`, {
+          method: 'PUT',
+          body: JSON.stringify(paymentData),
+        }),
+    },
+
+    // DG Quotation Payment APIs
+    dgQuotationPayments: {
+      create: (paymentData: any) =>
+        this.makeRequest<{ success: boolean; data: any; message: string }>('/dg-quotation-payments', {
+          method: 'POST',
+          body: JSON.stringify(paymentData),
+        }),
+
+      getByQuotation: (quotationId: string, params?: any) =>
+        this.makeRequest<{ success: boolean; data: { payments: any[]; pagination: any } }>(`/dg-quotation-payments/quotation/${quotationId}${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+      getById: (id: string) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/dg-quotation-payments/${id}`),
+
+      update: (id: string, data: any) =>
+        this.makeRequest<{ success: boolean; data: any; message: string }>(`/dg-quotation-payments/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify(data),
+        }),
+
+      delete: (id: string) =>
+        this.makeRequest<{ success: boolean; message: string }>(`/dg-quotation-payments/${id}`, {
+          method: 'DELETE',
+        }),
     },
 
     // DG PO From Customers

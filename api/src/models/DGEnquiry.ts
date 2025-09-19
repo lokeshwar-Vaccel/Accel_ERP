@@ -13,17 +13,16 @@ export interface IDGEnquiry extends Document {
   enquiryNo: string;
   enquiryDate: Date;
   customerType: string;
-  corporateName: string;
-  customerName: string;
+  corporateName: string; // Will store customerName (company name)
+  customerName: string; // Will store contactPersonName from primary address
   alice?: string;
-  designation?: string;
-  contactPersonName?: string;
-  phoneNumber: string;
-  email: string;
-  address: string;
-  pinCode: string;
-  tehsil: string;
-  district: string;
+  designation: string; // Will store designation from primary address
+  phoneNumber: string; // Will store phone from primary address
+  email: string; // Will store email from primary address
+  address: string; // Will store address from primary address
+  pinCode: string; // Will store pincode from primary address
+  district: string; // Will store district from primary address
+  tehsil: string; // Will store tehsil from primary address
   kva: string;
   phase: string;
   quantity: number;
@@ -60,6 +59,12 @@ export interface IDGEnquiry extends Document {
     isPrimary: boolean;
     gstNumber?: string;
     notes?: string;
+    contactPersonName?: string;
+    designation?: string;
+    email?: string;
+    phone?: string;
+    tehsil?: string;
+    registrationStatus: 'registered' | 'non_registered';
   }>;
   dgDetails?: Array<{
     dgSerialNumbers: string;
@@ -97,13 +102,12 @@ const DGEnquirySchema = new Schema<IDGEnquiry>({
   customerName: { type: String, trim: true },
   alice: { type: String, trim: true },
   designation: { type: String, trim: true },
-  contactPersonName: { type: String, trim: true },
   phoneNumber: { type: String, trim: true },
   email: { type: String, trim: true },
   address: { type: String, trim: true },
   pinCode: { type: String, trim: true },
-  tehsil: { type: String, trim: true },
   district: { type: String, trim: true },
+  tehsil: { type: String, trim: true },
   kva: { type: String, trim: true },
   phase: { type: String, trim: true },
   quantity: { type: Number },
@@ -139,7 +143,13 @@ const DGEnquirySchema = new Schema<IDGEnquiry>({
     pincode: { type: String, trim: true },
     isPrimary: { type: Boolean, default: false },
     gstNumber: { type: String, trim: true },
-    notes: { type: String, trim: true }
+    notes: { type: String, trim: true },
+    contactPersonName: { type: String, trim: true },
+    designation: { type: String, trim: true },
+    email: { type: String, trim: true },
+    phone: { type: String, trim: true },
+    tehsil: { type: String, trim: true },
+    registrationStatus: { type: String, enum: ['registered', 'non_registered'], required: true, default: 'non_registered' }
   }],
   dgDetails: [{
     dgSerialNumbers: { type: String, trim: true },
@@ -165,5 +175,36 @@ const DGEnquirySchema = new Schema<IDGEnquiry>({
 });
 
 DGEnquirySchema.index({ enquiryNo: 1 });
+
+// Pre-save middleware to populate top-level fields from primary address
+DGEnquirySchema.pre('save', function(this: any, next) {
+  if (this.addresses && this.addresses.length > 0) {
+    const primaryAddress = this.addresses.find((addr: any) => addr.isPrimary) || this.addresses[0];
+    
+    if (primaryAddress) {
+      // Store company name in corporateName (if not already set)
+      if (!this.corporateName) {
+        this.corporateName = this.customerName;
+      }
+      
+      // Store contact person name in customerName
+      if (primaryAddress.contactPersonName) {
+        this.customerName = primaryAddress.contactPersonName;
+      }
+      
+      // Store designation from primary address
+      this.designation = primaryAddress.designation || '';
+      
+      // Store primary address details in top-level fields
+      this.phoneNumber = primaryAddress.phone || '';
+      this.email = primaryAddress.email || '';
+      this.address = primaryAddress.address || '';
+      this.pinCode = primaryAddress.pincode || '';
+      this.district = primaryAddress.district || '';
+      this.tehsil = primaryAddress.tehsil || '';
+    }
+  }
+  next();
+});
 
 export const DGEnquiry = mongoose.model<IDGEnquiry>('DGEnquiry', DGEnquirySchema); 

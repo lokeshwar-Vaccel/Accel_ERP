@@ -78,11 +78,13 @@ export const getUsers = async (
 
     const total = await User.countDocuments(query);
     const pages = Math.ceil(total / Number(limit));
+    const totalAdmin = await User.countDocuments({ role: UserRole.ADMIN });
 
     const response: APIResponse = {
       success: true,
       message: 'Users retrieved successfully',
       data: {
+        totalAdmin: totalAdmin,
         users: users.map(user => ({
           id: user._id,
           firstName: user.firstName,
@@ -93,6 +95,7 @@ export const getUsers = async (
           status: user.status,
           department: user.department,
           phone: user.phone,
+          salesEmployeeCode: user.salesEmployeeCode,
           moduleAccess: user.moduleAccess,
           lastLoginAt: user.lastLoginAt,
           createdAt: user.createdAt,
@@ -592,6 +595,87 @@ export const getSalesEngineers = async (
           status: engineer.status
         }))
       }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all users for dropdown
+// @route   GET /api/v1/users/dropdown
+// @access  Private
+export const getAllUsersForDropdown = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { 
+      search, 
+      role, 
+      status, 
+      department
+    } = req.query as any;
+
+    // Build query
+    const query: any = {};
+    
+    if (search) {
+      query.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+        { salesEmployeeCode: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    if (role) {
+      query.role = role;
+    }
+    
+    if (status) {
+      query.status = status;
+    }
+
+    if (department) {
+      query.department = department;
+    }
+
+    // By default, exclude soft-deleted users unless explicitly requested
+    if (status !== 'all' && !status) {
+      query.status = { $ne: UserStatus.DELETED };
+    }
+
+    // Execute query without pagination - get all users
+    const users = await User.find(query)
+      .select('_id firstName lastName email phone role status department salesEmployeeCode')
+      .sort({ firstName: 1, lastName: 1 }) // Sort by name alphabetically
+      .lean();
+
+    // Process users for dropdown format
+    const processedUsers = users.map((user: any) => ({
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      fullName: `${user.firstName} ${user.lastName}`,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      status: user.status,
+      department: user.department,
+      salesEmployeeCode: user.salesEmployeeCode,
+      moduleAccess: user.moduleAccess
+    }));
+
+    console.log('Number of users returned for dropdown:', processedUsers.length);
+
+    const response: APIResponse = {
+      success: true,
+      message: 'All users retrieved successfully for dropdown',
+      data: processedUsers
     };
 
     res.status(200).json(response);

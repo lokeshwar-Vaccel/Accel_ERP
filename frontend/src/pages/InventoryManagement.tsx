@@ -1344,9 +1344,18 @@ const InventoryManagement: React.FC = () => {
       };
 
       // Send transfer request
-      await apiClient.stock.transferStock(transferData);
-
-      await fetchInventory(); // Refresh inventory
+      const response = await apiClient.stock.transferStock(transferData);
+      
+      // Show success message
+      const transferType = response.data?.transfer?.isLocationChange ? 'transferred' : 'reassigned';
+      toast.success(`Stock ${transferType} successfully!`);
+      
+      // Refresh inventory data with a small delay to ensure backend updates are complete
+      setTimeout(async () => {
+        await fetchInventory();
+      }, 500);
+      
+      // Close modal and reset form
       setShowTransferModal(false);
       setTransferFormData({
         stockId: '',
@@ -3494,6 +3503,16 @@ const InventoryManagement: React.FC = () => {
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
                 </div>
               )}
+              
+              {/* Success Message */}
+              {submitting && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-3"></div>
+                    <p className="text-blue-600 text-sm">Processing transfer...</p>
+                  </div>
+                </div>
+              )}
 
               {/* Product Information */}
               <div className="bg-gray-50 p-4 rounded-lg">
@@ -3645,7 +3664,12 @@ const InventoryManagement: React.FC = () => {
                         disabled={!transferFormData.toLocation}
                       >
                         <option value="">Select destination room</option>
-                        {rooms.filter(room => room.location && room.location._id === transferFormData.toLocation).map(room => (
+                        {rooms.filter(room => {
+                          const roomLocationId = typeof room.location === 'object' && room.location?._id 
+                            ? room.location._id 
+                            : room.location;
+                          return roomLocationId === transferFormData.toLocation;
+                        }).map(room => (
                           <option key={room._id} value={room._id}>{room.name}</option>
                         ))}
                       </select>
@@ -3660,7 +3684,12 @@ const InventoryManagement: React.FC = () => {
                         disabled={!transferFormData.toRoom}
                       >
                         <option value="">Select destination rack</option>
-                        {racks.filter(rack => rack.room && rack.room._id === transferFormData.toRoom).map(rack => (
+                        {racks.filter(rack => {
+                          const rackRoomId = typeof rack.room === 'object' && rack.room?._id 
+                            ? rack.room._id 
+                            : rack.room;
+                          return rackRoomId === transferFormData.toRoom;
+                        }).map(rack => (
                           <option key={rack._id} value={rack._id}>{rack.name}</option>
                         ))}
                       </select>
@@ -3729,28 +3758,45 @@ const InventoryManagement: React.FC = () => {
                 {/* Transfer Summary */}
                 {transferFormData.toLocation && transferFormData.quantity > 0 && (
                   <div className="mt-4 p-4 bg-white border border-yellow-300 rounded-lg">
-                    <h4 className="font-medium text-gray-900 mb-2">Transfer Summary</h4>
-                    <div className="text-sm text-gray-600 space-y-1">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-medium text-gray-900">Transfer Summary</h4>
+                      {transferFormData.fromLocation !== transferFormData.toLocation ? (
+                        <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                          Location Transfer
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                          Room/Rack Assignment
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm text-gray-600 space-y-2">
                       <p>
                         <strong>Moving {transferFormData.quantity} units</strong> of{' '}
                         {products.find(p => p._id === transferFormData.product)?.name}
                       </p>
                       <div className="flex items-center justify-between">
-                        <span>
-                          From: {locations.find(l => l._id === transferFormData.fromLocation)?.name}
-                          {transferFormData.fromRoom && rooms.find(r => r._id === transferFormData.fromRoom) &&
-                            ` → ${rooms.find(r => r._id === transferFormData.fromRoom)?.name}`}
-                          {transferFormData.fromRack && racks.find(r => r._id === transferFormData.fromRack) &&
-                            ` → ${racks.find(r => r._id === transferFormData.fromRack)?.name}`}
-                        </span>
-                        <ArrowUpDown className="w-4 h-4 text-gray-400" />
-                        <span>
-                          To: {locations.find(l => l._id === transferFormData.toLocation)?.name}
-                          {transferFormData.toRoom && rooms.find(r => r._id === transferFormData.toRoom) &&
-                            ` → ${rooms.find(r => r._id === transferFormData.toRoom)?.name}`}
-                          {transferFormData.toRack && racks.find(r => r._id === transferFormData.toRack) &&
-                            ` → ${racks.find(r => r._id === transferFormData.toRack)?.name}`}
-                        </span>
+                        <div className="flex-1">
+                          <div className="text-xs text-gray-500 mb-1">From:</div>
+                          <div className="font-medium">
+                            {locations.find(l => l._id === transferFormData.fromLocation)?.name}
+                            {transferFormData.fromRoom && rooms.find(r => r._id === transferFormData.fromRoom) &&
+                              ` → ${rooms.find(r => r._id === transferFormData.fromRoom)?.name}`}
+                            {transferFormData.fromRack && racks.find(r => r._id === transferFormData.fromRack) &&
+                              ` → ${racks.find(r => r._id === transferFormData.fromRack)?.name}`}
+                          </div>
+                        </div>
+                        <ArrowUpDown className="w-4 h-4 text-gray-400 mx-4" />
+                        <div className="flex-1">
+                          <div className="text-xs text-gray-500 mb-1">To:</div>
+                          <div className="font-medium">
+                            {locations.find(l => l._id === transferFormData.toLocation)?.name}
+                            {transferFormData.toRoom && rooms.find(r => r._id === transferFormData.toRoom) &&
+                              ` → ${rooms.find(r => r._id === transferFormData.toRoom)?.name}`}
+                            {transferFormData.toRack && racks.find(r => r._id === transferFormData.toRack) &&
+                              ` → ${racks.find(r => r._id === transferFormData.toRack)?.name}`}
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -3783,9 +3829,19 @@ const InventoryManagement: React.FC = () => {
                 <button
                   type="submit"
                   disabled={submitting || !transferFormData.toLocation || transferFormData.quantity <= 0}
-                  className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center justify-center"
                 >
-                  {submitting ? 'Transferring...' : 'Transfer Stock'}
+                  {submitting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Transferring...
+                    </>
+                  ) : (
+                    <>
+                      <ArrowUpDown className="w-4 h-4 mr-2" />
+                      Transfer Stock
+                    </>
+                  )}
                 </button>
               </div>
             </form>

@@ -1073,36 +1073,135 @@ export const transferStock = async (
       ]);
     } else {
       // ROOM/RACK TRANSFER: Same location, different room or rack
-      // Update the existing stock record with new room/rack assignment
-      
-      // Update the source stock record with the new room/rack assignment
-      sourceStock.room = toRoom || null;
-      sourceStock.rack = toRack || null;
-      sourceStock.lastUpdated = new Date();
-
-      // Save the updated stock record
-      await sourceStock.save();
-      
-      // Set destStock to the same record for response consistency
-      destStock = sourceStock;
-
-      // Create ledger entry for room/rack assignment
-      await StockLedger.create({
+      console.log('Performing room/rack transfer:', {
         product,
-        location: fromLocation,
-        room: toRoom || null,
-        rack: toRack || null,
-        transactionType: 'adjustment',
-        quantity: 0, // No quantity change, just room/rack assignment
-        reason: `Room/Rack assignment updated from ${fromDesc} to ${toDesc}`,
-        notes,
-        performedBy: req.user!.id,
-        transactionDate: new Date(),
-        resultingQuantity: sourceStock.quantity,
-        previousQuantity: originalSourceQuantity,
-        referenceId,
-        referenceType: 'adjustment'
+        fromLocation,
+        fromRoom,
+        fromRack,
+        toRoom,
+        toRack,
+        quantity
       });
+      
+      // Check if destination stock already exists
+      const destQuery: any = {
+        product,
+        location: fromLocation, // Same location for room/rack transfer
+        room: toRoom || null,
+        rack: toRack || null
+      };
+
+      console.log('Checking for existing destination stock with query:', destQuery);
+      destStock = await Stock.findOne(destQuery);
+      console.log('Destination stock found:', destStock ? 'Yes' : 'No');
+
+      if (destStock) {
+        // Destination stock exists - merge quantities
+        originalDestQuantity = destStock.quantity;
+        destStock.quantity += quantity;
+        destStock.availableQuantity = destStock.quantity - destStock.reservedQuantity;
+        destStock.lastUpdated = new Date();
+        
+        // Update source stock (subtract quantity)
+        sourceStock.quantity -= quantity;
+        sourceStock.availableQuantity = sourceStock.quantity - sourceStock.reservedQuantity;
+        sourceStock.lastUpdated = new Date();
+
+        // Save both stocks
+        await Promise.all([sourceStock.save(), destStock.save()]);
+
+        // Create ledger entries for the transfer
+        await StockLedger.create([
+          {
+            product,
+            location: fromLocation,
+            room: fromRoom || null,
+            rack: fromRack || null,
+            transactionType: 'transfer',
+            quantity: -quantity,
+            reason: `Stock transferred from ${fromDesc} to ${toDesc}`,
+            notes,
+            performedBy: req.user!.id,
+            transactionDate: new Date(),
+            resultingQuantity: sourceStock.quantity,
+            previousQuantity: originalSourceQuantity,
+            referenceId,
+            referenceType: 'transfer'
+          },
+          {
+            product,
+            location: fromLocation,
+            room: toRoom || null,
+            rack: toRack || null,
+            transactionType: 'transfer',
+            quantity: quantity,
+            reason: `Stock received from ${fromDesc} to ${toDesc}`,
+            notes,
+            performedBy: req.user!.id,
+            transactionDate: new Date(),
+            resultingQuantity: destStock.quantity,
+            previousQuantity: originalDestQuantity,
+            referenceId,
+            referenceType: 'transfer'
+          }
+        ]);
+      } else {
+        // Destination stock doesn't exist - create new and update source
+        destStock = new Stock({
+          product,
+          location: fromLocation,
+          room: toRoom || null,
+          rack: toRack || null,
+          quantity,
+          reservedQuantity: 0,
+          availableQuantity: quantity,
+          lastUpdated: new Date()
+        });
+
+        // Update source stock (subtract quantity)
+        sourceStock.quantity -= quantity;
+        sourceStock.availableQuantity = sourceStock.quantity - sourceStock.reservedQuantity;
+        sourceStock.lastUpdated = new Date();
+
+        // Save both stocks
+        await Promise.all([sourceStock.save(), destStock.save()]);
+
+        // Create ledger entries for the transfer
+        await StockLedger.create([
+          {
+            product,
+            location: fromLocation,
+            room: fromRoom || null,
+            rack: fromRack || null,
+            transactionType: 'transfer',
+            quantity: -quantity,
+            reason: `Stock transferred from ${fromDesc} to ${toDesc}`,
+            notes,
+            performedBy: req.user!.id,
+            transactionDate: new Date(),
+            resultingQuantity: sourceStock.quantity,
+            previousQuantity: originalSourceQuantity,
+            referenceId,
+            referenceType: 'transfer'
+          },
+          {
+            product,
+            location: fromLocation,
+            room: toRoom || null,
+            rack: toRack || null,
+            transactionType: 'transfer',
+            quantity: quantity,
+            reason: `Stock received from ${fromDesc} to ${toDesc}`,
+            notes,
+            performedBy: req.user!.id,
+            transactionDate: new Date(),
+            resultingQuantity: destStock.quantity,
+            previousQuantity: 0,
+            referenceId,
+            referenceType: 'transfer'
+          }
+        ]);
+      }
     }
 
     // Clean up empty stock records (optional)
@@ -1139,16 +1238,12 @@ export const transferStock = async (
             room: sourceStock.room,
             rack: sourceStock.rack
           },
-          destStock: isLocationChange ? {
+          destStock: {
             id: destStock._id,
             newQuantity: destStock.quantity,
-            availableQuantity: destStock.availableQuantity
-          } : {
-            id: sourceStock._id,
-            updatedQuantity: sourceStock.quantity,
-            availableQuantity: sourceStock.availableQuantity,
-            room: sourceStock.room,
-            rack: sourceStock.rack
+            availableQuantity: destStock.availableQuantity,
+            room: destStock.room,
+            rack: destStock.rack
           }
         }
       }
