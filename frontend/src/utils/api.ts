@@ -2259,6 +2259,41 @@ class ApiClient {
       //   }),
     };
 
+  // AMC Quotations APIs
+  amcQuotations = {
+    getAll: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/amc-quotations${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    getById: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc-quotations/${id}`),
+
+    create: (quotationData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/amc-quotations', {
+        method: 'POST',
+        body: JSON.stringify(quotationData),
+      }),
+
+    update: (id: string, quotationData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc-quotations/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(quotationData),
+      }),
+
+    updatePayment: (id: string, paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: any; message: string }>(`/amc-quotations/${id}/payment`, {
+        method: 'PUT',
+        body: JSON.stringify(paymentData),
+      }),
+
+    delete: (id: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/amc-quotations/${id}`, {
+        method: 'DELETE',
+      }),
+
+    getStats: () =>
+      this.makeRequest<{ success: boolean; data: any }>('/amc-quotations/stats'),
+  };
+
   // Feedback APIs
   feedback = {
     getByToken: (token: string) =>

@@ -90,6 +90,20 @@ export interface IInvoice extends mongoose.Document {
   bankAccountNo?: string;
   bankIFSC?: string;
   bankBranch?: string;
+  // Company information with bank details
+  company?: {
+    name?: string;
+    address?: string;
+    phone?: string;
+    email?: string;
+    pan?: string;
+    bankDetails?: {
+      bankName?: string;
+      accountNo?: string;
+      ifsc?: string;
+      branch?: string;
+    };
+  };
   // Customer address details
   customerAddress?: {
     id: number;
@@ -431,6 +445,47 @@ const invoiceSchema = new Schema<IInvoice>({
   bankBranch: {
     type: String,
     trim: true
+  },
+  // Company information with bank details
+  company: {
+    name: {
+      type: String,
+      trim: true
+    },
+    address: {
+      type: String,
+      trim: true
+    },
+    phone: {
+      type: String,
+      trim: true
+    },
+    email: {
+      type: String,
+      trim: true
+    },
+    pan: {
+      type: String,
+      trim: true
+    },
+    bankDetails: {
+      bankName: {
+        type: String,
+        trim: true
+      },
+      accountNo: {
+        type: String,
+        trim: true
+      },
+      ifsc: {
+        type: String,
+        trim: true
+      },
+      branch: {
+        type: String,
+        trim: true
+      }
+    }
   },
   // Customer address details
   customerAddress: {

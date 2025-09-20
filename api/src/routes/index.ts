@@ -43,6 +43,7 @@ import poFromCustomersRoutes from './poFromCustomers';
 import dgPoFromCustomersRoutes from './dgPoFromCustomers';
 import dgProformasRoutes from './dgProformas';
 import deliveryChallanRoutes from './deliveryChallans';
+import amcQuotationRoutes from './amcQuotationRoutes';
 
 const router = Router();
 
@@ -81,6 +82,7 @@ router.get('/', (req, res) => {
       dgProformas: '/dg-proformas',
       dgInvoices: '/dg-invoices',
       deliveryChallans: '/delivery-challans',
+      amcQuotations: '/amc-quotations',
     }
   });
 });
@@ -130,5 +132,6 @@ router.use('/po-from-customers', poFromCustomersRoutes);
 router.use('/dg-po-from-customers', dgPoFromCustomersRoutes);
 router.use('/dg-proformas', dgProformasRoutes);
 router.use('/delivery-challans', deliveryChallanRoutes);
+router.use('/amc-quotations', amcQuotationRoutes);
 
 export default router;

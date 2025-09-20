@@ -1559,6 +1559,8 @@ const InvoiceFormPage: React.FC = () => {
         })),
         billToAddress: sanitizedData.billToAddress,
         shipToAddress: sanitizedData.shipToAddress,
+        // Include company information with bank details
+        ...(sanitizedData.company && { company: sanitizedData.company }),
         ...(sanitizedData.assignedEngineer && sanitizedData.assignedEngineer.trim() !== '' && { assignedEngineer: sanitizedData.assignedEngineer }),
         overallDiscount: sanitizedData.overallDiscount || 0,
         overallDiscountAmount: sanitizedData.overallDiscountAmount || 0,
@@ -4937,6 +4939,94 @@ const InvoiceFormPage: React.FC = () => {
               <p className="text-sm text-blue-800">
                 💡 <strong>Note:</strong> Battery Buy Back is a deduction from the total. Use negative values (e.g., -500) to reduce the grand total.
               </p>
+            </div>
+          </div>
+
+          {/* Company Information Section */}
+          <div className="p-5 border-t border-gray-200">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Company Information</h3>
+            
+            {/* Bank Details Section */}
+            <div className="border-t border-gray-200 pt-4">
+              <h4 className="text-md font-semibold text-gray-800 mb-3">Bank Details</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
+                  <input
+                    type="text"
+                    value={formData.company?.bankDetails?.bankName || ''}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      company: {
+                        ...prev.company!,
+                        bankDetails: {
+                          ...prev.company!.bankDetails!,
+                          bankName: e.target.value
+                        }
+                      }
+                    }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter bank name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
+                  <input
+                    type="text"
+                    value={formData.company?.bankDetails?.accountNo || ''}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      company: {
+                        ...prev.company!,
+                        bankDetails: {
+                          ...prev.company!.bankDetails!,
+                          accountNo: e.target.value
+                        }
+                      }
+                    }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter account number"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">IFSC Code</label>
+                  <input
+                    type="text"
+                    value={formData.company?.bankDetails?.ifsc || ''}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      company: {
+                        ...prev.company!,
+                        bankDetails: {
+                          ...prev.company!.bankDetails!,
+                          ifsc: e.target.value
+                        }
+                      }
+                    }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter IFSC code"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bank Branch</label>
+                  <input
+                    type="text"
+                    value={formData.company?.bankDetails?.branch || ''}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      company: {
+                        ...prev.company!,
+                        bankDetails: {
+                          ...prev.company!.bankDetails!,
+                          branch: e.target.value
+                        }
+                      }
+                    }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter bank branch"
+                  />
+                </div>
+              </div>
             </div>
           </div>
 

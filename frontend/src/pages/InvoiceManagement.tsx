@@ -4509,11 +4509,11 @@ const InvoiceManagement: React.FC = () => {
             <thead>
               <tr>
                 <th style="width: 6%;">Sr.No</th>
+                <th style="width: 8%;">Part No</th>
                 <th style="width: 25%;">Description</th>
                 <th style="width: 8%;">HSN Code</th>
                 <th style="width: 5%;">Qty</th>
                 <th style="width: 6%;">UOM</th>
-                <th style="width: 8%;">Part No</th>
                 <th style="width: 10%;">Unit Price</th>
                 ${(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
                 <th style="width: 8%;">Total Basic</th>
@@ -4535,11 +4535,11 @@ const InvoiceManagement: React.FC = () => {
                 return `
                   <tr>
                     <td class="center-cell">${idx + 1}</td>
+                    <td class="center-cell">${item.partNo || item?.product?.partNo || '-'}</td>
                     <td>${item.description || ''}</td>
                     <td class="center-cell">${item.hsnNumber || item?.product?.hsnNumber || '-'}</td>
                     <td class="center-cell">${item.quantity || 0}</td>
                     <td class="center-cell">${item.uom || 'NOS'}</td>
-                    <td class="center-cell">${item.partNo || item?.product?.partNo || '-'}</td>
                     <td class="number-cell">₹${basicAmount.toFixed(2)}</td>
                     ${showDiscount ? `<td class="center-cell">${discountPercent}%</td>` : ''}
                     <td class="number-cell">₹${totalBasic.toFixed(2)}</td>
@@ -4727,12 +4727,22 @@ const InvoiceManagement: React.FC = () => {
           </div>
           
           <div class="footer">
-            <div><strong>For ${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong></div>
-            <br><br>
-            <div><strong>Authorized Signatory</strong></div>
             <div style="margin-top: 20px; font-size: 9px; border-top: 1px solid #000; padding-top: 10px;">
-              <strong>Address:</strong> Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116<br>
-              <strong>Mobile:</strong> +91 9176660123 | <strong>GSTIN:</strong> 33BLFPS9951M1ZC | <strong>Email:</strong> 24x7powerolservice@gmail.com
+              <strong>Address:</strong> ${selectedInvoice.company?.address || generalSettings?.companyAddress || 'Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116'}<br>
+              <strong>Mobile:</strong> ${selectedInvoice.company?.phone || generalSettings?.companyPhone || '+91 9176660123'} | <strong>PAN:</strong> ${selectedInvoice.company?.pan || generalSettings?.companyPAN || '33BLFPS9951M1ZC'} | <strong>Email:</strong> ${selectedInvoice.company?.email || generalSettings?.companyEmail || 'service@sunpowerservices.in'}
+              ${selectedInvoice?.company?.bankDetails && (
+                selectedInvoice.company.bankDetails.bankName || 
+                selectedInvoice.company.bankDetails.accountNo || 
+                selectedInvoice.company.bankDetails.ifsc || 
+                selectedInvoice.company.bankDetails.branch
+              ) ? `
+              <br><br>
+              <div style="font-weight: bold; margin-top: 10px;">Banking Details:</div>
+              ${selectedInvoice?.company?.bankDetails?.bankName ? `<div>Bank: ${selectedInvoice.company.bankDetails.bankName}</div>` : ''}
+              ${selectedInvoice?.company?.bankDetails?.accountNo ? `<div>A/C No: ${selectedInvoice.company.bankDetails.accountNo}</div>` : ''}
+              ${selectedInvoice?.company?.bankDetails?.ifsc ? `<div>IFSC: ${selectedInvoice.company.bankDetails.ifsc}</div>` : ''}
+              ${selectedInvoice?.company?.bankDetails?.branch ? `<div>Branch: ${selectedInvoice.company.bankDetails.branch}</div>` : ''}
+              ` : ''}
             </div>
           </div>
         </div>
@@ -5521,10 +5531,23 @@ const InvoiceManagement: React.FC = () => {
             <div class="footer-left">
               <div style="font-weight: bold;">Sun Power Bank Details: -</div>
               <div class="company-details">
-                Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116<br>
-                Mobile: +91 9176660123<br>
-                GSTIN: 33BLFPS9951M1ZC<br>
-                Mail Id: sm@sunpowerservices.in / service@sunpowerservices.in
+                ${quotation?.company?.address || 'Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116'}<br>
+                Mobile: ${quotation?.company?.phone || '+91 9176660123'}<br>
+                PAN: ${quotation?.company?.pan || '33BLFPS9951M1ZC'}<br>
+                Mail Id: ${quotation?.company?.email || 'service@sunpowerservices.in'}
+                ${quotation?.company?.bankDetails && (
+                  quotation.company.bankDetails.bankName || 
+                  quotation.company.bankDetails.accountNo || 
+                  quotation.company.bankDetails.ifsc || 
+                  quotation.company.bankDetails.branch
+                ) ? `
+                <br><br>
+                <div style="font-weight: bold; margin-top: 10px;">Banking Details:</div>
+                ${quotation?.company?.bankDetails?.bankName ? `<div>Bank: ${quotation.company.bankDetails.bankName}</div>` : ''}
+                ${quotation?.company?.bankDetails?.accountNo ? `<div>A/C No: ${quotation.company.bankDetails.accountNo}</div>` : ''}
+                ${quotation?.company?.bankDetails?.ifsc ? `<div>IFSC: ${quotation.company.bankDetails.ifsc}</div>` : ''}
+                ${quotation?.company?.bankDetails?.branch ? `<div>Branch: ${quotation.company.bankDetails.branch}</div>` : ''}
+                ` : ''}
               </div>
             </div>
             <div class="footer-center">
@@ -6745,6 +6768,30 @@ const InvoiceManagement: React.FC = () => {
                           {selectedInvoice?.location?.address && <p>{selectedInvoice?.location?.address}</p>}
                         </>
                       )}
+                      
+                      {/* Bank Details */}
+                      {selectedInvoice?.company?.bankDetails && (
+                        selectedInvoice.company.bankDetails.bankName || 
+                        selectedInvoice.company.bankDetails.accountNo || 
+                        selectedInvoice.company.bankDetails.ifsc || 
+                        selectedInvoice.company.bankDetails.branch
+                      ) && (
+                        <>
+                          <p className="mt-3 font-medium text-gray-700">Bank Details:</p>
+                          {selectedInvoice?.company?.bankDetails?.bankName && (
+                            <p className="text-sm text-gray-600">Bank: {selectedInvoice.company.bankDetails.bankName}</p>
+                          )}
+                          {selectedInvoice?.company?.bankDetails?.accountNo && (
+                            <p className="text-sm text-gray-600">A/C: {selectedInvoice.company.bankDetails.accountNo}</p>
+                          )}
+                          {selectedInvoice?.company?.bankDetails?.ifsc && (
+                            <p className="text-sm text-gray-600">IFSC: {selectedInvoice.company.bankDetails.ifsc}</p>
+                          )}
+                          {selectedInvoice?.company?.bankDetails?.branch && (
+                            <p className="text-sm text-gray-600">Branch: {selectedInvoice.company.bankDetails.branch}</p>
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -6903,11 +6950,11 @@ const InvoiceManagement: React.FC = () => {
                   <table className="w-full border border-gray-200 rounded-lg">
                     <thead className="bg-gray-50">
                       <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part No</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">HSN Number</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">UOM</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part No</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
                         {(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) && (
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
@@ -6922,11 +6969,11 @@ const InvoiceManagement: React.FC = () => {
                     <tbody className="divide-y divide-gray-200">
                       {(selectedInvoice.items || []).map((item: any, index: number) => (
                         <tr key={index}>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.partNo || item?.product?.partNo || 'N/A'}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.hsnNumber || item?.product?.hsnNumber || 'N/A'}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.uom || 'N/A'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.partNo || item?.product?.partNo || 'N/A'}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">
                             {editMode && hasAmountMismatch(selectedInvoice) ? (
                               <input
@@ -8931,6 +8978,30 @@ const InvoiceManagement: React.FC = () => {
                         )}
                       </>
                     )}
+                    
+                    {/* Bank Details */}
+                    {selectedQuotation?.company?.bankDetails && (
+                      selectedQuotation.company.bankDetails.bankName || 
+                      selectedQuotation.company.bankDetails.accountNo || 
+                      selectedQuotation.company.bankDetails.ifsc || 
+                      selectedQuotation.company.bankDetails.branch
+                    ) && (
+                      <>
+                        <p className="mt-3 font-medium text-gray-700">Bank Details:</p>
+                        {selectedQuotation?.company?.bankDetails?.bankName && (
+                          <p className="text-sm text-gray-600">Bank: {selectedQuotation.company.bankDetails.bankName}</p>
+                        )}
+                        {selectedQuotation?.company?.bankDetails?.accountNo && (
+                          <p className="text-sm text-gray-600">A/C: {selectedQuotation.company.bankDetails.accountNo}</p>
+                        )}
+                        {selectedQuotation?.company?.bankDetails?.ifsc && (
+                          <p className="text-sm text-gray-600">IFSC: {selectedQuotation.company.bankDetails.ifsc}</p>
+                        )}
+                        {selectedQuotation?.company?.bankDetails?.branch && (
+                          <p className="text-sm text-gray-600">Branch: {selectedQuotation.company.bankDetails.branch}</p>
+                        )}
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -8998,7 +9069,7 @@ const InvoiceManagement: React.FC = () => {
               </div>
 
               {/* Quotation Items */}
-              <div>
+              {selectedQuotation.items && selectedQuotation.items.length > 0 && <div>
                 <h4 className="font-medium text-gray-900 mb-3">Items:</h4>
                 <div className="overflow-x-auto">
                   <table className="w-full border border-gray-200 rounded-lg">
@@ -9036,7 +9107,7 @@ const InvoiceManagement: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </div>}
 
               {/* Service Charges Section */}
               {selectedQuotation.serviceCharges && selectedQuotation.serviceCharges.length > 0 && (

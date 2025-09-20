@@ -22,8 +22,8 @@ export interface Product {
   minStockLevel: number;
   isActive: boolean;
   location: string; // MongoDB ObjectId as string
-  room: string;
-  rack: string;
+  room?: string;
+  rack?: string;
   hsnNumber?: string;
   productType1?: string;
   productType2?: string;
@@ -573,13 +573,7 @@ const ProductManagement: React.FC = () => {
       errors.location = 'Location is required';
     }
 
-    if (!formData.room.trim()) {
-      errors.room = 'Room is required';
-    }
-
-    if (!formData.rack.trim()) {
-      errors.rack = 'Rack is required';
-    }
+    // Room and rack are optional fields - no validation required
 
     if (!formData.uom.trim()) {
       errors.uom = 'Unit of Measure (UOM) is required';
@@ -1902,7 +1896,7 @@ const ProductManagement: React.FC = () => {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Room *
+                          Room
                           {!formData.location && (
                             <span className="text-xs text-gray-500 ml-1">(Select location first)</span>
                           )}
@@ -1943,7 +1937,7 @@ const ProductManagement: React.FC = () => {
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Rack *
+                          Rack
                           {!formData.room && (
                             <span className="text-xs text-gray-500 ml-1">(Select room first)</span>
                           )}

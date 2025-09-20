@@ -739,46 +739,55 @@ export const receiveItems = async (
       console.log("Received Items:", receivedItems);
       console.log("Order Items:", order.items);
       
-      const transformedItems = receivedItems.map((receivedItem: any) => {
-        const actualProductId = receivedItem.productId || receivedItem.product;
-        const actualQuantityReceived = receivedItem.quantityReceived || receivedItem.receivedQuantity;
-        
-        // Find the corresponding PO item to get unit price and tax rate
-        const poItem = order.items.find(poItem => {
-          const poProductId = typeof poItem.product === 'string' ? poItem.product : poItem.product._id;
-          return poProductId.toString() === actualProductId.toString();
-        });
-        
-        if (!poItem) {
-          console.warn(`PO item not found for product ${actualProductId}`);
-          return null;
-        }
-        
-        const unitPrice = poItem.unitPrice || 0;
-        const taxRate = poItem.taxRate || 0;
-        
-        console.log("Transforming received item:", {
-          product: actualProductId,
-          quantity: actualQuantityReceived,
-          unitPrice,
-          taxRate,
-          itemTotal: actualQuantityReceived * unitPrice,
-          taxAmount: (actualQuantityReceived * unitPrice * taxRate) / 100
-        });
-        
-        return {
-          product: actualProductId,
-          quantity: actualQuantityReceived,
-          unitPrice,
-          description: (typeof poItem.product === 'object' && 'name' in poItem.product ? poItem.product.name : '') || '',
-          taxRate
-        };
-      }).filter(Boolean); // Remove any null items
+      const transformedItems = receivedItems
+        .filter((receivedItem: any) => {
+          // Only process items with valid quantity > 0
+          const actualQuantityReceived = receivedItem.quantityReceived || receivedItem.receivedQuantity || 0;
+          return actualQuantityReceived > 0;
+        })
+        .map((receivedItem: any) => {
+          const actualProductId = receivedItem.productId || receivedItem.product;
+          const actualQuantityReceived = receivedItem.quantityReceived || receivedItem.receivedQuantity || 0;
+          
+          // Find the corresponding PO item to get unit price and tax rate
+          const poItem = order.items.find(poItem => {
+            const poProductId = typeof poItem.product === 'string' ? poItem.product : poItem.product._id;
+            return poProductId.toString() === actualProductId.toString();
+          });
+          
+          if (!poItem) {
+            console.warn(`PO item not found for product ${actualProductId}`);
+            return null;
+          }
+          
+          const unitPrice = poItem.unitPrice || 0;
+          const taxRate = poItem.taxRate || 0;
+          
+          console.log("Transforming received item:", {
+            product: actualProductId,
+            quantity: actualQuantityReceived,
+            unitPrice,
+            taxRate,
+            itemTotal: actualQuantityReceived * unitPrice,
+            taxAmount: (actualQuantityReceived * unitPrice * taxRate) / 100
+          });
+          
+          return {
+            product: actualProductId,
+            quantity: actualQuantityReceived,
+            unitPrice,
+            description: (typeof poItem.product === 'object' && 'name' in poItem.product ? poItem.product.name : '') || '',
+            taxRate
+          };
+        })
+        .filter(Boolean); // Remove any null items
 
       console.log("Transformed items for invoice:", transformedItems);
 
       if (transformedItems.length === 0) {
         console.warn("No valid items to create invoice for");
+        // Don't create invoice if no items are being received
+        return next(new AppError('No items selected for receipt. Please select at least one item with quantity > 0.', 400));
       } else {
         // Calculate the total value of items being received in this receipt
         const receiptTotalValue = transformedItems.reduce((sum: number, item: any) => {
@@ -1288,8 +1297,24 @@ const createInvoiceFromPO = async ({
   let subtotal = 0;
   let totalTax = 0;
 
+  // Validate items array
+  if (!items || items.length === 0) {
+    throw new Error('No items provided for invoice creation');
+  }
+
   // Calculate items and totals
   for (const item of items) {
+    // Validate required fields
+    if (!item.product) {
+      throw new Error('Product ID is required for all items');
+    }
+    if (!item.quantity || item.quantity <= 0) {
+      throw new Error('Valid quantity (> 0) is required for all items');
+    }
+    if (!item.unitPrice || item.unitPrice < 0) {
+      throw new Error('Valid unit price (>= 0) is required for all items');
+    }
+
     const product = await Product.findById(item.product);
     if (!product) {
       throw new Error(`Product not found: ${item.product}`);
@@ -1317,31 +1342,53 @@ const createInvoiceFromPO = async ({
   let finalSubtotal: number;
   let finalTaxAmount: number;
 
+  // Validate external invoice total if provided
+  if (externalInvoiceTotal !== undefined && externalInvoiceTotal !== null) {
+    if (typeof externalInvoiceTotal !== 'number' || isNaN(externalInvoiceTotal) || externalInvoiceTotal < 0) {
+      throw new Error('External invoice total must be a valid non-negative number');
+    }
+  }
+
   if (externalInvoiceTotal && externalInvoiceTotal > 0) {
-    // Use external invoice total
-    finalTotalAmount = subtotal + totalTax - discountAmount;
+    // Use external invoice total as the final amount
+    finalTotalAmount = externalInvoiceTotal;
     finalSubtotal = subtotal;
     finalTaxAmount = totalTax;
     
-    // // Adjust discount if needed to match external total
-    // const calculatedTotal = subtotal + totalTax - discountAmount;
-    // if (Math.abs(calculatedTotal - externalInvoiceTotal) > 0.01) {
-    //   // Adjust discount to match external total
-    //   const newDiscountAmount = (subtotal + totalTax) - externalInvoiceTotal;
-    //   discountAmount = Math.max(0, newDiscountAmount);
-    // }
+    console.log("Using external invoice total:", {
+      calculatedTotal: subtotal + totalTax - discountAmount,
+      externalInvoiceTotal,
+      finalTotalAmount,
+      note: "External invoice total will be used as final amount"
+    });
   } else {
     // Calculate from items
     finalSubtotal = subtotal;
     finalTaxAmount = totalTax;
     finalTotalAmount = subtotal + totalTax - discountAmount;
+    
+    console.log("Calculated totals from items:", {
+      subtotal,
+      totalTax,
+      discountAmount,
+      finalTotalAmount
+    });
   }
 
-  // Ensure amounts are properly rounded
+  // Ensure amounts are properly rounded and valid
   finalTotalAmount = Math.round(finalTotalAmount * 100) / 100;
   finalSubtotal = Math.round(finalSubtotal * 100) / 100;
   finalTaxAmount = Math.round(finalTaxAmount * 100) / 100;
   discountAmount = Math.round(discountAmount * 100) / 100;
+
+  // Validate all amounts are valid numbers
+  if (isNaN(finalTotalAmount) || isNaN(finalSubtotal) || isNaN(finalTaxAmount) || isNaN(discountAmount)) {
+    throw new Error('Invalid numeric values in invoice calculation');
+  }
+
+  if (finalTotalAmount < 0 || finalSubtotal < 0 || finalTaxAmount < 0 || discountAmount < 0) {
+    throw new Error('Invoice amounts cannot be negative');
+  }
 
   console.log("Calculated amounts:", {
     subtotal: finalSubtotal,

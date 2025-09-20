@@ -257,7 +257,7 @@ export class QuotationService {
         pan: String(data.company?.pan || '').trim(),
         bankDetails: data.company?.bankDetails
       } : undefined,
-      location: String(data.location || '').trim(), // Added location sanitization
+      location: data.location && data.location.trim() ? data.location.trim() : undefined, // Added location sanitization
       // Service Ticket related fields
       engineSerialNumber: String(data.engineSerialNumber || '').trim(),
       kva: String(data.kva || '').trim(),

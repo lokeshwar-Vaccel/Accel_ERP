@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
     Plus,
@@ -142,6 +142,7 @@ interface AMCQuotationData extends Omit<QuotationData, 'batteryBuyBack'> {
 }
 
 const AMCQuotationForm: React.FC = () => {
+    const navigate = useNavigate();
     const location = useLocation();
     const currentUser = useSelector((state: RootState) => state.auth.user);
     const tableContainerRef = useRef(null);
@@ -629,13 +630,152 @@ const AMCQuotationForm: React.FC = () => {
         }));
     };
 
+    // AMC-specific validation function
+    const validateAMCQuotationData = (data: AMCQuotationData): ValidationError[] => {
+        const errors: ValidationError[] = [];
+
+        // Customer validation
+        if (!data.customer || !data.customer.name?.trim()) {
+            errors.push({ field: 'customer.name', message: 'Customer name is required' });
+        }
+
+        // AMC Type validation
+        if (!data.amcType || !['AMC', 'CAMC'].includes(data.amcType)) {
+            errors.push({ field: 'amcType', message: 'AMC type must be either AMC or CAMC' });
+        }
+
+        // Contract duration validation
+        if (!data.contractDuration || data.contractDuration <= 0) {
+            errors.push({ field: 'contractDuration', message: 'Contract duration must be greater than 0 months' });
+        }
+
+        // Contract dates validation
+        if (!data.contractStartDate) {
+            errors.push({ field: 'contractStartDate', message: 'Contract start date is required' });
+        }
+        if (!data.contractEndDate) {
+            errors.push({ field: 'contractEndDate', message: 'Contract end date is required' });
+        }
+        if (data.contractStartDate && data.contractEndDate && data.contractStartDate >= data.contractEndDate) {
+            errors.push({ field: 'contractEndDate', message: 'Contract end date must be after start date' });
+        }
+
+        // AMC Period validation
+        if (!data.amcPeriodFrom) {
+            errors.push({ field: 'amcPeriodFrom', message: 'AMC period start date is required' });
+        }
+        if (!data.amcPeriodTo) {
+            errors.push({ field: 'amcPeriodTo', message: 'AMC period end date is required' });
+        }
+        if (data.amcPeriodFrom && data.amcPeriodTo && data.amcPeriodFrom >= data.amcPeriodTo) {
+            errors.push({ field: 'amcPeriodTo', message: 'AMC period end date must be after start date' });
+        }
+
+        // Billing cycle validation
+        if (!data.billingCycle || !['monthly', 'quarterly', 'half-yearly', 'yearly'].includes(data.billingCycle)) {
+            errors.push({ field: 'billingCycle', message: 'Valid billing cycle is required' });
+        }
+
+        // Number of visits validation
+        if (!data.numberOfVisits || data.numberOfVisits <= 0) {
+            errors.push({ field: 'numberOfVisits', message: 'Number of visits must be greater than 0' });
+        }
+
+        // Number of oil services validation
+        if (!data.numberOfOilServices || data.numberOfOilServices <= 0) {
+            errors.push({ field: 'numberOfOilServices', message: 'Number of oil services must be greater than 0' });
+        }
+
+        // Response time validation
+        if (!data.responseTime || data.responseTime <= 0) {
+            errors.push({ field: 'responseTime', message: 'Response time must be greater than 0 hours' });
+        }
+
+        // Coverage area validation - Made optional
+        // if (!data.coverageArea?.trim()) {
+        //     errors.push({ field: 'coverageArea', message: 'Coverage area is required' });
+        // }
+
+        // Emergency contact hours validation
+        if (!data.emergencyContactHours?.trim()) {
+            errors.push({ field: 'emergencyContactHours', message: 'Emergency contact hours is required' });
+        }
+
+        // Offer items validation
+        if (!data.offerItems || data.offerItems.length === 0) {
+            errors.push({ field: 'offerItems', message: 'At least one DG set offer item is required' });
+        } else {
+            data.offerItems.forEach((item, index) => {
+                if (!item.make?.trim()) {
+                    errors.push({ field: `offerItems[${index}].make`, message: 'DG make is required' });
+                }
+                if (!item.engineSlNo?.trim()) {
+                    errors.push({ field: `offerItems[${index}].engineSlNo`, message: 'Engine serial number is required' });
+                }
+                if (!item.dgRatingKVA || item.dgRatingKVA <= 0) {
+                    errors.push({ field: `offerItems[${index}].dgRatingKVA`, message: 'DG rating must be greater than 0 KVA' });
+                }
+                if (!item.typeOfVisits?.trim()) {
+                    errors.push({ field: `offerItems[${index}].typeOfVisits`, message: 'Type of visits is required' });
+                }
+                if (!item.qty || item.qty <= 0) {
+                    errors.push({ field: `offerItems[${index}].qty`, message: 'Quantity must be greater than 0' });
+                }
+                if (!item.amcCostPerDG || item.amcCostPerDG <= 0) {
+                    errors.push({ field: `offerItems[${index}].amcCostPerDG`, message: 'AMC cost per DG must be greater than 0' });
+                }
+            });
+        }
+
+        // CAMC spares validation (only if AMC type is CAMC)
+        if (data.amcType === 'CAMC') {
+            if (!data.sparesItems || data.sparesItems.length === 0) {
+                errors.push({ field: 'sparesItems', message: 'At least one spare item is required for CAMC contract' });
+            } else {
+                data.sparesItems.forEach((item, index) => {
+                    if (!item.partNo?.trim()) {
+                        errors.push({ field: `sparesItems[${index}].partNo`, message: 'Part number is required' });
+                    }
+                    if (!item.description?.trim()) {
+                        errors.push({ field: `sparesItems[${index}].description`, message: 'Description is required' });
+                    }
+                    if (!item.hsnCode?.trim()) {
+                        errors.push({ field: `sparesItems[${index}].hsnCode`, message: 'HSN code is required' });
+                    }
+                    if (!item.qty || item.qty <= 0) {
+                        errors.push({ field: `sparesItems[${index}].qty`, message: 'Quantity must be greater than 0' });
+                    }
+                });
+            }
+        }
+
+        // Payment terms validation
+        if (!data.paymentTermsText?.trim()) {
+            errors.push({ field: 'paymentTermsText', message: 'Payment terms are required' });
+        }
+
+        // Validity validation
+        if (!data.validityText?.trim()) {
+            errors.push({ field: 'validityText', message: 'Validity terms are required' });
+        }
+
+        return errors;
+    };
+
     const handleSubmit = async () => {
         try {
-            // Validate form
-            const validationResult = validateQuotationData(quotationData as Partial<QuotationData>);
-            if (!validationResult.isValid) {
-                setValidationErrors(validationResult.errors);
-                toast.error('Please fix the validation errors');
+            // Validate AMC-specific data
+            const amcValidationErrors = validateAMCQuotationData(quotationData);
+            
+            // Also validate basic quotation data
+            const basicValidationResult = validateQuotationData(quotationData as Partial<QuotationData>);
+            
+            // Combine all validation errors
+            const allErrors = [...amcValidationErrors, ...basicValidationResult.errors];
+            
+            if (allErrors.length > 0) {
+                setValidationErrors(allErrors);
+                toast.error(`Please fix ${allErrors.length} validation error(s)`);
                 return;
             }
 
@@ -652,13 +792,14 @@ const AMCQuotationForm: React.FC = () => {
             };
 
             if (isEditMode && quotationFromState?._id) {
-                await apiClient.quotations.update(quotationFromState._id, amcQuotationData);
+                await apiClient.amcQuotations.update(quotationFromState._id, amcQuotationData);
                 toast.success('AMC quotation updated successfully');
+
             } else {
-                await apiClient.quotations.create(amcQuotationData);
+                await apiClient.amcQuotations.create(amcQuotationData);
                 toast.success('AMC quotation created successfully');
             }
-
+navigate('/billing');
             // Navigation will be handled by the parent component
         } catch (error: any) {
             console.error('Error submitting quotation:', error);
@@ -716,6 +857,22 @@ const AMCQuotationForm: React.FC = () => {
         );
     };
 
+    // Helper function to get error message for a specific field
+    const getFieldError = (field: string): string | undefined => {
+        const error = validationErrors.find(err => err.field === field);
+        return error?.message;
+    };
+
+    // Helper function to check if a field has an error
+    const hasFieldError = (field: string): boolean => {
+        return validationErrors.some(err => err.field === field);
+    };
+
+    // Helper function to get error class for styling
+    const getErrorClass = (field: string): string => {
+        return hasFieldError(field) ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500';
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -726,6 +883,31 @@ const AMCQuotationForm: React.FC = () => {
 
     return (
         <div className="p-6 bg-white">
+            {/* Validation Errors Summary */}
+            {validationErrors.length > 0 && (
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
+                    <div className="flex items-center mb-2">
+                        <div className="flex-shrink-0">
+                            <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                            </svg>
+                        </div>
+                        <div className="ml-3">
+                            <h3 className="text-sm font-medium text-red-800">
+                                Please fix the following {validationErrors.length} error(s):
+                            </h3>
+                        </div>
+                    </div>
+                    <div className="mt-2 text-sm text-red-700">
+                        <ul className="list-disc list-inside space-y-1">
+                            {validationErrors.map((error, index) => (
+                                <li key={index}>{error.message}</li>
+                            ))}
+                        </ul>
+                    </div>
+                </div>
+            )}
+
             {/* Header with Logos */}
             <div className="flex justify-between items-center mb-6 pb-4 border-b border-red-200">
                 <div className="flex items-center">
@@ -745,11 +927,14 @@ const AMCQuotationForm: React.FC = () => {
                         <select
                             value={quotationData.amcType}
                             onChange={(e) => handleInputChange('amcType', e.target.value as 'AMC' | 'CAMC')}
-                            className="px-4 py-2 border border-blue-300 rounded-full bg-blue-50 text-blue-700 font-medium"
+                            className={`px-4 py-2 border rounded-full font-medium ${hasFieldError('amcType') ? 'border-red-500 bg-red-50 text-red-700' : 'border-blue-300 bg-blue-50 text-blue-700'}`}
                         >
                             <option value="AMC">AMC</option>
                             <option value="CAMC">CAMC</option>
                         </select>
+                        {getFieldError('amcType') && (
+                            <p className="mt-1 text-sm text-red-600 text-center">{getFieldError('amcType')}</p>
+                        )}
                     </div>
                 </div>
             </div>
@@ -796,8 +981,11 @@ const AMCQuotationForm: React.FC = () => {
                                         setTimeout(() => setShowCustomerDropdown(false), 200);
                                     }}
                                     placeholder="From customer list Drop Down"
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${getErrorClass('customer.name')}`}
                                     />
+                                    {getFieldError('customer.name') && (
+                                        <p className="mt-1 text-sm text-red-600">{getFieldError('customer.name')}</p>
+                                    )}
                                     {showCustomerDropdown && (
                                         <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
                                         {getFilteredCustomers().length > 0 ? (
@@ -1009,18 +1197,24 @@ const AMCQuotationForm: React.FC = () => {
                                             type="text"
                                             value={item.make}
                                             onChange={(e) => handleOfferItemChange(index, 'make', e.target.value)}
-                                            className="w-full border-none focus:outline-none"
+                                            className={`w-full border-none focus:outline-none ${hasFieldError(`offerItems[${index}].make`) ? 'bg-red-50' : ''}`}
                                             placeholder="Select from customer DG list"
                                         />
+                                        {getFieldError(`offerItems[${index}].make`) && (
+                                            <p className="text-xs text-red-600 mt-1">{getFieldError(`offerItems[${index}].make`)}</p>
+                                        )}
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
                                     <input
                                             type="text"
                                             value={item.engineSlNo}
                                             onChange={(e) => handleOfferItemChange(index, 'engineSlNo', e.target.value)}
-                                            className="w-full border-none focus:outline-none"
+                                            className={`w-full border-none focus:outline-none ${hasFieldError(`offerItems[${index}].engineSlNo`) ? 'bg-red-50' : ''}`}
                                             placeholder="Select from customer DG list"
                                         />
+                                        {getFieldError(`offerItems[${index}].engineSlNo`) && (
+                                            <p className="text-xs text-red-600 mt-1">{getFieldError(`offerItems[${index}].engineSlNo`)}</p>
+                                        )}
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
                                 <input
@@ -1030,18 +1224,24 @@ const AMCQuotationForm: React.FC = () => {
                                                 const v = e.target.value;
                                                 handleOfferItemChange(index, 'dgRatingKVA', v === '' ? undefined : parseFloat(v));
                                             }}
-                                            className="w-full border-none focus:outline-none"
+                                            className={`w-full border-none focus:outline-none ${hasFieldError(`offerItems[${index}].dgRatingKVA`) ? 'bg-red-50' : ''}`}
                                             placeholder="Auto Update"
                                         />
+                                        {getFieldError(`offerItems[${index}].dgRatingKVA`) && (
+                                            <p className="text-xs text-red-600 mt-1">{getFieldError(`offerItems[${index}].dgRatingKVA`)}</p>
+                                        )}
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
                                 <input
                                     type="text"
                                             value={item.typeOfVisits}
                                             onChange={(e) => handleOfferItemChange(index, 'typeOfVisits', e.target.value)}
-                                            className="w-full border-none focus:outline-none"
+                                            className={`w-full border-none focus:outline-none ${hasFieldError(`offerItems[${index}].typeOfVisits`) ? 'bg-red-50' : ''}`}
                                             placeholder="Manual Typing"
                                         />
+                                        {getFieldError(`offerItems[${index}].typeOfVisits`) && (
+                                            <p className="text-xs text-red-600 mt-1">{getFieldError(`offerItems[${index}].typeOfVisits`)}</p>
+                                        )}
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
                                 <input
@@ -1051,9 +1251,12 @@ const AMCQuotationForm: React.FC = () => {
                                                 const v = e.target.value;
                                                 handleOfferItemChange(index, 'qty', v === '' ? undefined : parseInt(v));
                                             }}
-                                            className="w-full border-none focus:outline-none"
+                                            className={`w-full border-none focus:outline-none ${hasFieldError(`offerItems[${index}].qty`) ? 'bg-red-50' : ''}`}
                                             placeholder="Select Number"
                                         />
+                                        {getFieldError(`offerItems[${index}].qty`) && (
+                                            <p className="text-xs text-red-600 mt-1">{getFieldError(`offerItems[${index}].qty`)}</p>
+                                        )}
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
                                 <input
@@ -1063,9 +1266,12 @@ const AMCQuotationForm: React.FC = () => {
                                                 const v = e.target.value;
                                                 handleOfferItemChange(index, 'amcCostPerDG', v === '' ? undefined : parseFloat(v));
                                             }}
-                                            className="w-full border-none focus:outline-none"
+                                            className={`w-full border-none focus:outline-none ${hasFieldError(`offerItems[${index}].amcCostPerDG`) ? 'bg-red-50' : ''}`}
                                             placeholder="Manual Entry"
                                         />
+                                        {getFieldError(`offerItems[${index}].amcCostPerDG`) && (
+                                            <p className="text-xs text-red-600 mt-1">{getFieldError(`offerItems[${index}].amcCostPerDG`)}</p>
+                                        )}
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
                                     <input
@@ -1132,9 +1338,12 @@ const AMCQuotationForm: React.FC = () => {
                                                 type="text"
                                 value={quotationData.paymentTermsText}
                                 onChange={(e) => handleInputChange('paymentTermsText', e.target.value)}
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${getErrorClass('paymentTermsText')}`}
                                 placeholder="Manual Entry"
                                             />
+                                            {getFieldError('paymentTermsText') && (
+                                                <p className="mt-1 text-sm text-red-600">{getFieldError('paymentTermsText')}</p>
+                                            )}
                                         </div>
                         <div className="flex items-center space-x-4">
                             <span className="font-medium w-24">AMC Start Date:</span>
@@ -1142,8 +1351,11 @@ const AMCQuotationForm: React.FC = () => {
                                 type="date"
                                 value={quotationData.amcPeriodFrom ? new Date(quotationData.amcPeriodFrom).toISOString().split('T')[0] : ''}
                                 onChange={(e) => handleInputChange('amcPeriodFrom', new Date(e.target.value))}
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${getErrorClass('amcPeriodFrom')}`}
                                             />
+                                            {getFieldError('amcPeriodFrom') && (
+                                                <p className="mt-1 text-sm text-red-600">{getFieldError('amcPeriodFrom')}</p>
+                                            )}
                                         </div>
                                         </div>
 
@@ -1155,9 +1367,12 @@ const AMCQuotationForm: React.FC = () => {
                                 type="text"
                                 value={quotationData.validityText}
                                 onChange={(e) => handleInputChange('validityText', e.target.value)}
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${getErrorClass('validityText')}`}
                                 placeholder="Manual Entry"
                                             />
+                                            {getFieldError('validityText') && (
+                                                <p className="mt-1 text-sm text-red-600">{getFieldError('validityText')}</p>
+                                            )}
                                         </div>
                         <div className="flex items-center space-x-4">
                             <span className="font-medium w-24">AMC End Date:</span>
@@ -1165,8 +1380,11 @@ const AMCQuotationForm: React.FC = () => {
                                 type="date"
                                 value={quotationData.amcPeriodTo ? new Date(quotationData.amcPeriodTo).toISOString().split('T')[0] : ''}
                                 onChange={(e) => handleInputChange('amcPeriodTo', new Date(e.target.value))}
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${getErrorClass('amcPeriodTo')}`}
                                             />
+                                            {getFieldError('amcPeriodTo') && (
+                                                <p className="mt-1 text-sm text-red-600">{getFieldError('amcPeriodTo')}</p>
+                                            )}
                                         </div>
                                         </div>
                                         </div>
@@ -1230,8 +1448,11 @@ const AMCQuotationForm: React.FC = () => {
                                                     }}
                                                     onBlur={() => setTimeout(() => setShowSparesProductDropdowns(prev => ({ ...prev, [index]: false })), 200)}
                                                     placeholder="Search by part no or product name"
-                                                    className="w-full border-none focus:outline-none"
+                                                    className={`w-full border-none focus:outline-none ${hasFieldError(`sparesItems[${index}].partNo`) ? 'bg-red-50' : ''}`}
                                                 />
+                                                {getFieldError(`sparesItems[${index}].partNo`) && (
+                                                    <p className="text-xs text-red-600 mt-1">{getFieldError(`sparesItems[${index}].partNo`)}</p>
+                                                )}
                                                 {showSparesProductDropdowns[index] && (
                                                     <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg overflow-hidden">
                                                         <div className="px-3 py-2 text-xs text-gray-600 bg-gray-50 border-b border-gray-200">
@@ -1293,8 +1514,11 @@ const AMCQuotationForm: React.FC = () => {
                                                 value={item.description || ''}
                                                 onChange={(e) => handleSpareItemChange(index, 'description', e.target.value)}
                                                 placeholder="Enter description"
-                                                className="w-full border-none focus:outline-none"
+                                                className={`w-full border-none focus:outline-none ${hasFieldError(`sparesItems[${index}].description`) ? 'bg-red-50' : ''}`}
                                             />
+                                            {getFieldError(`sparesItems[${index}].description`) && (
+                                                <p className="text-xs text-red-600 mt-1">{getFieldError(`sparesItems[${index}].description`)}</p>
+                                            )}
                                         </td>
                                         {/* HSN Code */}
                                         <td className="border border-gray-300 px-4 py-2">
@@ -1302,8 +1526,11 @@ const AMCQuotationForm: React.FC = () => {
                                                 type="text"
                                                 value={item.hsnCode || ''}
                                                 onChange={(e) => handleSpareItemChange(index, 'hsnCode', e.target.value)}
-                                                className="w-full border-none focus:outline-none"
+                                                className={`w-full border-none focus:outline-none ${hasFieldError(`sparesItems[${index}].hsnCode`) ? 'bg-red-50' : ''}`}
                                             />
+                                            {getFieldError(`sparesItems[${index}].hsnCode`) && (
+                                                <p className="text-xs text-red-600 mt-1">{getFieldError(`sparesItems[${index}].hsnCode`)}</p>
+                                            )}
                                         </td>
                                         {/* Qty */}
                                         <td className="border border-gray-300 px-4 py-2">
@@ -1316,8 +1543,11 @@ const AMCQuotationForm: React.FC = () => {
                                                     const qty = parseFloat(e.target.value) || 0;
                                                     handleSpareItemChange(index, 'qty', qty);
                                                 }}
-                                                className="w-full border-none focus:outline-none text-right"
+                                                className={`w-full border-none focus:outline-none text-right ${hasFieldError(`sparesItems[${index}].qty`) ? 'bg-red-50' : ''}`}
                                             />
+                                            {getFieldError(`sparesItems[${index}].qty`) && (
+                                                <p className="text-xs text-red-600 mt-1">{getFieldError(`sparesItems[${index}].qty`)}</p>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}

@@ -11,6 +11,7 @@ export interface ICompany extends Document {
     accNo: string;
     bankName: string;
     ifscCode: string;
+    branch: string;
   };
 }
 
@@ -25,6 +26,7 @@ const CompanySchema: Schema = new Schema(
       accNo: { type: String, required: true },
       bankName: { type: String, required: true },
       ifscCode: { type: String, required: true },
+      branch: { type: String, required: true },
     },
   },
   { timestamps: true }

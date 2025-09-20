@@ -188,20 +188,20 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
   //   errors.push({ field: 'subject', message: 'Subject is required' });
   // }
 
-  // Location validation
-  if (!data.location || (typeof data.location === 'string' && !data.location.trim())) {
-    errors.push({ field: 'location', message: 'From location is required' });
-  }
+  // Location validation - Made optional
+  // if (!data.location || (typeof data.location === 'string' && !data.location.trim())) {
+  //   errors.push({ field: 'location', message: 'From location is required' });
+  // }
 
-  // Validate billToAddress
-  if (!data.billToAddress || !data.billToAddress.address || (typeof data.billToAddress.address === 'string' && !data.billToAddress.address.trim())) {
-    errors.push({ field: 'billToAddress.address', message: 'Bill to address is required' });
-  }
+  // Validate billToAddress - Made optional
+  // if (!data.billToAddress || !data.billToAddress.address || (typeof data.billToAddress.address === 'string' && !data.billToAddress.address.trim())) {
+  //   errors.push({ field: 'billToAddress.address', message: 'Bill to address is required' });
+  // }
 
-  // Validate shipToAddress
-  if (!data.shipToAddress || !data.shipToAddress.address || (typeof data.shipToAddress.address === 'string' && !data.shipToAddress.address.trim())) {
-    errors.push({ field: 'shipToAddress.address', message: 'Ship to address is required' });
-  }
+  // Validate shipToAddress - Made optional
+  // if (!data.shipToAddress || !data.shipToAddress.address || (typeof data.shipToAddress.address === 'string' && !data.shipToAddress.address.trim())) {
+  //   errors.push({ field: 'shipToAddress.address', message: 'Ship to address is required' });
+  // }
 
   // Validate assigned engineer (optional)
   // No validation needed - field is optional
@@ -232,9 +232,9 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
   // } else {
   if (data.items && data.items.length > 0) {
     data.items.forEach((item, index) => {
-      if (!item.product || (typeof item.product === 'string' && !item.product.trim())) {
-        errors.push({ field: `items[${index}].product`, message: 'Product is required' });
-      }
+      // if (!item.product || (typeof item.product === 'string' && !item.product.trim())) {
+      //   errors.push({ field: `items[${index}].product`, message: 'Product is required' });
+      // }
       // if (!item.description?.trim()) {
       //   errors.push({ field: `items[${index}].description`, message: 'Description is required' });
       // }
@@ -552,6 +552,7 @@ export const sanitizeQuotationData = (data: any): any => {
       discount: Number(service.discount) || 0,
       taxRate: Number(service.taxRate) || 18
     })) : [],
+    location: data.location && data.location.trim() ? data.location.trim() : undefined,
     batteryBuyBack: data.batteryBuyBack ? {
       description: String(data.batteryBuyBack.description || 'Battery Buy Back').trim(),
       hsnNumber: String(data.batteryBuyBack.hsnNumber || '').trim(), // Add HSN field for battery buy back
@@ -597,7 +598,14 @@ export const getDefaultQuotationData = (): Partial<QuotationData> => ({
     phone: '',
     email: '',
     pan: '',
+    bankDetails: {
+      bankName: '',
+      accountNo: '',
+      ifsc: '',
+      branch: ''
+    }
   },
+  location: undefined, // Location field - optional
   // Service Ticket related fields
   engineSerialNumber: '',
   kva: '',

@@ -40,6 +40,10 @@ interface FormField {
   placeholder?: string;
 }
 
+interface FormErrors {
+  [key: string]: string;
+}
+
 const AdminSettings: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const settingsState = useSelector((state: RootState) => state.settings);
@@ -50,6 +54,82 @@ const AdminSettings: React.FC = () => {
   const [activeTab, setActiveTab] = useState('general');
   const [formData, setFormData] = useState<{ [key: string]: any }>({});
   const [companyFormData, setCompanyFormData] = useState<Partial<CompanyData>>({});
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+
+  // Validation functions
+  const validateIFSC = (ifsc: string): string => {
+    if (!ifsc) return 'IFSC code is required';
+    const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+    if (!ifscRegex.test(ifsc.toUpperCase())) {
+      return 'Invalid IFSC code format (e.g., SBIN0001234)';
+    }
+    return '';
+  };
+
+  const validateAccountNumber = (accNo: string): string => {
+    if (!accNo) return 'Account number is required';
+    const accNoRegex = /^\d{9,18}$/;
+    if (!accNoRegex.test(accNo)) {
+      return 'Account number must be 9-18 digits';
+    }
+    return '';
+  };
+
+  const validatePAN = (pan: string): string => {
+    if (!pan) return 'PAN number is required';
+    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+    if (!panRegex.test(pan.toUpperCase())) {
+      return 'Invalid PAN format (e.g., ABCDE1234F)';
+    }
+    return '';
+  };
+
+  const validatePhone = (phone: string): string => {
+    if (!phone) return 'Phone number is required';
+    const phoneRegex = /^[6-9]\d{9}$/;
+    if (!phoneRegex.test(phone)) {
+      return 'Invalid phone number (10 digits starting with 6-9)';
+    }
+    return '';
+  };
+
+  const validateEmail = (email: string): string => {
+    if (!email) return 'Email is required';
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return 'Invalid email format';
+    }
+    return '';
+  };
+
+  const validateField = (name: string, value: string): string => {
+    switch (name) {
+      case 'ifscCode':
+        return validateIFSC(value);
+      case 'accNo':
+        return validateAccountNumber(value);
+      case 'companyPan':
+        return validatePAN(value);
+      case 'contactPhone':
+        return validatePhone(value);
+      case 'contactEmail':
+        return validateEmail(value);
+      case 'companyName':
+        if (!value.trim()) return 'Company name is required';
+        return '';
+      case 'companyAddress':
+        if (!value.trim()) return 'Company address is required';
+        return '';
+      case 'bankName':
+        if (!value.trim()) return 'Bank name is required';
+        return '';
+      case 'branch':
+        if (!value.trim()) return 'Bank branch is required';
+        return '';
+      default:
+        return '';
+    }
+  };
 
   // Redirect if not authenticated
   if (!isAuthenticated) {
@@ -89,8 +169,11 @@ const AdminSettings: React.FC = () => {
           accNo: companyData.companyBankDetails?.accNo || '',
           bankName: companyData.companyBankDetails?.bankName || '',
           ifscCode: companyData.companyBankDetails?.ifscCode || '',
+          branch: companyData.companyBankDetails?.branch || '',
         }
       });
+      // Clear form errors when data is loaded
+      setFormErrors({});
     }
   }, [companyData]);
 
@@ -111,6 +194,27 @@ const AdminSettings: React.FC = () => {
 
   const handleSave = async (category: string) => {
     if (category === 'general') {
+      // Validate all required fields
+      const flattenedValues = getFlattenedCompanyValues();
+      const errors: FormErrors = {};
+      
+      // Validate each field
+      Object.keys(flattenedValues).forEach(key => {
+        const error = validateField(key, flattenedValues[key as keyof typeof flattenedValues]);
+        if (error) {
+          errors[key] = error;
+        }
+      });
+
+      // Check if there are any validation errors
+      if (Object.keys(errors).length > 0) {
+        setFormErrors(errors);
+        return;
+      }
+
+      // Clear any existing errors
+      setFormErrors({});
+
       // Handle company data save
       if (companyData?._id) {
         // Update existing company
@@ -139,6 +243,12 @@ const AdminSettings: React.FC = () => {
     { id: 'security', name: 'Security', icon: <Lock className="w-5 h-5" /> },
     { id: 'system', name: 'System', icon: <Monitor className="w-5 h-5" /> }
   ];
+
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+    // Clear form errors when switching tabs
+    setFormErrors({});
+  };
 
   const getFieldsForCategory = (category: string): FormField[] => {
     if (!settings || !Array.isArray(settings)) {
@@ -170,6 +280,7 @@ const AdminSettings: React.FC = () => {
       { name: 'accNo', label: 'Bank Account Number', type: 'text', required: true },
       { name: 'bankName', label: 'Bank Name', type: 'text', required: true },
       { name: 'ifscCode', label: 'Bank IFSC Code', type: 'text', required: true },
+      { name: 'branch', label: 'Bank Branch', type: 'text', required: true },
     ];
     return generalFields;
   };
@@ -185,12 +296,20 @@ const AdminSettings: React.FC = () => {
       accNo: companyFormData.companyBankDetails?.accNo || '',
       bankName: companyFormData.companyBankDetails?.bankName || '',
       ifscCode: companyFormData.companyBankDetails?.ifscCode || '',
+      branch: companyFormData.companyBankDetails?.branch || '',
     };
   };
 
   // Handle form field changes
   const handleCompanyFieldChange = (name: string, value: any) => {
-    if (name === 'accNo' || name === 'bankName' || name === 'ifscCode') {
+    // Validate the field
+    const error = validateField(name, value);
+    setFormErrors(prev => ({
+      ...prev,
+      [name]: error
+    }));
+
+    if (name === 'accNo' || name === 'bankName' || name === 'ifscCode' || name === 'branch') {
       // Handle bank details
       setCompanyFormData({
         ...companyFormData,
@@ -198,6 +317,7 @@ const AdminSettings: React.FC = () => {
           accNo: companyFormData.companyBankDetails?.accNo || '',
           bankName: companyFormData.companyBankDetails?.bankName || '',
           ifscCode: companyFormData.companyBankDetails?.ifscCode || '',
+          branch: companyFormData.companyBankDetails?.branch || '',
           [name]: value
         }
       });
@@ -261,7 +381,7 @@ const AdminSettings: React.FC = () => {
               {tabs.map(tab => (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => handleTabChange(tab.id)}
                   className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left transition-colors ${
                     activeTab === tab.id
                       ? 'bg-blue-50 text-blue-700 border border-blue-200'
@@ -296,6 +416,7 @@ const AdminSettings: React.FC = () => {
                           fields={getFieldsForCategory('general').slice(0, 3)}
                           values={getFlattenedCompanyValues()}
                           onChange={handleCompanyFieldChange}
+                          errors={formErrors}
                         />
                       </div>
                       <div className="mb-6">
@@ -304,14 +425,16 @@ const AdminSettings: React.FC = () => {
                           fields={getFieldsForCategory('general').slice(3, 5)}
                           values={getFlattenedCompanyValues()}
                           onChange={handleCompanyFieldChange}
+                          errors={formErrors}
                         />
                       </div>
                       <div className="mb-6">
                         <h3 className="text-md font-semibold mb-2">Bank Details</h3>
                         <Form
-                          fields={getFieldsForCategory('general').slice(5, 8)}
+                          fields={getFieldsForCategory('general').slice(5, 9)}
                           values={getFlattenedCompanyValues()}
                           onChange={handleCompanyFieldChange}
+                          errors={formErrors}
                         />
                       </div>
                     </>
@@ -323,6 +446,12 @@ const AdminSettings: React.FC = () => {
                   />
                   )}
                   <div className="flex justify-end mt-6">
+                    {activeTab === 'general' && Object.keys(formErrors).length > 0 && (
+                      <div className="flex items-center text-red-600 text-sm mr-4">
+                        <AlertCircle className="w-4 h-4 mr-1" />
+                        Please fix validation errors
+                      </div>
+                    )}
                     <Button 
                       onClick={() => handleSave(activeTab)}
                       disabled={saving}

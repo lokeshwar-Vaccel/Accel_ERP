@@ -173,6 +173,8 @@ export const createInvoice = async (
       bankAccountNo,
       bankIFSC,
       bankBranch,
+      // Company information
+      company,
       // Customer address details
       customerAddress,
       billToAddress,
@@ -420,6 +422,8 @@ export const createInvoice = async (
       bankAccountNo,
       bankIFSC,
       bankBranch,
+      // Company information
+      ...(company && { company }),
       // Customer address details
       customerAddress,
       billToAddress,
@@ -1031,6 +1035,8 @@ export const createInvoiceFromQuotation = async (
       assignedEngineer: typeof quotation.assignedEngineer === 'object' ? quotation.assignedEngineer._id : quotation.assignedEngineer,
       billToAddress: quotation.billToAddress,
       shipToAddress: quotation.shipToAddress,
+      // Company information from quotation
+      ...(quotation.company && { company: quotation.company }),
       // Quotation reference fields
       sourceQuotation: quotation._id,
       quotationNumber: quotation.quotationNumber,

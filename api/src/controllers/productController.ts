@@ -155,9 +155,12 @@ export const createProduct = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    // Transform empty strings to null for optional ObjectId fields
     const productData = {
       ...req.body,
-      createdBy: req.user!.id
+      createdBy: req.user!.id,
+      room: req.body.room && req.body.room.trim() !== '' ? req.body.room : null,
+      rack: req.body.rack && req.body.rack.trim() !== '' ? req.body.rack : null
     };
   
     const product = await Product.create(productData);
@@ -165,9 +168,9 @@ export const createProduct = async (
     // Always create stock entry - use provided location or default location
     let stock = null;
     try {
-      let locationId = req.body.location;
-      let roomId = req.body.room || null;
-      let rackId = req.body.rack || null;
+      let locationId = productData.location;
+      let roomId = productData.room || null;
+      let rackId = productData.rack || null;
 
       // If no location provided, get or create default location
       if (!locationId) {
@@ -307,15 +310,22 @@ export const updateProduct = async (
       return next(new AppError('Product not found', 404));
     }
 
+    // Transform empty strings to null for optional ObjectId fields
+    const updateData = {
+      ...req.body,
+      room: req.body.room !== undefined ? (req.body.room && req.body.room.trim() !== '' ? req.body.room : null) : undefined,
+      rack: req.body.rack !== undefined ? (req.body.rack && req.body.rack.trim() !== '' ? req.body.rack : null) : undefined
+    };
+
     // Check if location fields are being updated
-    const locationChanged = req.body.location !== undefined && req.body.location !== product.location;
-    const roomChanged = req.body.room !== undefined && req.body.room !== product.room;
-    const rackChanged = req.body.rack !== undefined && req.body.rack !== product.rack;
+    const locationChanged = updateData.location !== undefined && updateData.location !== product.location;
+    const roomChanged = updateData.room !== undefined && updateData.room !== product.room;
+    const rackChanged = updateData.rack !== undefined && updateData.rack !== product.rack;
 
     // Debug: log incoming update payload
     const updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateData,
       { new: true, runValidators: true }
     ).populate('createdBy', 'firstName lastName email');
 

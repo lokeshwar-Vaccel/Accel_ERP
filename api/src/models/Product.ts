@@ -71,11 +71,27 @@ const productSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'Room',
     required: false,
+    default: null,
+    validate: {
+      validator: function(value: any) {
+        // Allow null, undefined, or valid ObjectId
+        return value === null || value === undefined || value === '' || /^[0-9a-fA-F]{24}$/.test(value);
+      },
+      message: 'Room must be a valid ObjectId or empty'
+    }
   },
   rack: {
     type: Schema.Types.ObjectId,
     ref: 'Rack',
     required: false,
+    default: null,
+    validate: {
+      validator: function(value: any) {
+        // Allow null, undefined, or valid ObjectId
+        return value === null || value === undefined || value === '' || /^[0-9a-fA-F]{24}$/.test(value);
+      },
+      message: 'Rack must be a valid ObjectId or empty'
+    }
   },
   hsnNumber: {
     type: String,

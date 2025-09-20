@@ -985,9 +985,18 @@ const PurchaseOrderManagement: React.FC = () => {
       allErrors.invoiceDate = 'Invoice Date is required';
     }
 
-    // Items validation
-    if (receiveData.receivedItems.every(item => (item.quantityReceived || 0) === 0)) {
-      allErrors.items = 'Please select items to receive';
+    // Validate external invoice total if provided
+    if (receiveData.externalInvoiceTotal !== undefined && receiveData.externalInvoiceTotal !== null) {
+      const externalTotal = parseFloat(receiveData.externalInvoiceTotal.toString());
+      if (isNaN(externalTotal) || externalTotal < 0) {
+        allErrors.externalInvoiceTotal = 'External Invoice Total must be a valid non-negative number';
+      }
+    }
+
+    // Items validation - check if any items have quantity > 0
+    const hasValidItems = receiveData.receivedItems.some(item => (item.quantityReceived || 0) > 0);
+    if (!hasValidItems) {
+      allErrors.items = 'Please select items to receive by entering quantities greater than 0';
     }
 
     // Check for duplicate GST Invoice Number if provided
@@ -1022,13 +1031,21 @@ const PurchaseOrderManagement: React.FC = () => {
     console.log("receiveData:", receiveData);
 
     try {
+      // Filter out items with zero or invalid quantities before sending
+      const validReceivedItems = receiveData.receivedItems.filter(item => 
+        item.quantityReceived && item.quantityReceived > 0
+      );
+
       // Prepare the data to send to backend
       const dataToSend = {
         ...receiveData,
+        receivedItems: validReceivedItems,
         // Ensure externalInvoiceTotal is properly set for invoice creation
-        externalInvoiceTotal: receiveData.externalInvoiceTotal || 0,
+        externalInvoiceTotal: receiveData.externalInvoiceTotal ? parseFloat(receiveData.externalInvoiceTotal.toString()) : 0,
         // Also set totalAmount for clarity (backend will use externalInvoiceTotal)
-        totalAmount: receiveData.totalAmount || 0
+        totalAmount: receiveData.totalAmount ? parseFloat(receiveData.totalAmount.toString()) : 0,
+        // Ensure numeric fields are properly formatted
+        noOfPackages: parseInt(receiveData.noOfPackages.toString()) || 1
       };
 
       console.log("Sending data to backend:", dataToSend);
@@ -1085,14 +1102,32 @@ const PurchaseOrderManagement: React.FC = () => {
       console.error('Error receiving items:', error);
 
       let errorMessage = 'Failed to receive items';
+      let shouldShowValidationErrors = false;
+
       if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
+        
+        // Check if this is a validation error that should be displayed in the form
+        if (errorMessage.includes('No items selected') || 
+            errorMessage.includes('quantity') || 
+            errorMessage.includes('required')) {
+          shouldShowValidationErrors = true;
+          
+          // Set form errors for validation issues
+          if (errorMessage.includes('No items selected')) {
+            setFormErrors({ items: 'Please select items to receive by entering quantities greater than 0' });
+          }
+        }
       } else if (error.message) {
         errorMessage = error.message;
       }
 
       // Display error to user
-      toast.error(`Error: ${errorMessage}`);
+      if (shouldShowValidationErrors) {
+        toast.error('Please fix the validation errors below');
+      } else {
+        toast.error(`Error: ${errorMessage}`);
+      }
     } finally {
       setSubmitting(false);
     }

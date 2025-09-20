@@ -660,7 +660,7 @@ const sanitizeQuotationData = (data: any): any => {
       pan: String(data.company.pan || '').trim(),
       bankDetails: data.company.bankDetails
     } : undefined,
-    location: String(data.location || '').trim(), // Added location sanitization
+    location: data.location && data.location.trim() ? data.location.trim() : undefined, // Added location sanitization
     items: Array.isArray(data.items) ? data.items.map((item: any) => ({
       product: String(item.product || '').trim(),
       description: String(item.description || '').trim(),

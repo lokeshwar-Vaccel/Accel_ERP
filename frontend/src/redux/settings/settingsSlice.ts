@@ -27,6 +27,7 @@ export interface CompanyData {
     accNo: string;
     bankName: string;
     ifscCode: string;
+    branch: string;
   };
   createdAt?: Date;
   updatedAt?: Date;
