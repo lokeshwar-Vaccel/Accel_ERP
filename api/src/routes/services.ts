@@ -26,7 +26,8 @@ import {
   exportServiceTickets,
   getCustomerEngines,
   getCustomerAddresses,
-  getEngineerPaymentReport
+  getEngineerPaymentReport,
+  getEngineerWorkStats
 } from '../controllers/serviceController';
 
 const router = Router();
@@ -57,6 +58,7 @@ router.get('/export', checkPermission('read'), exportServiceTickets);
 
 // Reports
 router.get('/reports/engineer-payments', checkPermission('read'), getEngineerPaymentReport);
+router.get('/reports/engineer-work-stats', checkPermission('read'), getEngineerWorkStats);
 
 router.route('/:id')
   .get(checkPermission('read'), getServiceTicket)

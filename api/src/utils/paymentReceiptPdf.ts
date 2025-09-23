@@ -14,12 +14,16 @@ interface PopulatedPayment extends Omit<IPurchaseOrderPayment, 'purchaseOrderId'
     _id: string;
     name: string;
     email: string;
+    phone?: string;
     addresses?: Array<{
       address: string;
       state: string;
       district: string;
       pincode: string;
       gstNumber?: string;
+      email?: string;
+      phone?: string;
+      contactPersonName?: string;
     }>;
   };
   createdBy: {
@@ -180,16 +184,17 @@ export const generatePaymentReceiptPDF = (payment: PopulatedPayment): Promise<Bu
       const leftColumn = margin + 15;
       const rightColumn = margin + contentWidth / 2 + 15;
 
-      // Left column
+      // Left column (removed Receipt Number as requested)
       doc.fontSize(10).font('Helvetica').fill('#374151');
-      doc.text(`Receipt Number: ${payment.receiptNumber || payment._id}`, leftColumn, receiptInfoY);
-      doc.text(`Payment Date: ${payment.paymentDate.toLocaleDateString('en-IN')}`, leftColumn, receiptInfoY + 20);
-      doc.text(`Payment Method: ${payment.paymentMethod.toUpperCase()}`, leftColumn, receiptInfoY + 40);
-      doc.text(`Amount: ₹${payment.amount.toLocaleString('en-IN')}`, leftColumn, receiptInfoY + 60);
+      doc.text(`Payment Date: ${payment.paymentDate.toLocaleDateString('en-IN')}`, leftColumn, receiptInfoY);
+      doc.text(`Payment Method: ${payment.paymentMethod.toUpperCase()}`, leftColumn, receiptInfoY + 20);
+      // Amount without currency symbol and extraneous symbols
+      doc.text(`Amount: ${Number(payment.amount).toFixed(2)}`, leftColumn, receiptInfoY + 40);
 
       // Right column
       doc.text(`PO Number: ${payment.purchaseOrderId.poNumber}`, rightColumn, receiptInfoY);
-      doc.text(`PO Amount: ₹${payment.purchaseOrderId.totalAmount.toLocaleString('en-IN')}`, rightColumn, receiptInfoY + 20);
+      // PO Amount without currency symbol and extraneous symbols
+      doc.text(`PO Amount: ${Number(payment.purchaseOrderId.totalAmount).toFixed(2)}`, rightColumn, receiptInfoY + 20);
       doc.text(`Currency: ${payment.currency}`, rightColumn, receiptInfoY + 40);
       doc.text(`Status: ${payment.paymentStatus.toUpperCase()}`, rightColumn, receiptInfoY + 60);
 
@@ -202,10 +207,46 @@ export const generatePaymentReceiptPDF = (payment: PopulatedPayment): Promise<Bu
       doc.fontSize(12).font('Helvetica-Bold').fill('#374151');
       doc.text('Supplier Information', margin + 15, supplierY + 8);
 
-      const supplierInfoY = supplierY + 40;
+      let supplierInfoY = supplierY + 40;
       doc.fontSize(10).font('Helvetica').fill('#374151');
-      doc.text(`Name: ${payment.supplierId.name}`, leftColumn, supplierInfoY);
-      doc.text(`Email: ${payment.supplierId.email}`, leftColumn, supplierInfoY + 20);
+      // Supplier address and GST (use first address if available)
+      const supAddr = (payment.supplierId.addresses && payment.supplierId.addresses.length > 0)
+        ? payment.supplierId.addresses[0]
+        : undefined;
+      const supplierEmail = (payment as any).supplierId?.email || supAddr?.email;
+      const supplierPhone = (payment as any).supplierId?.phone || supAddr?.phone;
+      const contactPerson = (payment as any).supplierId?.contactPerson || supAddr?.contactPersonName;
+
+      doc.text(`Corporate Name: ${payment.supplierId.name}`, leftColumn, supplierInfoY);
+      supplierInfoY += 20;
+      if (contactPerson) {
+        doc.text(`Contact Person: ${contactPerson}`, leftColumn, supplierInfoY);
+        supplierInfoY += 20;
+      }
+      if (supplierEmail) {
+        doc.text(`Email: ${supplierEmail}`, leftColumn, supplierInfoY);
+        supplierInfoY += 20;
+      }
+      if (supplierPhone) {
+        doc.text(`Phone: ${supplierPhone}`, leftColumn, supplierInfoY);
+        supplierInfoY += 20;
+      }
+      if (supAddr) {
+        doc.text(`Address: ${supAddr.address}`, leftColumn, supplierInfoY);
+        supplierInfoY += 20;
+        const locParts: string[] = [];
+        if (supAddr.district) locParts.push(supAddr.district);
+        if (supAddr.state) locParts.push(supAddr.state);
+        if (supAddr.pincode) locParts.push(`${supAddr.pincode}`);
+        if (locParts.length) {
+          doc.text(locParts.join(', '), leftColumn, supplierInfoY);
+          supplierInfoY += 20;
+        }
+        if (supAddr.gstNumber) {
+          doc.text(`GST: ${supAddr.gstNumber}`, leftColumn, supplierInfoY);
+          supplierInfoY += 20;
+        }
+      }
 
       // Payment method details
       const paymentDetailsY = supplierInfoY + 60;
@@ -216,12 +257,13 @@ export const generatePaymentReceiptPDF = (payment: PopulatedPayment): Promise<Bu
       doc.fontSize(12).font('Helvetica-Bold').fill('#374151');
       doc.text('Payment Method Details', margin + 15, paymentDetailsY + 8);
 
-      const paymentMethodDetailsY = paymentDetailsY + 40;
+      let paymentMethodDetailsY = paymentDetailsY + 40;
       const paymentDetails = getPaymentMethodDetails(payment.paymentMethod, payment.paymentMethodDetails);
       
       doc.fontSize(10).font('Helvetica').fill('#374151');
-      paymentDetails.forEach((detail, index) => {
-        doc.text(detail, leftColumn, paymentMethodDetailsY + (index * 20));
+      paymentDetails.forEach((detail) => {
+        doc.text(detail, leftColumn, paymentMethodDetailsY);
+        paymentMethodDetailsY += 18;
       });
 
       // Notes section
@@ -715,6 +757,7 @@ const getPaymentMethodDetails = (paymentMethod: string, paymentMethodDetails: an
       const bankDetails = paymentMethodDetails.bankTransfer;
       if (bankDetails) {
         if (bankDetails.bankName) details.push(`Bank Name: ${bankDetails.bankName}`);
+        if (bankDetails.branchName) details.push(`Branch Name: ${bankDetails.branchName}`);
         if (bankDetails.accountNumber) details.push(`Account Number: ${bankDetails.accountNumber}`);
         if (bankDetails.ifscCode) details.push(`IFSC Code: ${bankDetails.ifscCode}`);
         if (bankDetails.transactionId) details.push(`Transaction ID: ${bankDetails.transactionId}`);

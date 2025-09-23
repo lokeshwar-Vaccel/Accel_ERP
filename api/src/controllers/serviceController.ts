@@ -445,6 +445,8 @@ export const createServiceTicket = async (
       selectedAddress,
       typeOfService,
       typeOfVisit,
+      natureOfWork,
+      subNatureOfWork,
       businessVertical,
       complaintDescription,
       hourMeterReading,
@@ -575,6 +577,8 @@ export const createServiceTicket = async (
       SiteID: selectedAddress !== undefined && selectedAddress !== null ? selectedAddress.trim() : undefined,
       TypeofService: typeOfService ? typeOfService.trim() : '',
       typeOfVisit: typeOfVisit || undefined,
+      natureOfWork: natureOfWork || undefined,
+      subNatureOfWork: subNatureOfWork || undefined,
       ComplaintDescription: complaintDescription !== undefined && complaintDescription !== null ? complaintDescription.trim() : undefined,
       HourMeterReading: (hourMeterReading ?? HourMeterReading) !== undefined && (hourMeterReading ?? HourMeterReading) !== null && String(hourMeterReading ?? HourMeterReading) !== '' ? String(hourMeterReading ?? HourMeterReading).trim() : undefined,
       
@@ -1360,6 +1364,11 @@ export const bulkImportServiceTickets = async (
             ServiceRequestStatus: mappedStatus,
             OemName: ticketData.OEMName || '',
             
+            // Visit Details fields
+            typeOfVisit: ticketData.typeOfVisit || undefined,
+            natureOfWork: ticketData.natureOfWork || undefined,
+            subNatureOfWork: ticketData.subNatureOfWork || undefined,
+            
             // Essential fields for system functionality
             requestSubmissionDate: new Date(),
             
@@ -1996,6 +2005,252 @@ export const getEngineerPaymentReport = async (
   } catch (error) {
     next(error);
   }
-}; 
+};
 
- 
+// @desc    Get engineer work statistics by sub-nature of work
+// @route   GET /api/v1/services/engineer-work-stats
+// @access  Private
+export const getEngineerWorkStats = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { engineerId, fromMonth, toMonth, month } = req.query;
+
+    // Parse date range
+    let startDate: Date;
+    let endDate: Date;
+
+    if (fromMonth && toMonth) {
+      const [fromYear, fromMonthNum] = (fromMonth as string).split('-').map(Number);
+      const [toYear, toMonthNum] = (toMonth as string).split('-').map(Number);
+
+      startDate = new Date(fromYear, fromMonthNum - 1, 1);
+      endDate = new Date(toYear, toMonthNum, 0, 23, 59, 59, 999);
+    } else if (month) {
+      const [year, monthNum] = (month as string).split('-').map(Number);
+      startDate = new Date(year, monthNum - 1, 1);
+      endDate = new Date(year, monthNum, 0, 23, 59, 59, 999);
+    } else {
+      const now = new Date();
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    }
+
+    // Build match criteria
+    const matchCriteria: any = {
+      ServiceAttendedDate: {
+        $gte: startDate,
+        $lte: endDate
+      },
+      ServiceRequestStatus: { $in: [TicketStatus.RESOLVED, TicketStatus.CLOSED] }
+    };
+
+    if (engineerId) {
+      matchCriteria.$or = [
+        { ServiceEngineerName: engineerId },
+        { assignedTo: engineerId }
+      ];
+    }
+
+    // ─────────────────────────────────────────────
+    //   MAIN ENGINEER STATS
+    // ─────────────────────────────────────────────
+    const workStats = await ServiceTicket.aggregate([
+      { $match: matchCriteria },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'ServiceEngineerName',
+          foreignField: '_id',
+          as: 'engineerObj'
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'assignedTo',
+          foreignField: '_id',
+          as: 'assignedEngineerObj'
+        }
+      },
+      {
+        $addFields: {
+          engineer: {
+            $cond: {
+              if: { $gt: [{ $size: '$engineerObj' }, 0] },
+              then: { $arrayElemAt: ['$engineerObj', 0] },
+              else: { $arrayElemAt: ['$assignedEngineerObj', 0] }
+            }
+          }
+        }
+      },
+      {
+        $match: { 'engineer.role': UserRole.FIELD_ENGINEER }
+      },
+      // First group: break down tickets by engineer + nature + subNature
+      {
+        $group: {
+          _id: {
+            engineerId: { $ifNull: ['$ServiceEngineerName', '$assignedTo'] },
+            engineerName: {
+              $trim: {
+                input: {
+                  $concat: [
+                    { $ifNull: ['$engineer.firstName', ''] },
+                    ' ',
+                    {
+                      $cond: [
+                        { $in: ['$engineer.lastName', [null, '', 'Unknown']] },
+                        '',
+                        { $ifNull: ['$engineer.lastName', ''] }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            natureOfWork: { $ifNull: ['$natureOfWork', 'unspecified'] },
+            subNatureOfWork: { $ifNull: ['$subNatureOfWork', 'unspecified'] }
+          },
+          ticketCount: { $sum: 1 },
+          totalConvenienceCharges: { $sum: { $ifNull: ['$serviceCharge', 0] } }
+        }
+      },
+      // Second group: engineer-level grouping with nested subNature counts
+      {
+        $group: {
+          _id: {
+            engineerId: '$_id.engineerId',
+            engineerName: '$_id.engineerName',
+            natureOfWork: '$_id.natureOfWork'
+          },
+          subNatureBreakdown: {
+            $push: {
+              subNatureOfWork: '$_id.subNatureOfWork',
+              ticketCount: '$ticketCount',
+              totalConvenienceCharges: '$totalConvenienceCharges'
+            }
+          },
+          totalTicketsInNature: { $sum: '$ticketCount' },
+          totalChargesInNature: { $sum: '$totalConvenienceCharges' }
+        }
+      },
+      // Final group: aggregate by engineer
+      {
+        $group: {
+          _id: {
+            engineerId: '$_id.engineerId',
+            engineerName: '$_id.engineerName'
+          },
+          workBreakdown: {
+            $push: {
+              natureOfWork: '$_id.natureOfWork',
+              totalTicketsInNature: '$totalTicketsInNature',
+              totalChargesInNature: '$totalChargesInNature',
+              // ✅ NEW: subNature ticket counts
+              subNatureBreakdown: '$subNatureBreakdown'
+            }
+          },
+          totalTickets: { $sum: '$totalTicketsInNature' },
+          totalConvenienceCharges: { $sum: '$totalChargesInNature' }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          engineerId: '$_id.engineerId',
+          engineerName: '$_id.engineerName',
+          workBreakdown: 1,
+          totalTickets: 1,
+          totalConvenienceCharges: 1
+        }
+      },
+      { $sort: { engineerName: 1 } }
+    ]);
+
+    // ─────────────────────────────────────────────
+    //   OVERALL STATS (unchanged)
+    // ─────────────────────────────────────────────
+    const overallStats = await ServiceTicket.aggregate([
+      { $match: matchCriteria },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'ServiceEngineerName',
+          foreignField: '_id',
+          as: 'engineerObj'
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'assignedTo',
+          foreignField: '_id',
+          as: 'assignedEngineerObj'
+        }
+      },
+      {
+        $addFields: {
+          engineer: {
+            $cond: {
+              if: { $gt: [{ $size: '$engineerObj' }, 0] },
+              then: { $arrayElemAt: ['$engineerObj', 0] },
+              else: { $arrayElemAt: ['$assignedEngineerObj', 0] }
+            }
+          }
+        }
+      },
+      { $match: { 'engineer.role': UserRole.FIELD_ENGINEER } },
+      {
+        $group: {
+          _id: {
+            natureOfWork: { $ifNull: ['$natureOfWork', 'unspecified'] },
+            subNatureOfWork: { $ifNull: ['$subNatureOfWork', 'unspecified'] }
+          },
+          ticketCount: { $sum: 1 },
+          totalConvenienceCharges: { $sum: { $ifNull: ['$serviceCharge', 0] } }
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          natureOfWork: '$_id.natureOfWork',
+          subNatureOfWork: '$_id.subNatureOfWork',
+          ticketCount: 1,
+          totalConvenienceCharges: 1
+        }
+      },
+      { $sort: { natureOfWork: 1, subNatureOfWork: 1 } }
+    ]);
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Engineer work statistics retrieved successfully',
+      data: {
+        period: {
+          start: startDate,
+          end: endDate,
+          fromMonth: fromMonth || null,
+          toMonth: toMonth || null,
+          month: month || null
+        },
+        engineerStats: workStats,
+        overallStats,
+        summary: {
+          totalEngineers: workStats.length,
+          totalTickets: workStats.reduce((sum, eng) => sum + eng.totalTickets, 0),
+          totalConvenienceCharges: workStats.reduce((sum, eng) => sum + eng.totalConvenienceCharges, 0)
+        }
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+  

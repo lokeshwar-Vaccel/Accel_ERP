@@ -306,7 +306,7 @@ export const generatePaymentReceiptPDFEndpoint = async (
       .populate({
         path: 'supplierId',
         model: 'Customer',
-        select: 'name email addresses'
+        select: 'name email phone addresses'
       })
       .populate('createdBy', 'firstName lastName email');
 
@@ -345,9 +345,8 @@ const validatePaymentMethodDetails = (paymentMethod: string, details: IPaymentMe
 
     case 'bank_transfer':
       if (!details.bankTransfer?.bankName || !details.bankTransfer?.accountNumber || 
-          !details.bankTransfer?.ifscCode || !details.bankTransfer?.transactionId || 
-          !details.bankTransfer?.transferDate) {
-        return 'Bank transfer requires bank name, account number, IFSC code, transaction ID, and transfer date';
+          !details.bankTransfer?.ifscCode) {
+        return 'Bank transfer requires bank name, account number, and IFSC code';
       }
       return null;
 

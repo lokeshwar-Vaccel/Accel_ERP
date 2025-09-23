@@ -769,6 +769,37 @@ class ApiClient {
     getEngineerPaymentReport: (params?: { month?: string; engineerId?: string; customerId?: string; status?: string }) =>
       this.makeRequest<{ success: boolean; data: { period: any; rows: any[]; totals: { byEngineer: { engineerId: string; engineerName: string; totalAmount: number }[]; grandTotal: number } } }>(`/services/reports/engineer-payments${params ? `?${new URLSearchParams(params as any)}` : ''}`),
 
+    getEngineerWorkStats: (params?: { engineerId?: string; fromMonth?: string; toMonth?: string; month?: string }) =>
+      this.makeRequest<{ 
+        success: boolean; 
+        data: { 
+          period: { start: string; end: string; fromMonth: string | null; toMonth: string | null; month: string | null };
+          engineerStats: Array<{
+            engineerId: string;
+            engineerName: string;
+            workBreakdown: Array<{
+              natureOfWork: string;
+              subNatureOfWork: string;
+              ticketCount: number;
+              totalConvenienceCharges: number;
+            }>;
+            totalTickets: number;
+            totalConvenienceCharges: number;
+          }>;
+          overallStats: Array<{
+            natureOfWork: string;
+            subNatureOfWork: string;
+            ticketCount: number;
+            totalConvenienceCharges: number;
+          }>;
+          summary: {
+            totalEngineers: number;
+            totalTickets: number;
+            totalConvenienceCharges: number;
+          };
+        } 
+      }>(`/services/reports/engineer-work-stats${params ? `?${new URLSearchParams(params as any)}` : ''}`),
+
   };
 
   // Digital Service Report APIs
@@ -1391,8 +1422,8 @@ class ApiClient {
         return res.blob();
       }),
 
-    exportExcel: () =>
-      fetch(`${this.baseURL}/inventory/export-excel`, {
+    exportExcel: (params?: any) =>
+      fetch(`${this.baseURL}/inventory/export-excel${params ? `?${new URLSearchParams(params)}` : ''}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
         }

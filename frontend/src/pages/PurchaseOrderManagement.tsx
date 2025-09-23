@@ -89,6 +89,13 @@ interface Supplier {
   addresses?: SupplierAddress[];
   contactPerson?: string;
   type?: string;
+  bankDetails?: {
+    bankName?: string;
+    accountNo?: string;
+    ifsc?: string;
+    branch?: string;
+    accountHolderName?: string;
+  };
 }
 
 interface StockLocation {
@@ -236,6 +243,56 @@ const PurchaseOrderManagement: React.FC = () => {
 
   console.log("selectedPO--:",selectedPO);
   
+  // Prefill bank transfer details from supplier (by id or by name)
+  const prefillBankFromSupplier = async () => {
+    if (!selectedPO) return;
+    try {
+      let supplierObj: Supplier | undefined;
+      if (typeof selectedPO.supplier === 'string') {
+        // Try find by id first in current suppliers list
+        supplierObj = suppliers.find(s => s._id === selectedPO!.supplier);
+        // If not found by id, try by name
+        if (!supplierObj) supplierObj = suppliers.find(s => s.name === selectedPO!.supplier);
+        // If still not found, attempt API fetch by id (if it looks like an ObjectId)
+        if (!supplierObj && /^[a-f\d]{24}$/i.test(selectedPO.supplier)) {
+          const resp = await apiClient.customers.getById(selectedPO.supplier);
+          const fetched = (resp as any)?.data?.customer;
+          if (fetched) supplierObj = fetched as Supplier;
+        }
+      } else {
+        supplierObj = selectedPO.supplier as Supplier;
+        // If missing bankDetails but has _id, fetch fresh supplier
+        if (supplierObj && !supplierObj.bankDetails && supplierObj._id) {
+          const resp = await apiClient.customers.getById(supplierObj._id);
+          const fetched = (resp as any)?.data?.customer;
+          if (fetched) supplierObj = fetched as Supplier;
+        }
+      }
+
+      const bank = supplierObj?.bankDetails;
+      if (!bank) return;
+
+      setPaymentUpdate(prev => ({
+        ...prev,
+        paymentMethodDetails: {
+          ...prev.paymentMethodDetails,
+          bankTransfer: {
+            bankName: bank.bankName || prev.paymentMethodDetails.bankTransfer?.bankName,
+            accountNumber: bank.accountNo || prev.paymentMethodDetails.bankTransfer?.accountNumber,
+            ifscCode: bank.ifsc || prev.paymentMethodDetails.bankTransfer?.ifscCode,
+            branchName: bank.branch || prev.paymentMethodDetails.bankTransfer?.branchName,
+            accountHolderName: bank.accountHolderName || prev.paymentMethodDetails.bankTransfer?.accountHolderName,
+            transactionId: prev.paymentMethodDetails.bankTransfer?.transactionId,
+            transferDate: prev.paymentMethodDetails.bankTransfer?.transferDate,
+            referenceNumber: prev.paymentMethodDetails.bankTransfer?.referenceNumber
+          }
+        }
+      }));
+    } catch (e) {
+      // silent fail: keep manual entry
+    }
+  };
+
 
   // Payment update state
   const [paymentUpdate, setPaymentUpdate] = useState({
@@ -735,6 +792,9 @@ const PurchaseOrderManagement: React.FC = () => {
       paymentMethodDetails: {}
     });
     setShowPaymentModal(true);
+    // If user has previously used bank transfer often, we could prefetch bank in background
+    // Prefill will still happen on selecting Bank Transfer; this call is a safe async cache warm-up
+    setTimeout(() => { prefillBankFromSupplier(); }, 0);
   };
 
   // Fetch payment history for a purchase order
@@ -820,12 +880,10 @@ const PurchaseOrderManagement: React.FC = () => {
         if (!details.bankTransfer?.ifscCode) {
           errors.ifscCode = 'IFSC code is required';
         }
-        if (!details.bankTransfer?.transactionId) {
-          errors.transactionId = 'Transaction ID is required';
+        if (!details.bankTransfer?.branchName) {
+          errors.branchName = 'Branch name is required';
         }
-        if (!details.bankTransfer?.transferDate) {
-          errors.transferDate = 'Transfer date is required';
-        }
+        // transferDate optional
         break;
 
       case 'upi':
@@ -1082,7 +1140,7 @@ const PurchaseOrderManagement: React.FC = () => {
         // New shipping and documentation fields
         shipDate: new Date().toISOString().split('T')[0],
         docketNumber: '',
-        noOfPackages: 1,
+        noOfPackages: 0,
         gstInvoiceNumber: '',
         invoiceDate: new Date().toISOString().split('T')[0],
         documentNumber: '',
@@ -2163,6 +2221,12 @@ const PurchaseOrderManagement: React.FC = () => {
               <div>
                 <span className="text-sm font-medium text-gray-600">Bank Name:</span>
                 <span className="ml-2 text-sm text-gray-900">{details.bankTransfer.bankName}</span>
+              </div>
+            )}
+            {details.bankTransfer?.branchName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Branch Name:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.bankTransfer.branchName}</span>
               </div>
             )}
             {details.bankTransfer?.accountNumber && (
@@ -3423,7 +3487,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     // New shipping and documentation fields
                     shipDate: new Date().toISOString().split('T')[0],
                     docketNumber: '',
-                    noOfPackages: 1,
+                    noOfPackages: 0,
                     gstInvoiceNumber: '',
                     invoiceDate: new Date().toISOString().split('T')[0],
                     documentNumber: '',
@@ -3561,8 +3625,13 @@ const PurchaseOrderManagement: React.FC = () => {
                     <input
                       type="number"
                       value={receiveData.noOfPackages}
-                      onChange={(e) => setReceiveData({ ...receiveData, noOfPackages: parseInt(e.target.value) || 1 })}
-                      placeholder="1"
+                      // onChange={(e) => setReceiveData({ ...receiveData, noOfPackages: parseInt(e.target.value) || 1 })}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        // keep empty string while user is deleting; otherwise store numeric value
+                        setReceiveData(prev => ({ ...prev, noOfPackages: val === '' ? '' : parseInt(val, 10) }));
+                      }}
+                      placeholder="0"
                       min="1"
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.noOfPackages ? 'border-red-500' : 'border-gray-300'}`}
                     />
@@ -4658,7 +4727,16 @@ const PurchaseOrderManagement: React.FC = () => {
                                 <button
                                   key={option.value}
                                   onClick={() => {
-                                    setPaymentUpdate({ ...paymentUpdate, paymentMethod: option.value });
+                                    // Set payment method
+                                    const next = { ...paymentUpdate, paymentMethod: option.value } as typeof paymentUpdate;
+
+                                    // If selecting Bank Transfer, try to prefill from supplier bank details
+                                    if (option.value === 'bank_transfer' && selectedPO) {
+                                      // Prefill asynchronously from supplier if possible
+                                      setTimeout(() => { prefillBankFromSupplier(); }, 0);
+                                    }
+
+                                    setPaymentUpdate(next);
                                     setShowPaymentMethodDropdown(false);
 
                                     if (formErrors.paymentMethod && option.value) {
@@ -4908,6 +4986,27 @@ const PurchaseOrderManagement: React.FC = () => {
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Branch Name <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.bankTransfer?.branchName || ''}
+                                  onChange={(e) => {
+                                    updatePaymentMethodDetails('bankTransfer', 'branchName', e.target.value);
+                                    if (formErrors.branchName) {
+                                      setFormErrors(prev => ({ ...prev, branchName: '' }));
+                                    }
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.branchName ? 'border-red-500' : 'border-gray-300'}`}
+                                  placeholder="Enter branch name"
+                                  required
+                                />
+                                {formErrors.branchName && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.branchName}</p>
+                                )}
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
                                   IFSC Code <span className="text-red-500">*</span>
                                 </label>
                                 <input
@@ -4930,7 +5029,7 @@ const PurchaseOrderManagement: React.FC = () => {
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Transaction ID <span className="text-red-500">*</span>
+                                  Transaction ID
                                 </label>
                                 <input
                                   type="text"
@@ -4941,18 +5040,13 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, transactionId: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.transactionId ? 'border-red-500' : 'border-gray-300'
-                                    }`}
-                                  placeholder="Enter transaction ID"
-                                  required
+                                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors border-gray-300"
+                                  placeholder="Enter transaction ID (optional)"
                                 />
-                                {formErrors.transactionId && (
-                                  <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
-                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                                  Transfer Date <span className="text-red-500">*</span>
+                                  Transfer Date
                                 </label>
                                 <input
                                   type="date"
@@ -4963,13 +5057,9 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, transferDate: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.transferDate ? 'border-red-500' : 'border-gray-300'
-                                    }`}
-                                  required
+                                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors border-gray-300"
+                                  placeholder="Select transfer date (optional)"
                                 />
-                                {formErrors.transferDate && (
-                                  <p className="text-red-500 text-xs mt-1">{formErrors.transferDate}</p>
-                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">

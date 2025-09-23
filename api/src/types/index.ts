@@ -83,7 +83,9 @@ export enum TypeOfVisit {
   AMC_VISIT = 'amc_visit',
   SPARE = 'spare',
   FSC_VISIT = 'fsc_visit',
-  PAID_VISIT = 'paid_visit'
+  PAID_VISIT = 'paid_visit',
+  EV = 'EV',
+  WARRANTY = 'Warranty'
 }
 
 export enum NatureOfWork {
@@ -92,7 +94,11 @@ export enum NatureOfWork {
   BREAKDOWN = 'breakdown',
   INSTALLATION = 'installation',
   DMS_CALL = 'dms_call',
-  PM_VISIT = 'pm_visit'
+  PM_VISIT = 'pm_visit',
+  SURVEY = 'survey',
+  COMMISSIONING = 'commissioning',
+  RESURVEY = 'resurvey',
+  ONBOARDING = 'onboarding'
 }
 
 export enum SubNatureOfWork {
@@ -105,7 +111,9 @@ export enum SubNatureOfWork {
   COMMISSIONING = 'commissioning',
   EV = 'ev',
   LOGGED = 'logged',
-  WITHOUT_LOGGED = 'without_logged'
+  WITHOUT_LOGGED = 'without_logged',
+  PPM = 'PPM',
+  EPM = 'EPM'
 }
 
 // AMC Status
@@ -130,7 +138,6 @@ export enum StockTransactionType {
 
 // Product Categories
 export enum ProductCategory {
-  GENSET = 'genset',
   SPARE_PART = 'spare_part',
   ACCESSORY = 'accessory',
   DG_PRODUCT = 'dg_product',

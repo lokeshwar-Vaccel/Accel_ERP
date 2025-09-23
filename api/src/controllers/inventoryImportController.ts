@@ -11,7 +11,7 @@ import mongoose from 'mongoose';
 const getDepartmentCategory = (dept: string): ProductCategory => {
   const deptLower = dept.toLowerCase();
   if (deptLower.includes('retail') || deptLower.includes('ret')) {
-    return ProductCategory.GENSET;
+    return ProductCategory.SPARE_PART;
   } else if (deptLower.includes('telecom') || deptLower.includes('tel')) {
     return ProductCategory.ACCESSORY;
   } else if (deptLower.includes('ie') || deptLower.includes('industrial')) {
@@ -839,11 +839,155 @@ export const exportInventoryExcel = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const stocks = await Stock.find({})
-      .populate('product')
-      .populate('location')
-      .populate('room')
-      .populate('rack');
+    // Accept filters similar to GET /stock endpoint
+    const {
+      sort = 'product.name',
+      search,
+      location,
+      room,
+      rack,
+      category,
+      dept,
+      brand,
+      lowStock,
+      outOfStock,
+      overStocked,
+      inStock
+    } = req.query as any;
+
+    // Build Mongo match query for ids
+    const mongoose = require('mongoose');
+    const idQuery: any = {};
+    if (location) idQuery.location = new mongoose.Types.ObjectId(String(location));
+    if (room) idQuery.room = new mongoose.Types.ObjectId(String(room));
+    if (rack) idQuery.rack = new mongoose.Types.ObjectId(String(rack));
+
+    // Build aggregation pipeline to support product-based filtering and stock status
+    const XLSX = require('xlsx');
+    const pipeline: any[] = [
+      { $match: idQuery },
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'product',
+          foreignField: '_id',
+          as: 'productInfo'
+        }
+      },
+      {
+        $lookup: {
+          from: 'stocklocations',
+          localField: 'location',
+          foreignField: '_id',
+          as: 'locationInfo'
+        }
+      },
+      {
+        $lookup: {
+          from: 'rooms',
+          localField: 'room',
+          foreignField: '_id',
+          as: 'roomInfo'
+        }
+      },
+      {
+        $lookup: {
+          from: 'racks',
+          localField: 'rack',
+          foreignField: '_id',
+          as: 'rackInfo'
+        }
+      },
+      {
+        $addFields: {
+          product: { $arrayElemAt: ['$productInfo', 0] },
+          location: { $arrayElemAt: ['$locationInfo', 0] },
+          room: { $arrayElemAt: ['$roomInfo', 0] },
+          rack: { $arrayElemAt: ['$rackInfo', 0] }
+        }
+      }
+    ];
+
+    // Product-level filters
+    const productMatch: any = {};
+    if (search) {
+      const escaped = String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      productMatch.$or = [
+        { 'product.name': { $regex: escaped, $options: 'i' } },
+        { 'product.brand': { $regex: escaped, $options: 'i' } },
+        { 'product.modelNumber': { $regex: escaped, $options: 'i' } },
+        { 'product.partNo': { $regex: escaped, $options: 'i' } }
+      ];
+    }
+    if (category) productMatch['product.category'] = category;
+    if (dept) productMatch['product.dept'] = dept;
+    if (brand) productMatch['product.brand'] = { $regex: String(brand), $options: 'i' };
+    if (Object.keys(productMatch).length > 0) {
+      pipeline.push({ $match: productMatch });
+    }
+
+    // Stock status filters
+    if (lowStock === 'true' || outOfStock === 'true' || overStocked === 'true' || inStock === 'true') {
+      const statusConditions: any[] = [];
+      if (outOfStock === 'true') {
+        statusConditions.push({ $lte: ['$quantity', 0] });
+      }
+      if (lowStock === 'true') {
+        statusConditions.push({
+          $and: [
+            { $gt: ['$product.minStockLevel', 0] },
+            { $lt: ['$quantity', '$product.minStockLevel'] },
+            { $gt: ['$quantity', 0] }
+          ]
+        });
+      }
+      if (overStocked === 'true') {
+        statusConditions.push({
+          $and: [
+            { $gt: ['$product.maxStockLevel', 0] },
+            { $gt: ['$quantity', '$product.maxStockLevel'] }
+          ]
+        });
+      }
+      if (inStock === 'true') {
+        statusConditions.push({
+          $and: [
+            { $gt: ['$quantity', 0] },
+            { $or: [
+              { $eq: ['$product.minStockLevel', 0] },
+              { $gte: ['$quantity', '$product.minStockLevel'] }
+            ] },
+            { $or: [
+              { $eq: ['$product.maxStockLevel', 0] },
+              { $lte: ['$quantity', '$product.maxStockLevel'] }
+            ] }
+          ]
+        });
+      }
+      if (statusConditions.length > 0) {
+        pipeline.push({ $match: { $expr: { $or: statusConditions } } });
+      }
+    }
+
+    // Sorting
+    if (sort) {
+      const sortField = String(sort).replace('-', '');
+      const sortOrder = String(sort).startsWith('-') ? -1 : 1;
+      const stringSortFields = [
+        'product.name', 'product.category', 'product.brand', 'location.name', 'room.name', 'rack.name',
+        'product.partNo', 'product.hsnNumber', 'product.dept', 'product.productType1', 'product.productType2', 'product.productType3', 'product.make', 'location.type'
+      ];
+      if (stringSortFields.includes(sortField)) {
+        pipeline.push({ $addFields: { sortFieldLower: { $toLower: `$${sortField}` } } });
+        pipeline.push({ $sort: { sortFieldLower: sortOrder } });
+      } else {
+        const sortObj: any = {};
+        sortObj[sortField] = sortOrder;
+        pipeline.push({ $sort: sortObj });
+      }
+    }
+
+    const stocks = await Stock.aggregate(pipeline);
 
     const rows = stocks.map((stock, idx) => {
       const product = stock.product as any;
@@ -864,7 +1008,6 @@ export const exportInventoryExcel = async (
       };
     });
 
-    const XLSX = require('xlsx');
     const wb = XLSX.utils.book_new();
     const title = 'Inventory Export';
 

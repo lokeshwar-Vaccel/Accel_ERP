@@ -145,7 +145,6 @@ export interface DGProduct {
 }
 
 export enum ProductCategory {
-  GENSET = 'genset',
   SPARE_PART = 'spare_part',
   ACCESSORY = 'accessory',
   DG_PRODUCT = 'dg_product',

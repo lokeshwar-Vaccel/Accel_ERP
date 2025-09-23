@@ -894,11 +894,13 @@ const ProductManagement: React.FC = () => {
     }
   };
 
-  // Prepare dropdown options for form
-  const formCategoryOptions = category.map(cat => ({
-    value: cat,
-    label: cat.replace('_', ' ').toUpperCase()
-  }));
+  // Prepare dropdown options for form (exclude genset)
+  const formCategoryOptions = category
+    .filter(cat => String(cat).toLowerCase() !== 'genset')
+    .map(cat => ({
+      value: cat,
+      label: cat.replace('_', ' ').toUpperCase()
+    }));
 
   const formUomOptions = ["nos", "kg", "litre", "meter", "sq.ft", "hour", "set", "box", "can", "roll", "eu"].sort().map(unit => ({
     value: unit,
@@ -1091,7 +1093,6 @@ const ProductManagement: React.FC = () => {
   // Category options with labels
   const categoryOptions = [
     { value: 'all', label: 'All Categories' },
-    { value: 'genset', label: 'Generator Set' },
     { value: 'spare_part', label: 'Spare Part' },
     { value: 'accessory', label: 'Accessory' }
   ];

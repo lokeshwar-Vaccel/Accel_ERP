@@ -260,9 +260,13 @@ const ServiceManagement: React.FC = () => {
 
   // Engineer Payment Report modal state
   const [showEngineerReportModal, setShowEngineerReportModal] = useState(false);
+  // Engineer work stats (from getEngineerWorkStats)
+const [engineerWorkStats, setEngineerWorkStats] = useState<any[]>([]);
+
 
   // Engineer Payment Report states
-  const [reportMonth, setReportMonth] = useState<string>(new Date().toISOString().slice(0, 7));
+  const [fromMonth, setFromMonth] = useState<string>(new Date().toISOString().slice(0, 7));
+  const [toMonth, setToMonth] = useState<string>(new Date().toISOString().slice(0, 7));
   const [reportEngineerId, setReportEngineerId] = useState<string>('');
   const [showReportEngineerDropdown, setShowReportEngineerDropdown] = useState(false);
   const [engineerReportRows, setEngineerReportRows] = useState<any[]>([]);
@@ -490,6 +494,16 @@ const ServiceManagement: React.FC = () => {
   const [totalDatas, setTotalDatas] = useState(0);
 
 
+  //Table Modification states
+  const groupedColumns = [
+    { title: 'Oil Service', cols: ['FSC', 'AMC', 'Paid'] },
+    { title: 'Site Visit', cols: ['FSC', 'AMC', 'PPM', 'EV', 'CV'] },
+    { title: 'Breakdown', cols: ['Wty', 'AMC', 'Paid'] },
+    { title: 'Installation', cols: ['Pre-Ins', 'Comm', 'EV', 'Logged'] },
+    { title: 'DMS Call', cols: ['Logged', 'Without Logged'] },
+  ];
+
+
 
 
 
@@ -555,12 +569,11 @@ const ServiceManagement: React.FC = () => {
     }
   }, [users]);
 
-  // Dropdown options for new fields
   const typeOfVisitOptions = [
-    { value: 'oil_service', label: 'Oil Service' },
+    { value: 'EV', label: 'EV' },
+    { value: 'Warranty', label: 'Warranty' },
     { value: 'courtesy_visit', label: 'Courtesy Visit' },
     { value: 'amc_visit', label: 'AMC Visit' },
-    { value: 'spare', label: 'Spare' },
     { value: 'fsc_visit', label: 'FSC Visit' },
     { value: 'paid_visit', label: 'Paid Visit' }
   ];
@@ -572,7 +585,7 @@ const ServiceManagement: React.FC = () => {
     { value: 'preventive_maintenance', label: 'Preventive Maintenance' }
   ];
 
-
+  // Include Survey, Commissioning, Resurvey, Onboarding
 
   const natureOfWorkOptions = [
     { value: 'oil_service', label: 'Oil Service' },
@@ -580,7 +593,11 @@ const ServiceManagement: React.FC = () => {
     { value: 'breakdown', label: 'Breakdown' },
     { value: 'installation', label: 'Installation' },
     { value: 'dms_call', label: 'DMS Call' },
-    { value: 'pm_visit', label: 'PM Visit' }
+    { value: 'pm_visit', label: 'PM Visit' },
+    { value: 'survey', label: 'Survey' },
+    { value: 'commissioning', label: 'Commissioning' },
+    { value: 'resurvey', label: 'Resurvey' },
+    { value: 'onboarding', label: 'Onboarding' }
   ];
 
   const subNatureOfWorkOptions = [
@@ -593,7 +610,9 @@ const ServiceManagement: React.FC = () => {
     { value: 'commissioning', label: 'Commissioning' },
     { value: 'ev', label: 'EV' },
     { value: 'logged', label: 'Logged' },
-    { value: 'without_logged', label: 'Without Logged' }
+    { value: 'without_logged', label: 'Without Logged' },
+    { value: 'PPM', label: 'PPM' },
+    { value: 'EPM', label: 'EPM' }
   ];
 
   // Enhanced dropdown states for Type of Visit and Type of Service
@@ -2013,7 +2032,7 @@ const ServiceManagement: React.FC = () => {
         // Map the Excel headers to our new 19 fields structure
         const mappedData = {
           // Excel fields based on new structure
-          SRNumber: getFieldValue(['SRNumber', 'SR Number', 'Service Request Number', 'SR Number'], ''),
+          SRNumber: getFieldValue(['SR Number', 'SR Number', 'Service Request Number', 'SR Number'], ''),
           CustomerType: getFieldValue(['CustomerType', 'Customer Type', 'Customer Type'], ''),
           CustomerName: getFieldValue(['CustomerName', 'Customer Name', 'Customer'], ''),
           EngineNo: getFieldValue(['EngineNo', 'Engine No', 'Engine Number', 'Engine Serial Number'], ''),
@@ -2185,7 +2204,48 @@ const ServiceManagement: React.FC = () => {
 
         // Create workbook and worksheet
         const workbook = XLSX.utils.book_new();
-        const worksheet = XLSX.utils.json_to_sheet(response.data.tickets);
+        // Build a worksheet with custom headers (rename SRNumber -> Service Request Number)
+        const headers = [
+          'Service Request Number',
+          'Customer Type',
+          'Customer Name',
+          'Engine Serial Number',
+          'Engine Model',
+          'KVA',
+          'Service Request Date',
+          'Hour Meter Reading',
+          'Service Request Type',
+          'SITE ID',
+          'Service Request Engineer',
+          'Complaint Code',
+          'Complaint Description',
+          'Resolution Description',
+          'eFSR Number',
+          'eFSR Closure Date and Time',
+          'Service Request Status',
+          'OEM Name'
+        ];
+        const rows = (response.data.tickets as any[]).map((t: any) => [
+          t['SRNumber'] ?? '',
+          t['CustomerType'] ?? '',
+          t['CustomerName'] ?? '',
+          t['EngineNo'] ?? '',
+          t['ModelCode'] ?? '',
+          t['KVA'] ?? '',
+          t['RequestedDate'] ?? '',
+          t['AttendedHrs'] ?? '',
+          t['SRType'] ?? '',
+          t['SITEID'] ?? '',
+          t['SREngineer'] ?? '',
+          t['ComplaintCode'] ?? '',
+          t['ComplaintDescription'] ?? '',
+          t['ResolutionDesc'] ?? '',
+          t['eFSRNo'] ?? '',
+          t['eFSRClosureDateTime'] ?? '',
+          t['SRStatus'] ?? '',
+          t['OEMName'] ?? ''
+        ]);
+        const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
 
         // Add yellow background color to headers
         const headerRange = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
@@ -2252,28 +2312,45 @@ const ServiceManagement: React.FC = () => {
   };
 
   // Engineer Payment Report fetch
-  const fetchEngineerReport = async () => {
-    try {
-      setLoadingEngineerReport(true);
-      const params: any = { month: reportMonth };
-      if (reportTab === 'specific' && reportEngineerId) params.engineerId = reportEngineerId;
-      const res = await apiClient.services.getEngineerPaymentReport(params);
-      if (res.success && res.data) {
-        setEngineerReportRows(res.data.rows || []);
-        setEngineerReportTotals(res.data.totals || { byEngineer: [], grandTotal: 0 });
-        setReportApplied(true);
-      } else {
-        setEngineerReportRows([]);
-        setEngineerReportTotals({ byEngineer: [], grandTotal: 0 });
-        setReportApplied(true);
-      }
-    } catch (err: any) {
-      console.error('Engineer report fetch error:', err);
-      toast.error(err.message || 'Failed to fetch report');
-    } finally {
-      setLoadingEngineerReport(false);
+ // Engineer Payment Report fetch (updated to save engineerWorkStats)
+const fetchEngineerReport = async () => {
+  try {
+    setLoadingEngineerReport(true);
+    const params: any = { fromMonth, toMonth };
+    if (reportTab === 'specific' && reportEngineerId) params.engineerId = reportEngineerId;
+
+    const res = await apiClient.services.getEngineerPaymentReport(params);
+    const monthStats = await apiClient.services.getEngineerWorkStats({
+      fromMonth: params.fromMonth,
+      toMonth: params.toMonth
+    });
+
+    // Save existing payment report response
+    if (res.success && res.data) {
+      setEngineerReportRows(res.data.rows || []);
+      setEngineerReportTotals(res.data.totals || { byEngineer: [], grandTotal: 0 });
+      setReportApplied(true);
+    } else {
+      setEngineerReportRows([]);
+      setEngineerReportTotals({ byEngineer: [], grandTotal: 0 });
+      setReportApplied(true);
     }
-  };
+
+    // Save the engineer work stats response so table can use it
+    if (monthStats && monthStats.success && monthStats.data) {
+      setEngineerWorkStats(monthStats.data.engineerStats || []);
+    } else {
+      setEngineerWorkStats([]);
+    }
+  } catch (err: any) {
+    console.error('Engineer report fetch error:', err);
+    toast.error(err.message || 'Failed to fetch report');
+    setEngineerWorkStats([]);
+  } finally {
+    setLoadingEngineerReport(false);
+  }
+};
+
 
   const exportEngineerReportToExcel = async () => {
     try {
@@ -2283,25 +2360,165 @@ const ServiceManagement: React.FC = () => {
       const wb = XLSX.utils.book_new();
 
       if (reportTab === 'all') {
-        const totalsMap = new Map<string, number>();
-        engineerReportTotals.byEngineer.forEach(e => {
-          totalsMap.set(e.engineerId, Number(e.totalAmount) || 0);
+        // Build "Monthly Conveyance Dashboard" matching the provided reference
+        // Columns: SE Name | groupedColumns subcols... | Total Jobs | Total Conveyence
+        const groupDefs = groupedColumns; // already in UI
+
+        // Build header rows
+        const subCols: string[] = groupDefs.flatMap(g => g.cols);
+        const totalSubColCount = subCols.length; // 17
+        const headerRow4 = ['SE Name', ...groupDefs.flatMap(g => g.cols), 'Total Jobs', 'Total Conveyence'];
+
+        // Title and meta rows
+        const row1: any[] = Array(headerRow4.length).fill('');
+        row1[0] = 'Monthly Conveyance Dashboard';
+        const monthText = (fromMonth && toMonth)
+          ? `${fromMonth} to ${toMonth}`
+          : (fromMonth || toMonth || new Date().toISOString().slice(0, 7));
+        // Put Month text in the first cell of the merged region (top-left of merge)
+        row1[headerRow4.length - 2] = `Month: ${monthText}`;
+        row1[headerRow4.length - 1] = '';
+
+        const row2: any[] = Array(headerRow4.length).fill('');
+        row2[0] = '';
+        row2[1] = 'Site Visit Count';
+        row2[headerRow4.length - 2] = 'Total Jobs';
+        row2[headerRow4.length - 1] = 'Total Conveyence';
+
+        const row3: any[] = ['SE Name'];
+        groupDefs.forEach(g => {
+          // push group title; actual sub-columns are in row4
+          // We will merge cells in the sheet for this title across its width
+          row3.push(g.title);
+          for (let i = 1; i < g.cols.length; i++) row3.push('');
         });
+        row3.push('Total Jobs', 'Total Conveyence');
+
+        // Row 4 are the sub headers already defined in headerRow4
+
+        // Build data rows per engineer
+        const normalize = (s: string) => String(s).toLowerCase().replace(/\s+/g, '_');
+
+        const getSubNatureTickets = (engStats: any, natureKey: string, subNatureKey: string) => {
+          if (!engStats || !Array.isArray(engStats.workBreakdown)) return 0;
+          const wb = engStats.workBreakdown.find((w: any) => String(w.natureOfWork).toLowerCase() === natureKey);
+          if (!wb || !Array.isArray(wb.subNatureBreakdown)) return 0;
+          const sub = wb.subNatureBreakdown.find((s: any) => String(s.subNatureOfWork).toLowerCase() === subNatureKey);
+          return sub?.ticketCount ?? 0;
+        };
 
         const sortedUsers = users.slice().sort((a, b) => getUserName(a).localeCompare(getUserName(b)));
 
-        const summaryData = [
-          ['Engineer', 'Tickets', 'Total Amount'],
-          ...sortedUsers.map(u => [
-            getUserName(u),
-            engineerTicketCounts.get(u._id) || 0,
-            totalsMap.get(u._id) ?? 0
-          ]),
-          [],
-          ['Grand Total', '', engineerReportTotals.grandTotal]
+        const dataRows: any[] = sortedUsers.map((u) => {
+          const engStats = engineerWorkStats.find((es: any) => es.engineerId === u._id);
+          const row: any[] = [getUserName(u)];
+          groupDefs.forEach((g) => {
+            const natureKey = normalize(g.title);
+            g.cols.forEach((col: any) => {
+              const subKey = normalize(String(col));
+              row.push(getSubNatureTickets(engStats, natureKey, subKey));
+            });
+          });
+          row.push(engStats?.totalTickets ?? 0);
+          row.push(Number(engStats?.totalConvenienceCharges ?? 0));
+          return row;
+        });
+
+        // Grand total row
+        const allColPairs = groupDefs.flatMap((g) => g.cols.map((c: any) => ({ natureKey: normalize(g.title), subKey: normalize(String(c)) })));
+        const colSums = allColPairs.map(({ natureKey, subKey }) =>
+          engineerWorkStats.reduce((acc: number, es: any) => {
+            const wb = es?.workBreakdown?.find((w: any) => String(w.natureOfWork).toLowerCase() === natureKey);
+            if (!wb) return acc;
+            const s = wb.subNatureBreakdown?.find((x: any) => String(x.subNatureOfWork).toLowerCase() === subKey);
+            return acc + (s?.ticketCount ?? 0);
+          }, 0)
+        );
+        const grandTickets = engineerWorkStats.reduce((acc: number, es: any) => acc + (es.totalTickets || 0), 0);
+        const grandAmount = engineerWorkStats.reduce((acc: number, es: any) => acc + Number(es.totalConvenienceCharges || 0), 0);
+        const grandRow = ['Grand Total', ...colSums, grandTickets, grandAmount];
+
+        // Assemble AOA
+        const aoa: any[][] = [row1, row2, row3, headerRow4, ...dataRows, grandRow];
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+        // Column widths (scale by header label length for better spacing)
+        const subColWidths = groupDefs.flatMap(g =>
+          g.cols.map((c: any) => ({ wch: Math.max(12, String(c).length + 4) }))
+        );
+        const colWidths = [
+          { wch: 24 }, // SE Name
+          ...subColWidths,
+          { wch: 14 }, // Total Jobs
+          { wch: 26 }  // Total Conveyence / Month area needs more space visually
         ];
-        const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-        XLSX.utils.book_append_sheet(wb, wsSummary, 'All Engineers Summary');
+        (ws as any)['!cols'] = colWidths as any;
+
+        // Merges to match layout
+        const merges: any[] = [];
+        // Title across all but last column
+        merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: headerRow4.length - 3 } }); // leave more space for Month text
+        // Month box top-right - widen by merging last two columns in row 1
+        merges.push({ s: { r: 0, c: headerRow4.length - 2 }, e: { r: 0, c: headerRow4.length - 1 } });
+        // Style the month area explicitly (top row, last two columns)
+        const monthCellAddr = XLSX.utils.encode_cell({ r: 0, c: headerRow4.length - 2 });
+        const monthCell = (ws as any)[monthCellAddr] || ((ws as any)[monthCellAddr] = { v: '', t: 's' });
+        monthCell.s = {
+          font: { bold: true },
+          alignment: { vertical: 'center', horizontal: 'center', wrapText: true },
+          fill: { patternType: 'solid', fgColor: { rgb: 'FFEFD5' } },
+          border: { top: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' }, bottom: { style: 'thin' } }
+        } as any;
+        // Left header "SE Name"
+        merges.push({ s: { r: 1, c: 0 }, e: { r: 3, c: 0 } }); // A2:A4
+        // Site Visit Count across all grouped columns
+        merges.push({ s: { r: 1, c: 1 }, e: { r: 1, c: 1 + totalSubColCount - 1 } }); // B2:R2
+        // Group titles on row 3
+        let colCursor = 1;
+        groupDefs.forEach((g) => {
+          const start = colCursor;
+          const end = colCursor + g.cols.length - 1;
+          merges.push({ s: { r: 2, c: start }, e: { r: 2, c: end } });
+          colCursor = end + 1;
+        });
+        // Total Jobs and Total Conveyence headers spanning rows 2-4
+        const totalJobsCol = 1 + totalSubColCount; // after subcols
+        const totalConvCol = totalJobsCol + 1;
+        merges.push({ s: { r: 1, c: totalJobsCol }, e: { r: 3, c: totalJobsCol } });
+        merges.push({ s: { r: 1, c: totalConvCol }, e: { r: 3, c: totalConvCol } });
+        (ws as any)['!merges'] = merges as any;
+
+        // Basic styling for headers with wrapText to avoid overflow
+        const setHeaderStyle = (r: number, cStart: number, cEnd?: number) => {
+          const cE = cEnd ?? cStart;
+          for (let c = cStart; c <= cE; c++) {
+            const addr = XLSX.utils.encode_cell({ r, c });
+            const cell = (ws as any)[addr] || ((ws as any)[addr] = { v: '', t: 's' });
+            cell.s = {
+              font: { bold: true },
+              alignment: { vertical: 'center', horizontal: 'center', wrapText: true },
+              fill: { patternType: 'solid', fgColor: { rgb: 'F3F4F6' } },
+              border: { top: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' }, bottom: { style: 'thin' } }
+            } as any;
+          }
+        };
+        // Ensure DMS Call group header wraps nicely by explicitly styling its cells
+        // Find DMS Call group start/end columns on row 3 and apply wrap
+        let dmsStart = -1; let dmsEnd = -1; let cursor = 1;
+        groupDefs.forEach((g) => {
+          const start = cursor; const end = cursor + g.cols.length - 1;
+          if (String(g.title).toLowerCase() === 'dms call') { dmsStart = start; dmsEnd = end; }
+          cursor = end + 1;
+        });
+        if (dmsStart >= 0) setHeaderStyle(2, dmsStart, dmsEnd);
+        // Style rows 1-4
+        setHeaderStyle(0, 0, headerRow4.length - 1);
+        setHeaderStyle(1, 0, headerRow4.length - 1);
+        setHeaderStyle(2, 0, headerRow4.length - 1);
+        setHeaderStyle(3, 0, headerRow4.length - 1);
+
+        // Add worksheet
+        XLSX.utils.book_append_sheet(wb, ws, 'Conveyance Dashboard');
       } else {
         const headers = [
           'Service Attended Date',
@@ -2340,7 +2557,8 @@ const ServiceManagement: React.FC = () => {
         XLSX.utils.book_append_sheet(wb, ws, 'Ticket Details');
       }
 
-      const filename = `engineer_payment_report_${reportTab}_${reportMonth || new Date().toISOString().slice(0,7)}.xlsx`;
+      const filename = `engineer_payment_report_${reportTab}_${fromMonth}_to_${toMonth}.xlsx`;
+
       XLSX.writeFile(wb, filename);
 
       toast.success('Report exported to Excel');
@@ -6073,15 +6291,25 @@ const ServiceManagement: React.FC = () => {
               </div>
               {/* Report Filters */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">Month</label>
-                  <input
-                    type="month"
-                    value={reportMonth}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReportMonth(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                </div>
+              <div>
+  <label className="block text-sm text-gray-700 mb-1">From Month</label>
+  <input
+    type="month"
+    value={fromMonth}
+    onChange={(e) => setFromMonth(e.target.value)}
+    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+  />
+</div>
+<div>
+  <label className="block text-sm text-gray-700 mb-1">To Month</label>
+  <input
+    type="month"
+    value={toMonth}
+    onChange={(e) => setToMonth(e.target.value)}
+    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+  />
+</div>
+
                 {reportTab === 'specific' && (
                   <div>
                     <label className="block text-sm text-gray-700 mb-1">Engineer</label>
@@ -6146,65 +6374,212 @@ const ServiceManagement: React.FC = () => {
               )}
 
               {/* Per Engineer Totals (All Engineers view) */}
-              {reportTab === 'all' && (
-                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase align-bottom">Engineer</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase align-bottom">Customer</th>
-                        {engineerCustomerVisitMatrix.visitColumns.map(vc => (
-                          <th key={vc} className="px-4 py-2 text-right text-[10px] font-medium text-gray-500 uppercase">{(typeOfVisitOptions.find(o => o.value === vc)?.label) || vc}</th>
-                        ))}
-                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Tickets</th>
-                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Total Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {users
-                        .slice()
-                        .sort((a, b) => getUserName(a).localeCompare(getUserName(b)))
-                        .flatMap((u, idx) => {
-                          const totalsEntry = engineerReportTotals.byEngineer.find(e => e.engineerId === u._id);
-                          const total = totalsEntry?.totalAmount || 0;
-                          const count = engineerTicketCounts.get(u._id) || 0;
-                          const matrixEntry = engineerCustomerVisitMatrix.matrix.get(u._id);
-                          const rows: JSX.Element[] = [];
-                          if (matrixEntry && matrixEntry.customers.size > 0) {
-                            const customerNames = Array.from(matrixEntry.customers.keys()).sort((a, b) => a.localeCompare(b));
-                            customerNames.forEach((custName, rowIdx) => {
-                              const visitMap = matrixEntry.customers.get(custName)!;
-                              rows.push(
-                                <tr key={`${u._id}-${custName}`}>
-                                  <td className="px-4 py-2 text-sm text-gray-900">{rowIdx === 0 ? getUserName(u) : ''}</td>
-                                  <td className="px-4 py-2 text-sm text-gray-900">{custName}</td>
-                                  {engineerCustomerVisitMatrix.visitColumns.map(vc => (
-                                    <td key={vc} className="px-4 py-2 text-sm text-gray-900 text-right">{visitMap.get(vc) || 0}</td>
-                                  ))}
-                                  <td className="px-4 py-2 text-sm text-gray-900 text-right">{rowIdx === 0 ? count : ''}</td>
-                                  <td className="px-4 py-2 text-sm text-gray-900 text-right">{rowIdx === 0 ? `₹ ${Number(total).toFixed(2)}` : ''}</td>
-                                </tr>
-                              );
-                            });
-                          } else {
-                            rows.push(
-                              <tr key={`${u._id}-none`}>
-                                <td className="px-4 py-2 text-sm text-gray-900">{getUserName(u)}</td>
-                                <td className="px-4 py-2 text-sm text-gray-500">-</td>
-                                {engineerCustomerVisitMatrix.visitColumns.map(vc => (
-                                  <td key={vc} className="px-4 py-2 text-sm text-gray-900 text-right">0</td>
-                                ))}
-                                <td className="px-4 py-2 text-sm text-gray-900 text-right">{count}</td>
-                                <td className="px-4 py-2 text-sm text-gray-900 text-right">₹ {Number(total).toFixed(2)}</td>
-                              </tr>
-                            );
-                          }
-                          return rows;
-                        })}
-                    </tbody>
-                  </table>
-                </div>
+              {/* Per Engineer Totals (All Engineers view) */}
+{reportTab === 'all' && (
+  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+    {/* Engineer work stats table */}
+    <div className="w-full overflow-x-auto">
+      <table className="min-w-[1200px] table-fixed border-collapse">
+        <thead className="bg-gray-50">
+          <tr>
+            <th
+              rowSpan={2}
+              className="px-4 py-4 text-left text-xs font-semibold text-gray-700 uppercase leading-normal sticky left-0 z-40 bg-white"
+              style={{ width: 220 }}
+            >
+              Engineer
+            </th>
+
+            {groupedColumns.map((g) => (
+              <th
+                key={g.title}
+                colSpan={g.cols.length}
+                className="px-4 py-4 text-center text-xs font-semibold text-gray-700 uppercase border-l leading-normal"
+              >
+                {g.title}
+              </th>
+            ))}
+
+            <th
+              rowSpan={2}
+              className="px-4 py-4 text-right text-xs font-semibold text-gray-700 uppercase border-l leading-normal"
+              style={{ width: 90 }}
+            >
+              Tickets
+            </th>
+            <th
+              rowSpan={2}
+              className="px-4 py-4 text-right text-xs font-semibold text-gray-700 uppercase leading-normal"
+              style={{ width: 140 }}
+            >
+              Total Convenience
+            </th>
+          </tr>
+
+          {/* sub headers */}
+          <tr>
+            {groupedColumns.map((g) =>
+              g.cols.map((col) => (
+                <th
+                  key={g.title + '-' + col}
+                  className="px-3 py-3 text-[11px] text-right font-medium text-gray-500 uppercase border-t leading-normal whitespace-nowrap"
+                  style={{ width: 90 }}
+                >
+                  {(() => {
+                    // try subNatureOfWorkOptions first
+                    const subOpt = subNatureOfWorkOptions.find(
+                      (s) =>
+                        s.value.toLowerCase() === String(col).toLowerCase()
+                    );
+                    if (subOpt) return subOpt.label;
+                    // then typeOfVisitOptions
+                    const opt = typeOfVisitOptions.find(
+                      (o) =>
+                        o.value.toLowerCase() === String(col).toLowerCase()
+                    );
+                    if (opt) return opt.label;
+                    // prettify fallback
+                    return String(col)
+                      .replace(/_/g, " ")
+                      .replace(/\b\w/g, (ch) => ch.toUpperCase());
+                  })()}
+                </th>
+              ))
+            )}
+          </tr>
+        </thead>
+
+        <tbody className="divide-y divide-gray-200">
+          {users
+            .slice()
+            .sort((a, b) => getUserName(a).localeCompare(getUserName(b)))
+            .map((u) => {
+              const engStats = engineerWorkStats.find(
+                (es) => es.engineerId === u._id
+              );
+
+              const getSubNatureTickets = (
+                natureKey: string,
+                subNatureKey: string
+              ) => {
+                if (!engStats || !Array.isArray(engStats.workBreakdown))
+                  return 0;
+                const wb = engStats.workBreakdown.find(
+                  (w: any) =>
+                    String(w.natureOfWork).toLowerCase() ===
+                    String(natureKey).toLowerCase()
+                );
+                if (!wb || !Array.isArray(wb.subNatureBreakdown)) return 0;
+                const sub = wb.subNatureBreakdown.find(
+                  (s: any) =>
+                    String(s.subNatureOfWork).toLowerCase() ===
+                    String(subNatureKey).toLowerCase()
+                );
+                return sub?.ticketCount ?? 0;
+              };
+
+              const normalizeGroupToApiKey = (title: string) =>
+                title.toLowerCase().replace(/\s+/g, "_");
+
+              const ticketCount = engStats?.totalTickets ?? 0;
+              const convenienceTotal =
+                engStats?.totalConvenienceCharges ?? 0;
+
+              return (
+                <tr key={u._id} className="even:bg-white odd:bg-white">
+                  <td
+                    className="px-4 py-4 text-sm text-gray-900 leading-relaxed align-top sticky left-0 z-30 bg-white"
+                    style={{ width: 220 }}
+                  >
+                    {getUserName(u)}
+                  </td>
+
+                  {groupedColumns.map((g) =>
+                    g.cols.map((col) => {
+                      const natureKey = normalizeGroupToApiKey(g.title);
+                      const subKey = String(col)
+                        .toLowerCase()
+                        .replace(/\s+/g, "_");
+                      const val = getSubNatureTickets(natureKey, subKey);
+                      return (
+                        <td
+                          key={`${u._id}-${g.title}-${col}`}
+                          className="px-3 py-4 text-sm text-right text-gray-900 leading-relaxed align-top"
+                        >
+                          {val}
+                        </td>
+                      );
+                    })
+                  )}
+
+                  <td className="px-4 py-4 text-sm text-right text-gray-900 leading-relaxed align-top">
+                    {ticketCount}
+                  </td>
+
+                  <td className="px-4 py-4 text-sm text-right text-gray-900 leading-relaxed align-top">
+                    ₹ {Number(convenienceTotal).toFixed(2)}
+                  </td>
+                </tr>
+              );
+            })}
+
+          {/* Grand total row */}
+          <tr className="bg-gray-50 font-semibold">
+            <td className="px-4 py-3 text-sm text-gray-900">Grand Total</td>
+            {(() => {
+              const allCols = groupedColumns.flatMap((g) =>
+                g.cols.map((col) => ({
+                  natureKey: g.title.toLowerCase().replace(/\s+/g, "_"),
+                  subKey: String(col).toLowerCase().replace(/\s+/g, "_"),
+                }))
+              );
+              const sums = allCols.map(({ natureKey, subKey }) => {
+                return engineerWorkStats.reduce((acc: number, es: any) => {
+                  if (!es?.workBreakdown) return acc;
+                  const wb = es.workBreakdown.find(
+                    (w: any) =>
+                      String(w.natureOfWork).toLowerCase() === natureKey
+                  );
+                  if (!wb || !Array.isArray(wb.subNatureBreakdown)) return acc;
+                  const s = wb.subNatureBreakdown.find(
+                    (x: any) =>
+                      String(x.subNatureOfWork).toLowerCase() === subKey
+                  );
+                  return acc + (s?.ticketCount ?? 0);
+                }, 0);
+              });
+              return sums.map((s, i) => (
+                <td
+                  key={`sum-${i}`}
+                  className="px-3 py-3 text-sm text-right text-gray-900"
+                >
+                  {s}
+                </td>
+              ));
+            })()}
+
+            <td className="px-4 py-3 text-sm text-right text-gray-900">
+              {engineerWorkStats.reduce(
+                (acc, es) => acc + (es.totalTickets || 0),
+                0
               )}
+            </td>
+
+            <td className="px-4 py-3 text-sm text-right text-gray-900">
+              ₹{" "}
+              {Number(
+                engineerWorkStats.reduce(
+                  (acc, es) => acc + (es.totalConvenienceCharges || 0),
+                  0
+                )
+              ).toFixed(2)}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
 
               {/* Ticket Detail Rows (Specific Engineer view) */}
               {reportTab === 'specific' && (

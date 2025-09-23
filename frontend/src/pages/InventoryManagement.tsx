@@ -1941,10 +1941,29 @@ const InventoryManagement: React.FC = () => {
     return () => window.removeEventListener('resize', checkScrollable);
   }, [previewData?.duplicateGroups]);
 
-    // Export inventory as Excel
+    // Export inventory as Excel (respect current filters)
     const handleExportExcel = async () => {
       try {
-        const blob = await apiClient.inventory.exportExcel();
+        const sortField = filters.sortBy || 'product.name';
+        const sortDirection = filters.sortOrder === 'desc' ? '-' : '';
+        const sortParam = `${sortDirection}${sortField}`;
+
+        const params: any = {
+          sort: sortParam,
+          search: filters.search,
+          ...(filters.category && { category: filters.category }),
+          ...(filters.dept && { dept: filters.dept }),
+          ...(filters.brand && { brand: filters.brand }),
+          ...(filters.location && { location: filters.location }),
+          ...(filters.room && { room: filters.room }),
+          ...(filters.rack && { rack: filters.rack }),
+          ...(filters.stockStatus === 'low_stock' && { lowStock: 'true' }),
+          ...(filters.stockStatus === 'out_of_stock' && { outOfStock: 'true' }),
+          ...(filters.stockStatus === 'overstocked' && { overStocked: 'true' }),
+          ...(filters.stockStatus === 'in_stock' && { inStock: 'true' })
+        };
+
+        const blob = await apiClient.inventory.exportExcel(params);
         saveAs(blob, 'inventory-export.xlsx');
         toast.success('Inventory exported successfully!');
       } catch (error: any) {
