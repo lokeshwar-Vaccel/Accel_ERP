@@ -2520,55 +2520,157 @@ const fetchEngineerReport = async () => {
         // Add worksheet
         XLSX.utils.book_append_sheet(wb, ws, 'Conveyance Dashboard');
       } else {
-        const headers = [
-          'Service Attended Date',
-          'Customer',
-          'Type of Visit',
-          'Nature of Work',
-          'Sub Nature of Work',
-          'Engineer',
-          'Ticket Number',
-          'Convenience Charges'
+       if (!Array.isArray(engineerReportRows) || engineerReportRows.length === 0) {
+        const headers = ['Service Attended Date', 'Customer', 'Type of Visit', 'Nature of Work', 'Sub Nature of Work', 'Engineer', 'Ticket Number', 'Convenience Charges'];
+        const wsEmpty = XLSX.utils.aoa_to_sheet([headers]);
+        (wsEmpty as any)['!cols'] = headers.map(h => ({ wch: Math.max(h.length + 2, 18) }));
+        XLSX.utils.book_append_sheet(wb, wsEmpty, 'Ticket Details');
+      } else {
+        // Discover the union of keys from all rows to ensure every field is included
+        const keySet = new Set<string>();
+        for (const rowObj of engineerReportRows) {
+          if (rowObj && typeof rowObj === 'object') {
+            Object.keys(rowObj).forEach(k => keySet.add(k));
+          }
+        }
+        const excludeKeys = new Set([
+          'id', '_id', 'ID', 'Id',
+          'engineerId', 'engineer_id', 'engineerID', 'engineerid',
+          'EngineerId', 'Engineer_ID'
+        ]);
+        // Convert to array and keep a stable deterministic order:
+        // prefer common/display fields first if present, then the rest alphabetically
+        const preferredOrder = [
+          'ticketNumber', 'ServiceRequestNumber', 'serviceRequestNumber',
+          'serviceAttendedDate', 'ServiceAttendedDate', 'ServiceAttendedDateTime',
+          'customerName', 'CustomerName', 'customer',
+          'typeOfVisit', 'TypeofVisit', 'typeOfService', 'TypeofService',
+          'natureOfWork', 'subNatureOfWork', 'sub_nature',
+          'serviceEngineerName', 'ServiceEngineerName', 'engineer', 'engineerName',
+          'convenienceCharges', 'convenience_charge', 'convenience'
         ];
-        const rows = engineerReportRows.map((r) => ([
-          r.serviceAttendedDate ? new Date(r.serviceAttendedDate).toISOString().replace('T', ' ').substring(0, 19) : '',
-          r.customerName || '',
-          r.typeOfVisit || '',
-          r.natureOfWork || '',
-          r.subNatureOfWork || '',
-          r.serviceEngineerName || '',
-          r.ticketNumber || '',
-          Number(r.convenienceCharges || 0)
-        ]));
 
+        const allKeys = Array.from(keySet).filter(k => !excludeKeys.has(k));
+        const orderedKeys: string[] = [];
+
+        // push preferred keys in order if they exist
+        for (const p of preferredOrder) {
+          if (allKeys.includes(p) && !orderedKeys.includes(p)) orderedKeys.push(p);
+        }
+        // push remaining keys alphabetically for consistency
+        const remaining = allKeys.filter(k => !orderedKeys.includes(k)).sort((a, b) => a.localeCompare(b));
+        orderedKeys.push(...remaining);
+
+        // Build friendly headers from keys (camelCase / snake_case -> Title Case)
+        const pretty = (k: string) =>
+          k
+            .replace(/([A-Z])/g, ' $1')
+            .replace(/[_\-]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .replace(/^\w/, c => c.toUpperCase())
+            .trim();
+
+        const headers = orderedKeys.map(pretty);
+
+        // Build rows preserving the same order as headers
+        // --- robust rows builder with explicit convenience-fee handling ---
+const convenienceKey = orderedKeys.find(k => /conveni/i.test(k)); // finds keys like convenienceCharges, convenience_charge, convenience
+
+const rows = engineerReportRows.map((r: any) =>
+  orderedKeys.map((k) => {
+    const raw = r?.[k];
+
+    // If this column is the convenience-fee column, coerce to numeric (strip currency chars)
+    if (convenienceKey && k === convenienceKey) {
+      if (raw == null || raw === '') return '';
+      if (typeof raw === 'number') return raw;
+      if (typeof raw === 'string') {
+        // Remove any non-numeric except minus and dot (handles "₹ 100.00", "$100", "100")
+        const cleaned = raw.replace(/[^\d.-]+/g, '');
+        const num = cleaned === '' ? NaN : Number(cleaned);
+        return Number.isFinite(num) ? num : raw; // return numeric if valid, else original string
+      }
+      // if nested object with amount field (rare), try to extract
+      if (typeof raw === 'object') {
+        const candidate = raw.amount ?? raw.value ?? raw.convenienceCharges ?? raw.convenience;
+        if (typeof candidate === 'number') return candidate;
+        if (typeof candidate === 'string') {
+          const cleaned = String(candidate).replace(/[^\d.-]+/g, '');
+          const num = cleaned === '' ? NaN : Number(cleaned);
+          return Number.isFinite(num) ? num : String(candidate);
+        }
+      }
+      return String(raw);
+    }
+
+    // --- non-convenience columns: reuse your previous formatting rules ---
+    if (raw === null || raw === undefined) return '';
+    if (typeof raw === 'string') {
+      const isoLike = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
+      const dateOnlyLike = /^\d{4}-\d{2}-\d{2}$/;
+      if (isoLike.test(raw) || dateOnlyLike.test(raw)) {
+        const d = new Date(raw);
+        if (!isNaN(d.getTime())) {
+          const pad = (n: number) => String(n).padStart(2, '0');
+          return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        }
+      }
+      return raw;
+    }
+    if (typeof raw === 'number') return raw;
+    if (typeof raw === 'object') {
+      const name = raw?.name || raw?.fullName || `${raw?.firstName || ''} ${raw?.lastName || ''}`.trim();
+      if (name) return name;
+      try { return JSON.stringify(raw); } catch { return String(raw); }
+    }
+    return String(raw);
+  })
+);
+
+
+        // Create sheet and auto-size columns
+        const aoa = [headers, ...rows];
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+        const computeWidth = (val: any) => {
+          if (val == null) return 10;
+          const s = String(val);
+          return Math.min(Math.max(s.length + 2, 10), 60);
+        };
+        const colCount = headers.length;
+        const colWidths = new Array(colCount).fill(null).map((_, ci) => {
+          const candidates = [headers[ci], ...rows.slice(0, 200).map(r => r[ci])];
+          const max = Math.max(...candidates.map(c => computeWidth(c)));
+          return { wch: max };
+        });
+        (ws as any)['!cols'] = colWidths;
+
+        XLSX.utils.book_append_sheet(wb, ws, 'Ticket Details');
+
+        // Also append the existing Engineer Summary sheet like before
         const summaryData = [
           ['Engineer', 'Total Amount'],
-          ...engineerReportTotals.byEngineer.map(e => [e.engineerName, e.totalAmount]),
+          ...engineerReportTotals.byEngineer.map((e: any) => [e.engineerName, e.totalAmount]),
           [],
           ['Grand Total', engineerReportTotals.grandTotal]
         ];
         const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+        (wsSummary as any)['!cols'] = [{ wch: 30 }, { wch: 18 }];
         XLSX.utils.book_append_sheet(wb, wsSummary, 'Engineer Summary');
-
-        const aoa = [headers, ...rows];
-        const ws = XLSX.utils.aoa_to_sheet(aoa);
-        const colWidths = headers.map((h) => ({ wch: Math.max(h.length + 2, 18) }));
-        (ws as any)['!cols'] = colWidths;
-        XLSX.utils.book_append_sheet(wb, ws, 'Ticket Details');
       }
-
-      const filename = `engineer_payment_report_${reportTab}_${fromMonth}_to_${toMonth}.xlsx`;
-
-      XLSX.writeFile(wb, filename);
-
-      toast.success('Report exported to Excel');
-    } catch (err: any) {
-      console.error('Export error:', err);
-      toast.error(err.message || 'Failed to export');
-    } finally {
-      setExportingEngineerReport(false);
     }
-  };
+
+    const filename = `engineer_payment_report_${reportTab}_${fromMonth}_to_${toMonth}.xlsx`;
+    XLSX.writeFile(wb, filename);
+
+    toast.success('Report exported to Excel');
+  } catch (err: any) {
+    console.error('Export error:', err);
+    toast.error(err?.message || 'Failed to export');
+  } finally {
+    setExportingEngineerReport(false);
+  }
+};
 
   // Enhanced dropdown handlers
   const scrollToSelectedItem = (dropdownType: 'customer' | 'engine' | 'address' | 'product' | 'assignee' | 'typeOfVisit' | 'typeOfService') => {

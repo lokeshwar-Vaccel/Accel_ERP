@@ -1345,16 +1345,16 @@ const InventoryManagement: React.FC = () => {
 
       // Send transfer request
       const response = await apiClient.stock.transferStock(transferData);
-      
+
       // Show success message
       const transferType = response.data?.transfer?.isLocationChange ? 'transferred' : 'reassigned';
       toast.success(`Stock ${transferType} successfully!`);
-      
+
       // Refresh inventory data with a small delay to ensure backend updates are complete
       setTimeout(async () => {
         await fetchInventory();
       }, 500);
-      
+
       // Close modal and reset form
       setShowTransferModal(false);
       setTransferFormData({
@@ -1501,7 +1501,7 @@ const InventoryManagement: React.FC = () => {
 
         summary.netMovement = summary.totalInward - summary.totalOutward;
         setLedgerSummary({
-          ...summary, 
+          ...summary,
           totalInwardCount: (response.data as any).totalInward || 0,
           totalOutwardCount: (response.data as any).totalOutward || 0,
           totalAdjustmentCount: (response.data as any).totalAdjustment || 0,
@@ -1527,13 +1527,13 @@ const InventoryManagement: React.FC = () => {
   };
 
   const handleShowStockLedger = () => {
-    setLedgerFilters({ 
-      search: '', 
-      location: '', 
-      transactionType: '', 
-      dateRange: '', 
-      fromDate: '', 
-      toDate: '' 
+    setLedgerFilters({
+      search: '',
+      location: '',
+      transactionType: '',
+      dateRange: '',
+      fromDate: '',
+      toDate: ''
     });
     setLedgerPagination(prev => ({ ...prev, page: 1 }));
     setShowLedgerModal(true);
@@ -1941,35 +1941,35 @@ const InventoryManagement: React.FC = () => {
     return () => window.removeEventListener('resize', checkScrollable);
   }, [previewData?.duplicateGroups]);
 
-    // Export inventory as Excel (respect current filters)
-    const handleExportExcel = async () => {
-      try {
-        const sortField = filters.sortBy || 'product.name';
-        const sortDirection = filters.sortOrder === 'desc' ? '-' : '';
-        const sortParam = `${sortDirection}${sortField}`;
+  // Export inventory as Excel (respect current filters)
+  const handleExportExcel = async () => {
+    try {
+      const sortField = filters.sortBy || 'product.name';
+      const sortDirection = filters.sortOrder === 'desc' ? '-' : '';
+      const sortParam = `${sortDirection}${sortField}`;
 
-        const params: any = {
-          sort: sortParam,
-          search: filters.search,
-          ...(filters.category && { category: filters.category }),
-          ...(filters.dept && { dept: filters.dept }),
-          ...(filters.brand && { brand: filters.brand }),
-          ...(filters.location && { location: filters.location }),
-          ...(filters.room && { room: filters.room }),
-          ...(filters.rack && { rack: filters.rack }),
-          ...(filters.stockStatus === 'low_stock' && { lowStock: 'true' }),
-          ...(filters.stockStatus === 'out_of_stock' && { outOfStock: 'true' }),
-          ...(filters.stockStatus === 'overstocked' && { overStocked: 'true' }),
-          ...(filters.stockStatus === 'in_stock' && { inStock: 'true' })
-        };
+      const params: any = {
+        sort: sortParam,
+        search: filters.search,
+        ...(filters.category && { category: filters.category }),
+        ...(filters.dept && { dept: filters.dept }),
+        ...(filters.brand && { brand: filters.brand }),
+        ...(filters.location && { location: filters.location }),
+        ...(filters.room && { room: filters.room }),
+        ...(filters.rack && { rack: filters.rack }),
+        ...(filters.stockStatus === 'low_stock' && { lowStock: 'true' }),
+        ...(filters.stockStatus === 'out_of_stock' && { outOfStock: 'true' }),
+        ...(filters.stockStatus === 'overstocked' && { overStocked: 'true' }),
+        ...(filters.stockStatus === 'in_stock' && { inStock: 'true' })
+      };
 
-        const blob = await apiClient.inventory.exportExcel(params);
-        saveAs(blob, 'inventory-export.xlsx');
-        toast.success('Inventory exported successfully!');
-      } catch (error: any) {
-        toast.error('Failed to export inventory: ' + (error.message || error));
-      }
-    };
+      const blob = await apiClient.inventory.exportExcel(params);
+      saveAs(blob, 'inventory-export.xlsx');
+      toast.success('Inventory exported successfully!');
+    } catch (error: any) {
+      toast.error('Failed to export inventory: ' + (error.message || error));
+    }
+  };
 
   // Helper to convert dateRange string to fromDate/toDate
   const getDateRangeParams = (dateRange: string) => {
@@ -2619,87 +2619,87 @@ const InventoryManagement: React.FC = () => {
                       <td className="px-3 py-3 text-sm font-medium text-gray-900 break-words">
                         {item.product?.name || 'N/A'}
                       </td>
-                      
+
                       {/* Part No */}
                       <td className="px-3 py-3 text-xs font-bold text-black font-mono">
                         {item.product?.partNo || 'N/A'}
                       </td>
-                      
+
                       {/* Category */}
                       <td className="px-3 py-3 text-xs text-gray-700 capitalize">
                         {item.product?.category || 'N/A'}
                       </td>
-                      
+
                       {/* Brand */}
                       <td className="px-3 py-3 text-xs text-gray-700">
                         {item.product?.brand || 'N/A'}
                       </td>
-                      
+
                       {/* Department */}
                       <td className="px-3 py-3 text-xs text-gray-700 uppercase">
                         {item.product?.dept || 'N/A'}
                       </td>
-                      
+
                       {/* Current Quantity */}
                       <td className="px-3 py-3 text-sm font-bold text-gray-900 text-center">
                         {item.quantity}
                       </td>
-                      
+
                       {/* Reserved Quantity */}
                       <td className="px-3 py-3 text-sm font-medium text-orange-600 text-center">
                         {item.reservedQuantity || 0}
                       </td>
-                      
+
                       {/* Available Quantity */}
                       <td className="px-3 py-3 text-sm font-medium text-green-600 text-center">
                         {item.availableQuantity}
                       </td>
-                      
+
                       {/* Location */}
                       <td className="px-3 py-3 text-xs text-gray-900">
                         {item.location?.name || <span className="text-red-500">Unassigned</span>}
                       </td>
-                      
+
                       {/* Room */}
                       <td className="px-3 py-3 text-xs text-gray-700">
                         {item.room?.name || <span className="text-red-500">Unassigned</span>}
                       </td>
-                      
+
                       {/* Rack */}
                       <td className="px-3 py-3 text-xs text-gray-600">
                         {item.rack?.name || <span className="text-red-500">Unassigned</span>}
                       </td>
-                      
+
                       {/* UOM */}
                       <td className="px-3 py-3 text-xs text-gray-700">
                         {item.product?.uom || 'N/A'}
                       </td>
-                      
+
                       {/* Unit Price */}
                       <td className="px-3 py-3 text-sm font-medium text-gray-900">
                         {item.product?.price !== undefined ? `₹${item.product.price.toFixed(2)}` : 'N/A'}
                       </td>
-                      
+
                       {/* GST % */}
                       <td className="px-3 py-3 text-xs text-gray-700">
                         {item.product?.gst || 0}%
                       </td>
-                      
+
                       {/* GNDP */}
                       <td className="px-3 py-3 text-sm font-medium text-gray-900">
                         ₹{(item.product?.gndp || 0).toFixed(2)}
                       </td>
-                      
+
                       {/* CPCB No */}
                       <td className="px-3 py-3 text-xs text-gray-700">
                         {item.product?.cpcbNo || 'N/A'}
                       </td>
-                      
+
                       {/* HSN Number */}
                       <td className="px-3 py-3 text-xs text-gray-700">
                         {item.product?.hsnNumber || 'N/A'}
                       </td>
-                      
+
                       {/* Status */}
                       <td className="px-3 py-3">
                         <Badge variant={status.variant} size="xs">
@@ -2707,12 +2707,12 @@ const InventoryManagement: React.FC = () => {
                           {status.label}
                         </Badge>
                       </td>
-                      
+
                       {/* Last Updated */}
                       <td className="px-3 py-3 text-xs text-gray-500">
                         {new Date(item?.lastUpdated).toLocaleDateString()}
                       </td>
-                      
+
                       {/* Actions */}
                       <td className="px-3 py-3 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center justify-center space-x-1">
@@ -3522,7 +3522,7 @@ const InventoryManagement: React.FC = () => {
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
                 </div>
               )}
-              
+
               {/* Success Message */}
               {submitting && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -3659,11 +3659,13 @@ const InventoryManagement: React.FC = () => {
                           }`}
                       >
                         <option value="">Select destination location</option>
-                        {locations.map((location) => (
-                          <option key={location._id} value={location._id}>
-                            {location.name} ({location.type.replace('_', ' ')})
-                          </option>
-                        ))}
+                        {locations
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map((location) => (
+                            <option key={location._id} value={location._id}>
+                              {location.name} ({location.type.replace('_', ' ')})
+                            </option>
+                          ))}
                       </select>
                       {formErrors.toLocation && (
                         <p className="text-red-500 text-xs mt-1">{formErrors.toLocation}</p>
@@ -3683,14 +3685,17 @@ const InventoryManagement: React.FC = () => {
                         disabled={!transferFormData.toLocation}
                       >
                         <option value="">Select destination room</option>
-                        {rooms.filter(room => {
-                          const roomLocationId = typeof room.location === 'object' && room.location?._id 
-                            ? room.location._id 
-                            : room.location;
-                          return roomLocationId === transferFormData.toLocation;
-                        }).map(room => (
-                          <option key={room._id} value={room._id}>{room.name}</option>
-                        ))}
+                        {rooms
+                          .filter(room => {
+                            const roomLocationId = typeof room.location === 'object' && room.location?._id
+                              ? room.location._id
+                              : room.location;
+                            return roomLocationId === transferFormData.toLocation;
+                          })
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map(room => (
+                            <option key={room._id} value={room._id}>{room.name}</option>
+                          ))}
                       </select>
                     </div>
 
@@ -3703,14 +3708,19 @@ const InventoryManagement: React.FC = () => {
                         disabled={!transferFormData.toRoom}
                       >
                         <option value="">Select destination rack</option>
-                        {racks.filter(rack => {
-                          const rackRoomId = typeof rack.room === 'object' && rack.room?._id 
-                            ? rack.room._id 
-                            : rack.room;
-                          return rackRoomId === transferFormData.toRoom;
-                        }).map(rack => (
-                          <option key={rack._id} value={rack._id}>{rack.name}</option>
-                        ))}
+                        {racks
+                          .filter(rack => {
+                            const rackRoomId = typeof rack.room === 'object' && rack.room?._id
+                              ? rack.room._id
+                              : rack.room;
+                            return rackRoomId === transferFormData.toRoom;
+                          })
+                          .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+                          .map(rack => (
+                            <option key={rack._id} value={rack._id}>
+                              {rack.name}
+                            </option>
+                          ))}
                       </select>
                     </div>
                   </div>
@@ -4288,12 +4298,11 @@ const InventoryManagement: React.FC = () => {
                 const stats = calculateHistoryStats(stockTransactions);
                 return (
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-                    <div 
-                      className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-3 ${
-                        historyFilter === 'all' 
-                          ? 'bg-blue-100 border-blue-300 ring-2 ring-blue-200' 
-                          : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                      }`}
+                    <div
+                      className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-3 ${historyFilter === 'all'
+                        ? 'bg-blue-100 border-blue-300 ring-2 ring-blue-200'
+                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                        }`}
                       onClick={() => handleHistoryFilterClick('all')}
                     >
                       <div className="flex items-center justify-between">
@@ -4305,12 +4314,11 @@ const InventoryManagement: React.FC = () => {
                       </div>
                     </div>
 
-                    <div 
-                      className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-3 ${
-                        historyFilter === 'inward' 
-                          ? 'bg-green-100 border-green-300 ring-2 ring-green-200' 
-                          : 'bg-green-50 border-green-200 hover:bg-green-100'
-                      }`}
+                    <div
+                      className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-3 ${historyFilter === 'inward'
+                        ? 'bg-green-100 border-green-300 ring-2 ring-green-200'
+                        : 'bg-green-50 border-green-200 hover:bg-green-100'
+                        }`}
                       onClick={() => handleHistoryFilterClick('inward')}
                     >
                       <div className="flex items-center justify-between">
@@ -4323,12 +4331,11 @@ const InventoryManagement: React.FC = () => {
                       </div>
                     </div>
 
-                    <div 
-                      className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-3 ${
-                        historyFilter === 'outward' 
-                          ? 'bg-red-100 border-red-300 ring-2 ring-red-200' 
-                          : 'bg-red-50 border-red-200 hover:bg-red-100'
-                      }`}
+                    <div
+                      className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-3 ${historyFilter === 'outward'
+                        ? 'bg-red-100 border-red-300 ring-2 ring-red-200'
+                        : 'bg-red-50 border-red-200 hover:bg-red-100'
+                        }`}
                       onClick={() => handleHistoryFilterClick('outward')}
                     >
                       <div className="flex items-center justify-between">
@@ -4341,12 +4348,11 @@ const InventoryManagement: React.FC = () => {
                       </div>
                     </div>
 
-                    <div 
-                      className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-3 ${
-                        historyFilter === 'transfer' 
-                          ? 'bg-purple-100 border-purple-300 ring-2 ring-purple-200' 
-                          : 'bg-purple-50 border-purple-200 hover:bg-purple-100'
-                      }`}
+                    <div
+                      className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-3 ${historyFilter === 'transfer'
+                        ? 'bg-purple-100 border-purple-300 ring-2 ring-purple-200'
+                        : 'bg-purple-50 border-purple-200 hover:bg-purple-100'
+                        }`}
                       onClick={() => handleHistoryFilterClick('transfer')}
                     >
                       <div className="flex items-center justify-between">
@@ -4358,12 +4364,11 @@ const InventoryManagement: React.FC = () => {
                       </div>
                     </div>
 
-                    <div 
-                      className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-3 ${
-                        historyFilter === 'reservation' 
-                          ? 'bg-orange-100 border-orange-300 ring-2 ring-orange-200' 
-                          : 'bg-orange-50 border-orange-200 hover:bg-orange-100'
-                      }`}
+                    <div
+                      className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-3 ${historyFilter === 'reservation'
+                        ? 'bg-orange-100 border-orange-300 ring-2 ring-orange-200'
+                        : 'bg-orange-50 border-orange-200 hover:bg-orange-100'
+                        }`}
                       onClick={() => handleHistoryFilterClick('reservation')}
                     >
                       <div className="flex items-center justify-between">
@@ -4375,12 +4380,11 @@ const InventoryManagement: React.FC = () => {
                       </div>
                     </div>
 
-                    <div 
-                      className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-3 ${
-                        historyFilter === 'release' 
-                          ? 'bg-blue-100 border-blue-300 ring-2 ring-blue-200' 
-                          : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
-                      }`}
+                    <div
+                      className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-3 ${historyFilter === 'release'
+                        ? 'bg-blue-100 border-blue-300 ring-2 ring-blue-200'
+                        : 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+                        }`}
                       onClick={() => handleHistoryFilterClick('release')}
                     >
                       <div className="flex items-center justify-between">
@@ -4392,12 +4396,11 @@ const InventoryManagement: React.FC = () => {
                       </div>
                     </div>
 
-                    <div 
-                      className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-3 ${
-                        historyFilter === 'adjustment' 
-                          ? 'bg-gray-100 border-gray-300 ring-2 ring-gray-200' 
-                          : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
-                      }`}
+                    <div
+                      className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-3 ${historyFilter === 'adjustment'
+                        ? 'bg-gray-100 border-gray-300 ring-2 ring-gray-200'
+                        : 'bg-gray-50 border-gray-200 hover:bg-gray-100'
+                        }`}
                       onClick={() => handleHistoryFilterClick('adjustment')}
                     >
                       <div className="flex items-center justify-between">
@@ -4575,7 +4578,7 @@ const InventoryManagement: React.FC = () => {
                               const toDate = new Date();
                               const fromDate = new Date();
                               fromDate.setDate(toDate.getDate() - days + 1);
-                              
+
                               newDates = {
                                 fromDate: formatDateToString(fromDate),
                                 toDate: formatDateToString(toDate)
@@ -4675,57 +4678,57 @@ const InventoryManagement: React.FC = () => {
               <div className="min-w-full">
                 <table className="w-full border-collapse border border-gray-300">
                   <thead className="bg-gray-100 sticky top-0">
-                                         <tr>
-                       <th className="border border-gray-300 px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Description</th>
-                       <th className="border border-gray-300 px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Part Number</th>
-                       
-                       {/* Opening Balance */}
-                       <th colSpan={3} className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
-                         Opening Balance
-                       </th>
-                       
-                       {/* Inwards */}
-                       <th colSpan={3} className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
-                         Inwards
-                       </th>
-                       
-                       {/* Outwards */}
-                       <th colSpan={6} className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
-                         Outwards
-                       </th>
-                       
-                       {/* Closing Balance */}
-                       <th colSpan={3} className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
-                         Closing Balance
-                       </th>
-                     </tr>
-                     <tr>
-                       <th className="border border-gray-300 px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider"></th>
-                       <th className="border border-gray-300 px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider"></th>
-                       
-                       {/* Opening Balance sub-headers */}
-                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Quantity</th>
-                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Rate</th>
-                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Value</th>
-                       
-                       {/* Inwards sub-headers */}
-                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Quantity</th>
-                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Rate</th>
-                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Value</th>
-                       
-                       {/* Outwards sub-headers */}
-                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Quantity</th>
-                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Rate</th>
-                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Value</th>
-                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Consumption</th>
-                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Gross Profit</th>
-                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Perc %</th>
-                       
-                       {/* Closing Balance sub-headers */}
-                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Quantity</th>
-                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Rate</th>
-                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Value</th>
-                     </tr>
+                    <tr>
+                      <th className="border border-gray-300 px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Description</th>
+                      <th className="border border-gray-300 px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Part Number</th>
+
+                      {/* Opening Balance */}
+                      <th colSpan={3} className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Opening Balance
+                      </th>
+
+                      {/* Inwards */}
+                      <th colSpan={3} className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Inwards
+                      </th>
+
+                      {/* Outwards */}
+                      <th colSpan={6} className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Outwards
+                      </th>
+
+                      {/* Closing Balance */}
+                      <th colSpan={3} className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                        Closing Balance
+                      </th>
+                    </tr>
+                    <tr>
+                      <th className="border border-gray-300 px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider"></th>
+                      <th className="border border-gray-300 px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider"></th>
+
+                      {/* Opening Balance sub-headers */}
+                      <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Quantity</th>
+                      <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Rate</th>
+                      <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Value</th>
+
+                      {/* Inwards sub-headers */}
+                      <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Quantity</th>
+                      <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Rate</th>
+                      <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Value</th>
+
+                      {/* Outwards sub-headers */}
+                      <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Quantity</th>
+                      <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Rate</th>
+                      <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Value</th>
+                      <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Consumption</th>
+                      <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Gross Profit</th>
+                      <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Perc %</th>
+
+                      {/* Closing Balance sub-headers */}
+                      <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Quantity</th>
+                      <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Rate</th>
+                      <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Value</th>
+                    </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {loading && stockLedgerData.length === 0 ? (
@@ -4749,28 +4752,28 @@ const InventoryManagement: React.FC = () => {
                         const openingQty = ledger.previousQuantity || 0;
                         const openingRate = ledger.product?.price || 100; // Default price if not set
                         const openingValue = openingQty * openingRate;
-                        
+
                         const inwardsQty = ledger.transactionType === 'inward' ? ledger.quantity : 0;
                         const inwardsRate = ledger.product?.price || 100; // Default price if not set
                         const inwardsValue = inwardsQty * inwardsRate;
-                        
+
                         // For outward quantity, we need to show the actual outward quantity from the transaction
                         // Outward transactions typically have negative quantities, so we take the absolute value
                         const outwardsQty = ledger.transactionType === 'outward' ? Math.abs(ledger.quantity) : 0;
                         const outwardsRate = ledger.product?.price || 100; // Default price if not set
                         const outwardsValue = outwardsQty * outwardsRate;
-                        
+
                         // Formula: Consumption = Value of Opening Stock + Inward Value - Outward Value
                         const consumption = openingValue + inwardsValue - outwardsValue;
-                        
+
                         // Formula: Gross Profit = Value of Outward - Value of Consumption
                         const grossProfit = outwardsValue - consumption;
                         const profitPercentage = consumption > 0 ? (grossProfit / consumption) * 100 : 0;
-                        
+
                         const closingQty = ledger.resultingQuantity || 0;
                         const closingRate = ledger.product?.price || 100; // Default price if not set
                         const closingValue = closingQty * closingRate;
-                        
+
                         return (
                           <tr key={ledger._id} className="hover:bg-gray-50">
                             <td className="border border-gray-300 px-3 py-2 text-xs font-medium text-gray-900">
@@ -4779,59 +4782,59 @@ const InventoryManagement: React.FC = () => {
                             <td className="border border-gray-300 px-3 py-2 text-xs text-gray-600 font-mono">
                               {ledger.product?.partNo || 'N/A'}
                             </td>
-                            
-                                                         {/* Opening Balance */}
-                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
-                               {openingQty.toFixed(2)} {ledger.product?.uom || 'Nos.'}
-                             </td>
-                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
-                               ₹{openingRate.toFixed(2)}
-                             </td>
-                             <td className="border border-gray-300 px-3 py-2 text-xs text-center font-medium">
-                               ₹{openingValue.toFixed(2)}
-                             </td>
-                             
-                             {/* Inwards */}
-                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
-                               {inwardsQty.toFixed(2)} {ledger.product?.uom || 'Nos.'}
-                             </td>
-                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
-                               ₹{inwardsRate.toFixed(2)}
-                             </td>
-                             <td className="border border-gray-300 px-3 py-2 text-xs text-center font-medium">
-                               ₹{inwardsValue.toFixed(2)}
-                             </td>
-                             
-                             {/* Outwards */}
-                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
-                               {outwardsQty.toFixed(2)} {ledger.product?.uom || 'Nos.'}
-                             </td>
-                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
-                               ₹{outwardsRate.toFixed(2)}
-                             </td>
-                             <td className="border border-gray-300 px-3 py-2 text-xs text-center font-medium">
-                               ₹{outwardsValue.toFixed(2)}
-                             </td>
-                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
-                               ₹{consumption.toFixed(2)}
-                             </td>
-                             <td className={`border border-gray-300 px-3 py-2 text-xs text-center font-medium ${grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                               ₹{grossProfit.toFixed(2)}
-                             </td>
-                             <td className={`border border-gray-300 px-3 py-2 text-xs text-center font-medium ${profitPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                               {profitPercentage.toFixed(2)}%
-                             </td>
-                             
-                             {/* Closing Balance */}
-                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
-                               {closingQty.toFixed(2)} {ledger.product?.uom || 'Nos.'}
-                             </td>
-                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
-                               ₹{closingRate.toFixed(2)}
-                             </td>
-                             <td className="border border-gray-300 px-3 py-2 text-xs text-center font-medium">
-                               ₹{closingValue.toFixed(2)}
-                             </td>
+
+                            {/* Opening Balance */}
+                            <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                              {openingQty.toFixed(2)} {ledger.product?.uom || 'Nos.'}
+                            </td>
+                            <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                              ₹{openingRate.toFixed(2)}
+                            </td>
+                            <td className="border border-gray-300 px-3 py-2 text-xs text-center font-medium">
+                              ₹{openingValue.toFixed(2)}
+                            </td>
+
+                            {/* Inwards */}
+                            <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                              {inwardsQty.toFixed(2)} {ledger.product?.uom || 'Nos.'}
+                            </td>
+                            <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                              ₹{inwardsRate.toFixed(2)}
+                            </td>
+                            <td className="border border-gray-300 px-3 py-2 text-xs text-center font-medium">
+                              ₹{inwardsValue.toFixed(2)}
+                            </td>
+
+                            {/* Outwards */}
+                            <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                              {outwardsQty.toFixed(2)} {ledger.product?.uom || 'Nos.'}
+                            </td>
+                            <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                              ₹{outwardsRate.toFixed(2)}
+                            </td>
+                            <td className="border border-gray-300 px-3 py-2 text-xs text-center font-medium">
+                              ₹{outwardsValue.toFixed(2)}
+                            </td>
+                            <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                              ₹{consumption.toFixed(2)}
+                            </td>
+                            <td className={`border border-gray-300 px-3 py-2 text-xs text-center font-medium ${grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              ₹{grossProfit.toFixed(2)}
+                            </td>
+                            <td className={`border border-gray-300 px-3 py-2 text-xs text-center font-medium ${profitPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {profitPercentage.toFixed(2)}%
+                            </td>
+
+                            {/* Closing Balance */}
+                            <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                              {closingQty.toFixed(2)} {ledger.product?.uom || 'Nos.'}
+                            </td>
+                            <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                              ₹{closingRate.toFixed(2)}
+                            </td>
+                            <td className="border border-gray-300 px-3 py-2 text-xs text-center font-medium">
+                              ₹{closingValue.toFixed(2)}
+                            </td>
                           </tr>
                         );
                       })
