@@ -83,12 +83,12 @@ const getPaymentStatusColor = (status: string) => {
 interface DGProforma {
   _id: string;
   proformaNumber: string;
-  customer: {
+  customer?: {
     _id: string;
     name: string;
     email: string;
     phone?: string;
-  };
+  } | null;
   customerEmail: string;
   proformaDate: string;
   validUntil: string;
@@ -511,10 +511,10 @@ const DGProformaManagement: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-gray-900">
-                          {proforma.customer.name}
+                          {proforma.customer?.name || 'N/A'}
                         </div>
                         <div className="text-sm text-gray-500">
-                          {proforma.customerEmail}
+                          {proforma.customerEmail || 'N/A'}
                         </div>
                       </div>
                     </td>
