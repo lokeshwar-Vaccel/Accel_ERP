@@ -30,6 +30,7 @@ import {
   validateQuotationData
 } from '../utils/quotationUtils';
 import { numberToWords } from '../utils';
+import { Address } from '../types';
 
 // Types
 interface Customer {
@@ -39,14 +40,7 @@ interface Customer {
   phone: string;
   address: string;
   type: string;
-  addresses?: Array<{
-    id: number;
-    address: string;
-    state: string;
-    district: string;
-    pincode: string;
-    isPrimary: boolean;
-  }>;
+  addresses?: Address[];
 }
 
 interface Product {
@@ -60,6 +54,17 @@ interface Product {
   hsnNumber?: string;
   uom?: string;
   availableQuantity?: number;
+  aggregatedStock?: {
+    totalAvailable: number;
+    totalQuantity: number;
+    totalReserved: number;
+    stockDetails: Array<{
+      location: string;
+      room: string;
+      rack: string;
+      available: number;
+    }>;
+  };
 }
 
 interface StockLocationData {
@@ -222,10 +227,21 @@ const InvoiceFormPage: React.FC = () => {
     available: number;
     isValid: boolean;
     message: string;
+    totalQuantity?: number;
+    reservedQuantity?: number;
+    stockDetails?: Array<{
+      location: string;
+      room: string;
+      rack: string;
+      available: number;
+    }>;
   }>>({});
 
   // Stock loading state
   const [stockLoading, setStockLoading] = useState(false);
+  
+  // Stock cache version to force re-rendering when cache changes
+  const [stockCacheVersion, setStockCacheVersion] = useState(0);
 
       // Field engineers for sales invoices
   const [fieldOperators, setFieldOperators] = useState<any[]>([]);
@@ -401,7 +417,7 @@ const InvoiceFormPage: React.FC = () => {
           } : {
             _id: quotationData.customer._id || quotationData.customer,
             name: quotationData.customer.name || '',
-            email: quotationData.customer.email || '',
+            email: quotationData.customer.email || '', // This will be updated when addresses are loaded
             phone: quotationData.customer.phone || '',
             pan: quotationData.customer.pan || ''
           }) : undefined,
@@ -467,7 +483,7 @@ const InvoiceFormPage: React.FC = () => {
       if (quotationData.location) {
         console.log('InvoiceForm: Loading stock for location from quotation data:', quotationData.location);
         setTimeout(() => {
-          loadAllStockForLocation();
+          loadAllStockForLocation(quotationData.location);
         }, 500);
       }
 
@@ -506,6 +522,25 @@ const InvoiceFormPage: React.FC = () => {
         }));
         
         console.log('InvoiceForm: Addresses mapped successfully:', mappedAddresses);
+      }
+      
+      // Update customer email to use primary address email
+      if (formData.customer?._id && addresses.length > 0) {
+        const customer = customers.find(c => c._id === formData.customer?._id);
+        if (customer) {
+          const primaryAddress = customer.addresses?.find(addr => addr.isPrimary);
+          const primaryEmail = primaryAddress?.email || customer.email || '';
+          
+          if (primaryEmail !== formData.customer?.email) {
+            setFormData(prev => ({
+              ...prev,
+              customer: prev.customer ? {
+                ...prev.customer,
+                email: primaryEmail
+              } : prev.customer
+            }));
+          }
+        }
       }
     }
   }, [addresses, quotationData, loading]);
@@ -547,7 +582,7 @@ const InvoiceFormPage: React.FC = () => {
     if (formData.location && products.length > 0 && !loading && Object.keys(productStockCache).length === 0) {
       console.log('InvoiceForm: Auto-loading stock for location:', formData.location);
       setTimeout(() => {
-        loadAllStockForLocation();
+        loadAllStockForLocation(formData.location);
       }, 300);
     }
   }, [formData.location, products, loading, productStockCache]);
@@ -609,32 +644,83 @@ const InvoiceFormPage: React.FC = () => {
     }
   };
 
-  // Fixed fetchProducts function with deduplication
-  const fetchProducts = async () => {
+  // Fixed fetchProducts function with deduplication and stock aggregation
+  const fetchProducts = async (locationId?: string) => {
     try {
-      const response = await apiClient.stock.getStock({ limit: 10000, page: 1 });
+      // If location is selected, filter stock by location; otherwise get all stock
+      const currentLocation = locationId || formData.location;
+      const queryParams = currentLocation 
+        ? { limit: 10000, page: 1, location: currentLocation }
+        : { limit: 10000, page: 1 };
+      
+      console.log('🔍 Fetching products with params:', queryParams);
+      const response = await apiClient.stock.getStock(queryParams);
       const responseData = response.data as any;
 
-      // Use Map to deduplicate products by ID
+      // Use Map to deduplicate products by ID and aggregate stock
       const uniqueProducts = new Map();
+      const stockAggregation = new Map(); // Map to aggregate stock by product ID
+      let processedCount = 0;
+      let skippedCount = 0;
 
       if (responseData.stockLevels && Array.isArray(responseData.stockLevels)) {
+        console.log(`📦 Processing ${responseData.stockLevels.length} stock levels`);
         responseData.stockLevels.forEach((stock: any) => {
           const productId = stock.product?._id || stock.productId;
-          if (productId && !uniqueProducts.has(productId)) {
-            uniqueProducts.set(productId, {
-              _id: productId,
-              name: stock.product?.name || stock.productName || 'Unknown Product',
-              price: stock.product?.price || 0,
-              gst: stock.product?.gst || 0,
-              hsnNumber: stock.product?.hsnNumber || '',
-              partNo: stock.product?.partNo || '',
-              uom: stock.product?.uom || 'nos',
-              category: stock.product?.category || 'N/A',
-              brand: stock.product?.brand || 'N/A',
-              availableQuantity: stock.availableQuantity || 0,
-              stockData: stock
-            });
+          if (productId) {
+            // Only process stock for the selected location
+            if (currentLocation && stock.location?._id !== currentLocation) {
+              skippedCount++;
+              return; // Skip this stock item if it's not from the selected location
+            }
+            
+            processedCount++;
+
+            // Aggregate stock data
+            if (!stockAggregation.has(productId)) {
+              stockAggregation.set(productId, {
+                totalAvailable: 0,
+                totalQuantity: 0,
+                totalReserved: 0,
+                stockDetails: []
+              });
+            }
+            
+            const aggregatedStock = stockAggregation.get(productId);
+            const availableQty = Number(stock.availableQuantity) || 0;
+            const totalQty = Number(stock.quantity) || 0;
+            const reservedQty = Number(stock.reservedQuantity) || 0;
+            
+            aggregatedStock.totalAvailable += availableQty;
+            aggregatedStock.totalQuantity += totalQty;
+            aggregatedStock.totalReserved += reservedQty;
+            
+            // Store detailed stock info for each location
+            if (availableQty > 0) {
+              aggregatedStock.stockDetails.push({
+                location: stock.location?.name || 'Unknown Location',
+                room: stock.room?.name || '',
+                rack: stock.rack?.name || '',
+                available: availableQty
+              });
+            }
+
+            // Set product data (only once per product)
+            if (!uniqueProducts.has(productId)) {
+              uniqueProducts.set(productId, {
+                _id: productId,
+                name: stock.product?.name || stock.productName || 'Unknown Product',
+                price: stock.product?.price || 0,
+                gst: stock.product?.gst || 0,
+                hsnNumber: stock.product?.hsnNumber || '',
+                partNo: stock.product?.partNo || '',
+                uom: stock.product?.uom || 'nos',
+                category: stock.product?.category || 'N/A',
+                brand: stock.product?.brand || 'N/A',
+                availableQuantity: 0, // Will be updated with aggregated data
+                stockData: stock
+              });
+            }
           }
         });
       } else if (Array.isArray(responseData)) {
@@ -645,15 +731,28 @@ const InvoiceFormPage: React.FC = () => {
         });
       }
 
-      const productsData = Array.from(uniqueProducts.values());
-      console.log(`Loaded ${productsData.length} unique products`);
+      // Update products with aggregated stock data
+      const productsData = Array.from(uniqueProducts.values()).map(product => {
+        const aggregatedStock = stockAggregation.get(product._id);
+        if (aggregatedStock) {
+          return {
+            ...product,
+            availableQuantity: aggregatedStock.totalAvailable,
+            aggregatedStock: aggregatedStock
+          };
+        }
+        return product;
+      });
+
+      console.log(`📊 Results: Processed ${processedCount} stock items, skipped ${skippedCount} items`);
+      console.log(`Loaded ${productsData.length} unique products with aggregated stock${currentLocation ? ` for location: ${currentLocation}` : ' (all locations)'}`);
       setProducts(productsData);
 
       // Pre-load stock info for all products if location is selected
-      if (formData.location && productsData.length > 0) {
+      if (currentLocation && productsData.length > 0) {
         // Load ALL stock for this location - much faster
         setTimeout(() => {
-          loadAllStockForLocation();
+          loadAllStockForLocation(currentLocation);
         }, 200);
       }
     } catch (error) {
@@ -686,7 +785,7 @@ const InvoiceFormPage: React.FC = () => {
           // Auto-load stock for the default location after a short delay
           setTimeout(() => {
             console.log('InvoiceForm: Auto-loading stock for default location:', mainOffice._id);
-            loadAllStockForLocation();
+            loadAllStockForLocation(mainOffice._id);
           }, 500);
         }
       }
@@ -730,19 +829,20 @@ const InvoiceFormPage: React.FC = () => {
 
   const fetchFieldEngineers = async () => {
     try {
-      const response = await apiClient.users.getFieldEngineers();
-      if (response.success && response.data.fieldEngineers) {
-        const fieldEngineers = response.data.fieldEngineers.map((engineer: any) => ({
-          _id: engineer._id || engineer.id,
-          value: engineer._id || engineer.id,
-          label: engineer.name || `${engineer.firstName} ${engineer.lastName}`,
-          name: engineer.name || `${engineer.firstName} ${engineer.lastName}`,
-          firstName: engineer.firstName,
-          lastName: engineer.lastName,
-          email: engineer.email,
-          phone: engineer.phone
-        }));
-        setFieldOperators(fieldEngineers);
+      const response = await apiClient.users.getAllForDropdown();
+      
+      if (response.success && response.data) {
+          const fieldEngineers = response.data.map((engineer: any) => ({
+              _id: engineer._id || engineer.id,
+              value: engineer._id || engineer.id,
+              name: engineer.name || `${engineer.firstName || ''} ${engineer.lastName || ''}`.trim(),
+              label: engineer.name || `${engineer.firstName || ''} ${engineer.lastName || ''}`.trim(),
+              email: engineer.email,
+              phone: engineer.phone,
+              firstName: engineer.firstName,
+              lastName: engineer.lastName
+          }));
+          setFieldOperators(fieldEngineers);
       }
     } catch (error) {
       console.error('Error fetching field engineers:', error);
@@ -847,8 +947,6 @@ const InvoiceFormPage: React.FC = () => {
 
   // Enhanced getFilteredProducts function with deduplication
   const getFilteredProducts = (searchTerm: string = '') => {
-    if (!searchTerm || searchTerm.trim() === '') return products;
-
     const term = searchTerm.toLowerCase().trim();
 
     // Create a Map to deduplicate products by _id (additional safety)
@@ -861,9 +959,22 @@ const InvoiceFormPage: React.FC = () => {
     });
 
     // Convert back to array and filter
-    const uniqueProductsArray = Array.from(uniqueProducts.values());
+    let filteredProducts = Array.from(uniqueProducts.values());
 
-    return uniqueProductsArray.filter(product => {
+    // If location is selected, filter by stock availability
+    if (formData.location && Object.keys(productStockCache).length > 0) {
+      filteredProducts = filteredProducts.filter(product => {
+        const stockInfo = productStockCache[product._id];
+        // Only show products that have stock available at the selected location
+        return stockInfo && stockInfo.available > 0;
+      });
+    }
+
+    // If no search term, return all filtered products
+    if (!term) return filteredProducts;
+
+    // Apply search term filtering
+    filteredProducts = filteredProducts.filter(product => {
       const name = product.name?.toLowerCase() || '';
       const partNo = product.partNo?.toLowerCase() || '';
       const category = product.category?.toLowerCase() || '';
@@ -875,7 +986,10 @@ const InvoiceFormPage: React.FC = () => {
         brand.includes(term) ||
         name.startsWith(term) ||
         partNo.startsWith(term);
-    }).sort((a, b) => {
+    });
+
+    // Sort results
+    return filteredProducts.sort((a, b) => {
       // Prioritize exact matches and starts-with matches
       const aName = a.name?.toLowerCase() || '';
       const aPartNo = a.partNo?.toLowerCase() || '';
@@ -918,7 +1032,13 @@ const InvoiceFormPage: React.FC = () => {
   const getCustomerLabel = (value: string) => {
     if (!value) return 'Select customer';
     const customer = customers.find(c => c._id === value);
-    return customer ? `${customer.name} - ${customer.email || ''}` : 'Select customer';
+    if (!customer) return 'Select customer';
+    
+    // Get primary address email if available
+    const primaryAddress = customer.addresses?.find(addr => addr.isPrimary);
+    const displayEmail = primaryAddress?.email || customer.email || '';
+    
+    return `${customer.name} - ${displayEmail}`;
   };
 
   const getLocationLabel = (value: string) => {
@@ -930,7 +1050,14 @@ const InvoiceFormPage: React.FC = () => {
   const getProductLabel = (value: string) => {
     if (!value) return 'Select product';
     const product = products.find(p => p._id === value);
-    return product ? `${product?.name} - ₹${product?.price?.toLocaleString()}` : 'Select product';
+    if (!product) return 'Select product';
+    
+    const partNo = product.partNo || 'N/A';
+    const stockInfo = product.aggregatedStock;
+    const totalAvailable = stockInfo?.totalAvailable || 0;
+    const locationText = formData.location ? 'at location' : 'total';
+    
+    return `${partNo} - ${product.name} - ₹${product?.price?.toLocaleString()} (${totalAvailable} ${locationText})`;
   };
 
   const getAddressLabel = (value: string | undefined, addressType?: 'billTo' | 'shipTo') => {
@@ -1237,14 +1364,15 @@ const InvoiceFormPage: React.FC = () => {
   };
 
   // Load ALL stock data for a location - FASTEST approach
-  const loadAllStockForLocation = async () => {
-    if (!formData.location) return;
+  const loadAllStockForLocation = async (locationId?: string) => {
+    const currentLocation = locationId || formData.location;
+    if (!currentLocation) return;
 
     setStockLoading(true);
     try {
       // Get ALL stock data for this location in ONE API call - no limits
       const response = await apiClient.stock.getStock({
-        location: formData.location,
+        location: currentLocation,
         limit: 10000 // Get all stock items for this location
       });
 
@@ -1257,7 +1385,10 @@ const InvoiceFormPage: React.FC = () => {
       console.log('✅ Loaded stock data for location:', stockData.length, 'items');
 
       // Create complete stock cache for ALL products at this location
+      // Aggregate stock across all rooms and racks within the location
       const newStockCache: any = {};
+      const stockAggregation = new Map(); // Map to aggregate stock by product ID
+      
       stockData.forEach(stock => {
         const productId = stock.product?._id || stock.product;
         if (productId) {
@@ -1266,14 +1397,45 @@ const InvoiceFormPage: React.FC = () => {
           const reservedQuantity = Number(stock.reservedQuantity) || 0;
           const available = Math.max(0, totalQuantity - reservedQuantity);
 
-          newStockCache[productId] = {
-            available,
-            isValid: available > 0,
-            message: available === 0 ? 'Out of stock' : `${available} available`,
-            totalQuantity,
-            reservedQuantity
-          };
+          // Initialize aggregation for this product if not exists
+          if (!stockAggregation.has(productId)) {
+            stockAggregation.set(productId, {
+              totalAvailable: 0,
+              totalQuantity: 0,
+              totalReserved: 0,
+              stockDetails: []
+            });
+          }
+          
+          const aggregatedStock = stockAggregation.get(productId);
+          
+          // Aggregate quantities across all rooms and racks
+          aggregatedStock.totalAvailable += available;
+          aggregatedStock.totalQuantity += totalQuantity;
+          aggregatedStock.totalReserved += reservedQuantity;
+          
+          // Store detailed stock info for each room/rack
+          if (available > 0) {
+            aggregatedStock.stockDetails.push({
+              location: stock.location?.name || 'Unknown Location',
+              room: stock.room?.name || '',
+              rack: stock.rack?.name || '',
+              available: available
+            });
+          }
         }
+      });
+      
+      // Convert aggregated data to stock cache format
+      stockAggregation.forEach((aggregatedStock, productId) => {
+        newStockCache[productId] = {
+          available: aggregatedStock.totalAvailable,
+          isValid: aggregatedStock.totalAvailable > 0,
+          message: aggregatedStock.totalAvailable === 0 ? 'Out of stock' : `${aggregatedStock.totalAvailable} available`,
+          totalQuantity: aggregatedStock.totalQuantity,
+          reservedQuantity: aggregatedStock.totalReserved,
+          stockDetails: aggregatedStock.stockDetails
+        };
       });
 
       // For products not in stock at this location, set as out of stock
@@ -1291,6 +1453,7 @@ const InvoiceFormPage: React.FC = () => {
 
       // Update cache with complete stock data
       setProductStockCache(newStockCache);
+      setStockCacheVersion(prev => prev + 1); // Force re-render of product dropdowns
       console.log('✅ Stock cache updated for', Object.keys(newStockCache).length, 'products');
 
       // Also update stockValidation for all existing items to ensure consistency
@@ -1335,6 +1498,7 @@ const InvoiceFormPage: React.FC = () => {
         };
       });
       setProductStockCache(errorStockCache);
+      setStockCacheVersion(prev => prev + 1); // Force re-render of product dropdowns
     } finally {
       setStockLoading(false);
     }
@@ -1351,7 +1515,7 @@ const InvoiceFormPage: React.FC = () => {
 
     // If stock cache is empty, load all stock for location
     if (Object.keys(productStockCache).length === 0) {
-      await loadAllStockForLocation();
+      await loadAllStockForLocation(formData.location);
     }
     return productStockCache[productId] || { available: 0, isValid: false, message: 'Unable to check stock' };
   };
@@ -1389,12 +1553,16 @@ const InvoiceFormPage: React.FC = () => {
       // Check if this is a different customer than currently selected
       const isDifferentCustomer = formData.customer?._id !== customer._id;
 
+      // Get primary address email if available
+      const primaryAddress = customer.addresses?.find(addr => addr.isPrimary);
+      const primaryEmail = primaryAddress?.email || customer.email || '';
+      
       setFormData(prev => ({
         ...prev,
         customer: {
           _id: customer._id,
           name: customer.name,
-          email: customer.email,
+          email: primaryEmail,
           phone: customer.phone,
           pan: ''
         }
@@ -1528,6 +1696,7 @@ const InvoiceFormPage: React.FC = () => {
         invoiceType: invoiceType, // Use the actual invoice type
         location: sanitizedData.location || '',
         notes: sanitizedData.notes || '',
+        terms: sanitizedData.terms || '',
         // New fields from quotation
         subject: sanitizedData.subject || '',
         engineSerialNumber: sanitizedData.engineSerialNumber || '',
@@ -1664,6 +1833,7 @@ const InvoiceFormPage: React.FC = () => {
 
       if (showLocationDropdown && highlightedLocationIndex >= 0 && filteredLocations[highlightedLocationIndex]) {
         const selectedLocation = filteredLocations[highlightedLocationIndex];
+        console.log(`🔄 Location changed from ${formData.location} to ${selectedLocation._id} (${selectedLocation.name})`);
         setFormData({ ...formData, location: selectedLocation._id });
         setShowLocationDropdown(false);
         setHighlightedLocationIndex(-1);
@@ -1672,9 +1842,9 @@ const InvoiceFormPage: React.FC = () => {
         setProductStockCache({});
         setStockValidation({});
 
-        // Load ALL stock for this location
+        // Refresh products for the new location
         setTimeout(() => {
-          loadAllStockForLocation();
+          fetchProducts(selectedLocation._id);
         }, 100);
 
         setTimeout(() => {
@@ -1689,14 +1859,15 @@ const InvoiceFormPage: React.FC = () => {
       if (showLocationDropdown) {
         if (highlightedLocationIndex >= 0 && filteredLocations[highlightedLocationIndex]) {
           const selectedLocation = filteredLocations[highlightedLocationIndex];
+          console.log(`🔄 Location changed from ${formData.location} to ${selectedLocation._id} (${selectedLocation.name})`);
           setFormData({ ...formData, location: selectedLocation._id });
           // Clear stock cache when location changes
           setProductStockCache({});
           setStockValidation({});
 
-          // Load ALL stock for this location
+          // Refresh products for the new location
           setTimeout(() => {
-            loadAllStockForLocation();
+            fetchProducts(selectedLocation._id);
           }, 100);
         }
         setShowLocationDropdown(false);
@@ -1736,9 +1907,15 @@ const InvoiceFormPage: React.FC = () => {
 
       if (!customerSearchTerm) return false;
       const searchTerm = customerSearchTerm?.toLowerCase();
+      
+      // Get primary address email for search
+      const primaryAddress = customer.addresses?.find(addr => addr.isPrimary);
+      const primaryEmail = primaryAddress?.email || '';
+      
       return (
         (customer.name && customer.name.toLowerCase().includes(searchTerm)) ||
         (customer.email && customer.email.toLowerCase().includes(searchTerm)) ||
+        (primaryEmail && primaryEmail.toLowerCase().includes(searchTerm)) ||
         (customer.phone && customer.phone.toLowerCase().includes(searchTerm))
       );
     });
@@ -2512,6 +2689,7 @@ const InvoiceFormPage: React.FC = () => {
                         key={location._id}
                         data-location-index={index}
                         onClick={() => {
+                          console.log(`🔄 Location changed from ${formData.location} to ${location._id} (${location.name})`);
                           setFormData({ ...formData, location: location._id });
                           setShowLocationDropdown(false);
                           setLocationSearchTerm('');
@@ -2520,9 +2698,9 @@ const InvoiceFormPage: React.FC = () => {
                           setProductStockCache({});
                           setStockValidation({});
 
-                          // Load ALL stock for this location
+                          // Refresh products for the new location
                           setTimeout(() => {
-                            loadAllStockForLocation();
+                            fetchProducts(location._id);
                           }, 100);
                         }}
                         className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.location === location._id ? 'bg-blue-100 text-blue-800' :
@@ -2677,7 +2855,12 @@ const InvoiceFormPage: React.FC = () => {
                         >
                           <div>
                             <div className="font-medium">{customer.name}</div>
-                            <div className="text-xs text-gray-500">{customer.email}</div>
+                            <div className="text-xs text-gray-500">
+                              {(() => {
+                                const primaryAddress = customer.addresses?.find(addr => addr.isPrimary);
+                                return primaryAddress?.email || customer.email || '';
+                              })()}
+                            </div>
                           </div>
                         </button>
                       ));
@@ -3035,11 +3218,11 @@ const InvoiceFormPage: React.FC = () => {
               />
             </div>
 
-            {/* Assign to Engineer - Only for Sales Invoices */}
+            {/* Referred By - Only for Sales Invoices */}
             {isSalesInvoice && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Assign to Engineer
+                  Referred By
                 </label>
                 <div className="relative dropdown-container">
                   <input
@@ -3161,7 +3344,7 @@ const InvoiceFormPage: React.FC = () => {
                       }
                     }}
                     autoComplete="off"
-                    placeholder="Search engineer or press ↓ to open"
+                    placeholder="Search Referred By or press ↓ to open"
                     data-field="engineer"
                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   />
@@ -3208,11 +3391,11 @@ const InvoiceFormPage: React.FC = () => {
 
                         return (
                           <>
-                            <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                            {/* <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
                               <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
                               <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
                               <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
-                            </div>
+                            </div> */}
 
                             <button
                               onClick={() => {
@@ -3264,7 +3447,7 @@ const InvoiceFormPage: React.FC = () => {
           </div>
 
           {/* New Quotation Fields */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Subject
@@ -3278,7 +3461,11 @@ const InvoiceFormPage: React.FC = () => {
               />
             </div>
 
-            <div>
+            
+
+<div className='grid grid-cols-1 md:grid-cols-4 gap-4'>
+
+<div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Engine Serial Number
               </label>
@@ -3447,10 +3634,9 @@ const InvoiceFormPage: React.FC = () => {
                 )}
               </div>
               <p className="text-sm text-gray-500 mt-2">
-                Select an engine serial number from customer's DG details to auto-populate KVA, Hour Meter Reading, and Service Request Date
+                Select an engine serial number from customer's DG details to auto-populate KVA, Hour Meter Reading, and Service Done Date
               </p>
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 KVA Rating
@@ -3461,7 +3647,7 @@ const InvoiceFormPage: React.FC = () => {
                 onChange={(e) => setFormData({ ...formData, kva: e.target.value })}
                 placeholder="Auto-populated from service ticket"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-gray-50"
-                readOnly
+                disabled
               />
             </div>
 
@@ -3475,13 +3661,13 @@ const InvoiceFormPage: React.FC = () => {
                 onChange={(e) => setFormData({ ...formData, hourMeterReading: e.target.value })}
                 placeholder="Auto-populated from service ticket"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-gray-50"
-                readOnly
+                disabled
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Service Request Date
+                Service Done Date
               </label>
               <input
                 type="date"
@@ -3495,79 +3681,16 @@ const InvoiceFormPage: React.FC = () => {
                 }}
                 placeholder="Auto-populated from service ticket"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-gray-50"
-                readOnly
+                disabled
               />
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                QR Code Image <span className="text-gray-400 font-normal">(Optional)</span>
-              </label>
-              <div className="space-y-3">
-                {!qrCodePreview ? (
-                  <div
-                    className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors"
-                    onDragOver={handleQrCodeDragOver}
-                    onDragLeave={handleQrCodeDragLeave}
-                    onDrop={handleQrCodeDrop}
-                  >
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleQrCodeUpload}
-                      className="hidden"
-                      id="qr-code-upload"
-                    />
-                    <label
-                      htmlFor="qr-code-upload"
-                      className="cursor-pointer flex flex-col items-center space-y-2"
-                    >
-                      <QrCode className="w-12 h-12 text-gray-400" />
-                      <div className="text-sm text-gray-600">
-                        <span className="font-medium text-blue-600 hover:text-blue-500">
-                          Click to upload
-                        </span>{' '}
-                        or drag and drop
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        PNG, JPG, JPEG up to 5MB
-                      </div>
-                    </label>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="relative inline-block">
-                      <img
-                        src={qrCodePreview}
-                        alt="QR Code Preview"
-                        className="max-w-xs max-h-64 rounded-lg border border-gray-200 shadow-sm"
-                      />
-                      <button
-                        type="button"
-                        onClick={removeQrCode}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
-                        title="Remove QR Code"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                    {qrCodeImage && <div className="text-sm text-gray-600">
-                      <strong>File:</strong> {qrCodeImage?.name}
-                      <br />
-                      <strong>Size:</strong> {qrCodeImage?.size ? (qrCodeImage.size / 1024 / 1024).toFixed(2) : '0'} MB
-                    </div>}
-                  </div>
-                )}
-
-                <p className="text-sm text-gray-500 mt-2">
-                  Upload a QR code image that will be included in the invoice
-                </p>
-              </div>
             </div>
+
+            
           </div>
 
           {/* Stock Reduction Option - Conditional based on invoice type */}
-          {!isDeliveryChallan && (
+          {/* {!isDeliveryChallan && (
             <div className={`border rounded-lg p-4 ${isQuotation ? 'bg-blue-50 border-blue-200' :
               isSalesInvoice ? 'bg-green-50 border-green-200' :
                 'bg-purple-50 border-purple-200'
@@ -3623,7 +3746,7 @@ const InvoiceFormPage: React.FC = () => {
                 return null;
               })()}
             </div>
-          )}
+          )} */}
 
           {/* Delivery Challan Info */}
           {isDeliveryChallan && (
@@ -3744,7 +3867,7 @@ const InvoiceFormPage: React.FC = () => {
 
                               // Load all stock for location if not already loaded
                               if (formData.location && Object.keys(productStockCache).length === 0) {
-                                loadAllStockForLocation();
+                                loadAllStockForLocation(formData.location);
                               }
                             }}
                             onFocus={() => {
@@ -3758,7 +3881,7 @@ const InvoiceFormPage: React.FC = () => {
 
                               // Load all stock for location if not already loaded
                               if (formData.location && Object.keys(productStockCache).length === 0) {
-                                loadAllStockForLocation();
+                                loadAllStockForLocation(formData.location);
                               }
                             }}
                             onBlur={() => {
@@ -3866,31 +3989,106 @@ const InvoiceFormPage: React.FC = () => {
                                             <span className="font-medium">Brand:</span> {product?.brand || 'N/A'} •
                                             <span className="font-medium">Category:</span> {product?.category || 'N/A'}
                                           </div> */}
+
+                                          {/* Stock Display - Location-specific when location is selected */}
                                           {(() => {
-                                            const productStock = productStockCache[product._id];
-                                            if (stockLoading && !productStock) {
-                                              return (
-                                                <div className="text-xs mt-1 text-blue-600">
-                                                  <span className="animate-pulse">Loading stock...</span>
+                                            // Use location-specific stock if location is selected and stock cache is available
+                                            if (formData.location && productStockCache[product._id]) {
+                                              const stockInfo = productStockCache[product._id];
+                                              const available = stockInfo.available;
+                                              
+                                              // Show detailed breakdown if we have stock details
+                                              if (stockInfo.stockDetails && stockInfo.stockDetails.length > 0) {
+                                                return (
+                                                  <div className="mt-1">
+                                                    <div className="flex items-center mb-1">
+                                                      <span className="font-medium text-gray-700">Location Stock:</span>
+                                                      <span className={`ml-2 px-2 py-0.5 rounded-md text-xs font-bold ${available === 0
+                                                        ? 'bg-red-100 text-red-800 border border-red-300'
+                                                        : available <= 5
+                                                          ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                                                          : 'bg-green-100 text-green-800 border border-green-300'
+                                                        }`}>
+                                                        {available === 0 ? 'OUT OF STOCK' : `${available} available`}
+                                                      </span>
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 space-y-0.5">
+                                                      {stockInfo.stockDetails.map((detail: any, detailIndex: number) => (
+                                                        <div key={detailIndex} className="flex items-center">
+                                                          <span className="font-medium">•</span>
+                                                          <span className="ml-1">
+                                                            {detail.location}
+                                                            {detail.room && ` – ${detail.room}`}
+                                                          {detail.rack && ` – ${detail.rack}`}
+                                                          <span className="font-medium text-gray-700"> – {detail.available} available</span>
+                                                        </span>
+                                                      </div>
+                                                    ))}
+                                                  </div>
                                                 </div>
                                               );
                                             }
-                                            if (productStock) {
-                                              return (
-                                                <div className="text-xs mt-1">
-                                                  <span className={productStock.available === 0 ? 'text-red-600 font-bold' : productStock.isValid ? 'text-green-600' : 'text-yellow-600 font-semibold'}>
-                                                    Stock: {productStock.available} available
-                                                  </span>
-                                                </div>
-                                              );
-                                            }
-                                            // No stock info available yet
+                                            
+                                            // Simple display if no detailed breakdown
                                             return (
-                                              <div className="text-xs mt-1 text-gray-500">
-                                                <span>Stock: Checking...</span>
+                                              <div className="mt-1 flex items-center">
+                                                <span className="font-medium text-gray-700">Stock:</span>
+                                                <span className={`ml-2 px-2 py-0.5 rounded-md text-xs font-bold ${available === 0
+                                                  ? 'bg-red-100 text-red-800 border border-red-300'
+                                                  : available <= 5
+                                                    ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                                                    : 'bg-green-100 text-green-800 border border-green-300'
+                                                  }`}>
+                                                  {available === 0 ? 'OUT OF STOCK' : `${available} available`}
+                                                </span>
                                               </div>
                                             );
-                                          })()}
+                                          }
+                                          
+                                          // Fallback to aggregated stock for all locations
+                                          const stockInfo = product.aggregatedStock;
+                                          if (stockInfo && stockInfo.stockDetails.length > 0) {
+                                            const totalAvailable = stockInfo.totalAvailable;
+                                            return (
+                                              <div className="mt-1">
+                                                <div className="flex items-center mb-1">
+                                                  <span className="font-medium text-gray-700">
+                                                    {formData.location ? 'Location Stock:' : 'Total Stock:'}
+                                                  </span>
+                                                  <span className={`ml-2 px-2 py-0.5 rounded-md text-xs font-bold ${totalAvailable === 0
+                                                    ? 'bg-red-100 text-red-800 border border-red-300'
+                                                    : totalAvailable <= 5
+                                                      ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                                                      : 'bg-green-100 text-green-800 border border-green-300'
+                                                    }`}>
+                                                    {totalAvailable === 0 ? 'OUT OF STOCK' : `${totalAvailable} available`}
+                                                  </span>
+                                                </div>
+                                                <div className="text-xs text-gray-500 space-y-0.5">
+                                                  {stockInfo.stockDetails.map((detail: any, detailIndex: number) => (
+                                                    <div key={detailIndex} className="flex items-center">
+                                                      <span className="font-medium">•</span>
+                                                      <span className="ml-1">
+                                                        {detail.location}
+                                                        {detail.room && ` – ${detail.room}`}
+                                                        {detail.rack && ` – ${detail.rack}`}
+                                                        <span className="font-medium text-gray-700"> – {detail.available} available</span>
+                                                      </span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            );
+                                          }
+                                          return (
+                                            <div className="mt-1 flex items-center">
+                                              <span className="font-medium text-gray-700">Stock:</span>
+                                              <span className="ml-2 px-2 py-0.5 rounded-md text-xs font-bold bg-red-100 text-red-600 border border-red-300">
+                                                OUT OF STOCK
+                                              </span>
+                                            </div>
+                                          );
+                                        })()}
                                         </div>
                                       </div>
                                       <div className="text-right flex-shrink-0 ml-4">
@@ -3920,20 +4118,35 @@ const InvoiceFormPage: React.FC = () => {
                             placeholder="Description"
                             disabled={true}
                           />
-                          {stockInfo && item.product && (
-                            <div className="flex-shrink-0">
-                              <span className={`text-xs px-2 py-1 rounded-full font-medium ${stockInfo.available === 0
-                                ? 'bg-red-100 text-red-800'
-                                : !stockInfo.isValid
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-green-100 text-green-800'
-                                }`}>
-                                {stockInfo.available === 0
-                                  ? 'Out of Stock'
-                                  : `${stockInfo.available} in stock`}
-                              </span>
-                            </div>
-                          )}
+                          {item.product && (() => {
+                            const product = products.find(p => p._id === item.product);
+                            const stockInfo = product?.aggregatedStock;
+                            const totalAvailable = stockInfo?.totalAvailable || 0;
+                            
+                            if (stockInfo && stockInfo.stockDetails.length > 0) {
+                              return (
+                                <div className="flex-shrink-0">
+                                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${totalAvailable === 0
+                                    ? 'bg-red-100 text-red-800'
+                                    : totalAvailable <= 5
+                                      ? 'bg-yellow-100 text-yellow-800'
+                                      : 'bg-green-100 text-green-800'
+                                    }`}>
+                                    {totalAvailable === 0
+                                      ? '❌ Out of Stock'
+                                      : `📦 ${totalAvailable} ${formData.location ? 'at location' : 'total'}`}
+                                  </span>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div className="flex-shrink-0">
+                                <span className="text-xs px-2 py-1 rounded-full font-medium bg-gray-100 text-gray-600">
+                                  📦 No stock data
+                                </span>
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
 
@@ -4133,7 +4346,7 @@ const InvoiceFormPage: React.FC = () => {
             </div>
 
             {/* Stock Status Summary */}
-            {formData.location && Object.keys(productStockCache).length > 0 && !stockLoading && (
+            {/* {formData.location && Object.keys(productStockCache).length > 0 && !stockLoading && (
               <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-4">
@@ -4179,7 +4392,7 @@ const InvoiceFormPage: React.FC = () => {
                   </div>
                 </div>
               </div>
-            )}
+            )} */}
 
             {/* Excel-style Table */}
           </div>
@@ -4194,7 +4407,7 @@ const InvoiceFormPage: React.FC = () => {
                     const newServiceCharges = [
                       ...(prev.serviceCharges || []),
                       {
-                        description: 'Service Charge',
+                        description: '',
                         hsnNumber: '', // Add HSN field for new service charges
                         quantity: 1,
                         unitPrice: 0,
@@ -4237,21 +4450,22 @@ const InvoiceFormPage: React.FC = () => {
               <div className="overflow-x-auto">
                 <div className="bg-gray-100 border-b border-gray-300 min-w-[1200px]">
                   <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
-                    style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px 80px' }}>
+                    style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px 80px 60px' }}>
                     <div className="p-3 border-r border-gray-300 bg-gray-200">Description</div>
                     <div className="p-3 border-r border-gray-300 bg-gray-200">HSN</div>
                     <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
                     <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
                     <div className="p-3 border-r border-gray-300 bg-gray-200">Discount %</div>
                     <div className="p-3 border-r border-gray-300 bg-gray-200">GST %</div>
-                    <div className="p-3 text-center bg-gray-200">Total</div>
+                    <div className="p-3 text-center border-r border-gray-300 bg-gray-200">Total</div>
+                    <div className="p-3 text-center bg-gray-200">Action</div>
                   </div>
                 </div>
 
                 <div className="divide-y divide-gray-200 min-w-[1200px]">
                   {(formData.serviceCharges || []).map((service, index) => (
                     <div key={index} className="grid group hover:bg-blue-50 transition-colors bg-white"
-                      style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px 80px' }}>
+                      style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px 80px 60px' }}>
                       
                       {/* Description */}
                       <div className="p-2 border-r border-gray-200">
@@ -4279,9 +4493,18 @@ const InvoiceFormPage: React.FC = () => {
                               };
                             });
                           }}
-                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                          className={`w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 ${
+                            errors.find(error => error.field === `serviceCharges[${index}].description`)
+                              ? 'bg-red-50 focus:bg-red-50 focus:ring-red-500 border border-red-300'
+                              : 'focus:bg-blue-50 focus:ring-blue-500'
+                          }`}
                           placeholder="Service description..."
                         />
+                        {errors.find(error => error.field === `serviceCharges[${index}].description`) && (
+                          <div className="mt-1 text-xs text-red-600">
+                            {errors.find(error => error.field === `serviceCharges[${index}].description`)?.message}
+                          </div>
+                        )}
                       </div>
 
                       {/* HSN */}
@@ -4294,9 +4517,18 @@ const InvoiceFormPage: React.FC = () => {
                             newServiceCharges[index].hsnNumber = e.target.value;
                             setFormData(prev => ({ ...prev, serviceCharges: newServiceCharges }));
                           }}
-                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                          className={`w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 ${
+                            errors.find(error => error.field === `serviceCharges[${index}].hsnNumber`)
+                              ? 'bg-red-50 focus:bg-red-50 focus:ring-red-500 border border-red-300'
+                              : 'focus:bg-blue-50 focus:ring-blue-500'
+                          }`}
                           placeholder="HSN Code"
                         />
+                        {errors.find(error => error.field === `serviceCharges[${index}].hsnNumber`) && (
+                          <div className="mt-1 text-xs text-red-600">
+                            {errors.find(error => error.field === `serviceCharges[${index}].hsnNumber`)?.message}
+                          </div>
+                        )}
                       </div>
 
                       {/* Quantity */}
@@ -4346,8 +4578,17 @@ const InvoiceFormPage: React.FC = () => {
                               };
                             });
                           }}
-                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                          className={`w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 text-right ${
+                            errors.find(error => error.field === `serviceCharges[${index}].quantity`)
+                              ? 'bg-red-50 focus:bg-red-50 focus:ring-red-500 border border-red-300'
+                              : 'focus:bg-blue-50 focus:ring-blue-500'
+                          }`}
                         />
+                        {errors.find(error => error.field === `serviceCharges[${index}].quantity`) && (
+                          <div className="mt-1 text-xs text-red-600">
+                            {errors.find(error => error.field === `serviceCharges[${index}].quantity`)?.message}
+                          </div>
+                        )}
                       </div>
 
                       {/* Unit Price */}
@@ -4397,8 +4638,17 @@ const InvoiceFormPage: React.FC = () => {
                               };
                             });
                           }}
-                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                          className={`w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 text-right ${
+                            errors.find(error => error.field === `serviceCharges[${index}].unitPrice`)
+                              ? 'bg-red-50 focus:bg-red-50 focus:ring-red-500 border border-red-300'
+                              : 'focus:bg-blue-50 focus:ring-blue-500'
+                          }`}
                         />
+                        {errors.find(error => error.field === `serviceCharges[${index}].unitPrice`) && (
+                          <div className="mt-1 text-xs text-red-600">
+                            {errors.find(error => error.field === `serviceCharges[${index}].unitPrice`)?.message}
+                          </div>
+                        )}
                       </div>
 
                       {/* Discount */}
@@ -4449,8 +4699,17 @@ const InvoiceFormPage: React.FC = () => {
                               };
                             });
                           }}
-                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                          className={`w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 text-right ${
+                            errors.find(error => error.field === `serviceCharges[${index}].discount`)
+                              ? 'bg-red-50 focus:bg-red-50 focus:ring-red-500 border border-red-300'
+                              : 'focus:bg-blue-50 focus:ring-blue-500'
+                          }`}
                         />
+                        {errors.find(error => error.field === `serviceCharges[${index}].discount`) && (
+                          <div className="mt-1 text-xs text-red-600">
+                            {errors.find(error => error.field === `serviceCharges[${index}].discount`)?.message}
+                          </div>
+                        )}
                       </div>
 
                       {/* Tax Rate */}
@@ -4500,15 +4759,58 @@ const InvoiceFormPage: React.FC = () => {
                               };
                             });
                           }}
-                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                          className={`w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 text-right ${
+                            errors.find(error => error.field === `serviceCharges[${index}].taxRate`)
+                              ? 'bg-red-50 focus:bg-red-50 focus:ring-red-500 border border-red-300'
+                              : 'focus:bg-blue-50 focus:ring-blue-500'
+                          }`}
                         />
+                        {errors.find(error => error.field === `serviceCharges[${index}].taxRate`) && (
+                          <div className="mt-1 text-xs text-red-600">
+                            {errors.find(error => error.field === `serviceCharges[${index}].taxRate`)?.message}
+                          </div>
+                        )}
                       </div>
 
                       {/* Total */}
-                      <div className="p-2 text-center">
+                      <div className="p-2 text-center border-r border-gray-200">
                         <div className="text-sm font-medium text-blue-600">
                           ₹{service.totalPrice?.toFixed(2) || '0.00'}
                         </div>
+                      </div>
+
+                      {/* Remove Button */}
+                      <div className="p-2 text-center">
+                        <button
+                          onClick={() => {
+                            setFormData(prev => {
+                              const newServiceCharges = (prev.serviceCharges || []).filter((_, i) => i !== index);
+                              
+                              // Recalculate totals excluding removed service charge
+                              const calculationResult = calculateQuotationTotals(
+                                prev.items || [],
+                                newServiceCharges,
+                                prev.batteryBuyBack || null,
+                                prev.overallDiscount || 0
+                              );
+                              
+                              return {
+                                ...prev,
+                                serviceCharges: newServiceCharges,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full h-full text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors flex items-center justify-center border-0 hover:bg-red-100 bg-transparent"
+                          title="Remove this service charge"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -4516,38 +4818,6 @@ const InvoiceFormPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Remove Service Charge Button */}
-            {(formData.serviceCharges || []).length > 0 && (
-              <div className="mt-3 flex justify-end">
-                <button
-                  onClick={() => {
-                    setFormData(prev => {
-                      const newServiceCharges = (prev.serviceCharges || []).slice(0, -1);
-                      
-                      // Recalculate totals excluding removed service charge
-                      const calculationResult = calculateQuotationTotals(
-                        prev.items || [],
-                        newServiceCharges,
-                        prev.batteryBuyBack || null,
-                        prev.overallDiscount || 0
-                      );
-                      
-                      return {
-                        ...prev,
-                        serviceCharges: newServiceCharges,
-                        subtotal: calculationResult.subtotal,
-                        totalDiscount: calculationResult.totalDiscount,
-                        totalTax: calculationResult.totalTax,
-                        grandTotal: calculationResult.grandTotal
-                      };
-                    });
-                  }}
-                  className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm transition-colors"
-                >
-                  Remove Last Service Charge
-                </button>
-              </div>
-            )}
           </div>
 
           {/* Battery Buy Back Section */}
@@ -4601,20 +4871,21 @@ const InvoiceFormPage: React.FC = () => {
                 <div className="overflow-x-auto">
                   <div className="bg-gray-100 border-b border-gray-300 min-w-[1200px]">
                     <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
-                      style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px' }}>
+                      style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px 60px' }}>
                       <div className="p-3 border-r border-gray-300 bg-gray-200">Description</div>
                       <div className="p-3 border-r border-gray-300 bg-gray-200">HSN</div>
                       <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
                       <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
                       <div className="p-3 border-r border-gray-300 bg-gray-200">Discount %</div>
                       {/* <div className="p-3 border-r border-gray-300 bg-gray-200">GST %</div> */}
-                      <div className="p-3 text-center bg-gray-200">Total</div>
+                      <div className="p-3 text-center border-r border-gray-300 bg-gray-200">Total</div>
+                      <div className="p-3 text-center bg-gray-200">Action</div>
                     </div>
                   </div>
 
                   <div className="divide-y divide-gray-200 min-w-[1200px]">
                     <div className="grid group hover:bg-blue-50 transition-colors bg-white"
-                      style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px' }}>
+                      style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px 60px' }}>
                       
                       {/* Description */}
                       <div className="p-2 border-r border-gray-200">
@@ -4876,10 +5147,42 @@ const InvoiceFormPage: React.FC = () => {
                       </div> */}
 
                       {/* Total */}
-                      <div className="p-2 text-center">
+                      <div className="p-2 text-center border-r border-gray-200">
                         <div className="text-sm font-medium text-red-600">
                           ₹{formData.batteryBuyBack.totalPrice?.toFixed(2) || '0.00'}
                         </div>
+                      </div>
+
+                      {/* Remove Button */}
+                      <div className="p-2 text-center">
+                        <button
+                          onClick={() => {
+                            setFormData(prev => {
+                              // Remove battery buy back by setting it to null
+                              const calculationResult = calculateQuotationTotals(
+                                prev.items || [],
+                                prev.serviceCharges || [],
+                                null, // Set battery buy back to null
+                                prev.overallDiscount || 0
+                              );
+                              
+                              return {
+                                ...prev,
+                                batteryBuyBack: undefined,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full h-full text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors flex items-center justify-center border-0 hover:bg-red-100 bg-transparent"
+                          title="Remove battery buy back"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -4892,47 +5195,6 @@ const InvoiceFormPage: React.FC = () => {
               </div>
             )}
 
-            {/* Remove Battery Buy Back Button */}
-            {formData.batteryBuyBack && formData.batteryBuyBack.description && (
-              <div className="mt-3 flex justify-end">
-                <button
-                  onClick={() => {
-                    setFormData(prev => {
-                      const newBatteryBuyBack = {
-                        description: '',
-                        quantity: 0,
-                        unitPrice: 0,
-                        discount: 0,
-                        discountedAmount: 0,
-                        taxRate: 0,
-                        taxAmount: 0,
-                        totalPrice: 0
-                      };
-                      
-                      // Recalculate totals excluding battery buy back
-                      const calculationResult = calculateQuotationTotals(
-                        prev.items || [],
-                        prev.serviceCharges || [],
-                        newBatteryBuyBack,
-                        prev.overallDiscount || 0
-                      );
-                      
-                      return {
-                        ...prev,
-                        batteryBuyBack: newBatteryBuyBack,
-                        subtotal: calculationResult.subtotal,
-                        totalDiscount: calculationResult.totalDiscount,
-                        totalTax: calculationResult.totalTax,
-                        grandTotal: calculationResult.grandTotal
-                      };
-                    });
-                  }}
-                  className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm transition-colors"
-                >
-                  Remove Battery Buy Back
-                </button>
-              </div>
-            )}
 
             {/* Note about Battery Buy Back */}
             <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
@@ -5028,42 +5290,138 @@ const InvoiceFormPage: React.FC = () => {
                 </div>
               </div>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1 mt-3">
+                QR Code Image <span className="text-gray-400 font-normal">(Optional)</span>
+              </label>
+              <div className="space-y-3">
+                {!qrCodePreview ? (
+                  <div
+                    className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors"
+                    onDragOver={handleQrCodeDragOver}
+                    onDragLeave={handleQrCodeDragLeave}
+                    onDrop={handleQrCodeDrop}
+                  >
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleQrCodeUpload}
+                      className="hidden"
+                      id="qr-code-upload"
+                    />
+                    <label
+                      htmlFor="qr-code-upload"
+                      className="cursor-pointer flex flex-col items-center space-y-2"
+                    >
+                      <QrCode className="w-12 h-12 text-gray-400" />
+                      <div className="text-sm text-gray-600">
+                        <span className="font-medium text-blue-600 hover:text-blue-500">
+                          Click to upload
+                        </span>{' '}
+                        or drag and drop
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        PNG, JPG, JPEG up to 5MB
+                      </div>
+                    </label>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="relative inline-block">
+                      <img
+                        src={qrCodePreview}
+                        alt="QR Code Preview"
+                        className="max-w-xs max-h-64 rounded-lg border border-gray-200 shadow-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={removeQrCode}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+                        title="Remove QR Code"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {qrCodeImage && <div className="text-sm text-gray-600">
+                      <strong>File:</strong> {qrCodeImage?.name}
+                      <br />
+                      <strong>Size:</strong> {qrCodeImage?.size ? (qrCodeImage.size / 1024 / 1024).toFixed(2) : '0'} MB
+                    </div>}
+                  </div>
+                )}
+
+                <p className="text-sm text-gray-500 mt-2">
+                  Upload a QR code image that will be included in the invoice
+                </p>
+              </div>
+            </div>
           </div>
 
-          {/* Notes */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
-            <textarea
-              value={formData.notes || ''}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === 'Tab' && e.shiftKey) {
-                  e.preventDefault();
-                  const lastRowIndex = (formData.items || []).length - 1;
-                  setTimeout(() => {
-                    const lastQuantityInput = document.querySelector(`[data-row="${lastRowIndex}"][data-field="quantity"]`) as HTMLInputElement;
-                    if (lastQuantityInput) lastQuantityInput.focus();
-                  }, 50);
-                } else if (e.key === 'Tab' && !e.shiftKey) {
-                  e.preventDefault();
-                  setTimeout(() => {
-                    if (isSalesInvoice) {
-                      const overallDiscountInput = document.querySelector('[data-field="overall-discount"]') as HTMLInputElement;
-                      if (overallDiscountInput) overallDiscountInput.focus();
-                    } else {
-                      const createButton = document.querySelector('[data-action="create"]') as HTMLButtonElement;
-                      if (createButton) createButton.focus();
-                    }
-                  }, 50);
-                }
-              }}
+          {/* Notes and Terms */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
+              <textarea
+                value={formData.notes || ''}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab' && e.shiftKey) {
+                    e.preventDefault();
+                    const lastRowIndex = (formData.items || []).length - 1;
+                    setTimeout(() => {
+                      const lastQuantityInput = document.querySelector(`[data-row="${lastRowIndex}"][data-field="quantity"]`) as HTMLInputElement;
+                      if (lastQuantityInput) lastQuantityInput.focus();
+                    }, 50);
+                  } else if (e.key === 'Tab' && !e.shiftKey) {
+                    e.preventDefault();
+                    // Move to Terms field
+                    setTimeout(() => {
+                      const termsInput = document.querySelector('[data-field="terms"]') as HTMLTextAreaElement;
+                      if (termsInput) termsInput.focus();
+                    }, 50);
+                  }
+                }}
+                rows={3}
+                data-field="notes"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                placeholder="Additional notes..."
+              />
+            </div>
 
-              rows={3}
-              data-field="notes"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-              placeholder="Additional notes..."
-            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Terms & Conditions (Optional)</label>
+              <textarea
+                value={formData.terms || ''}
+                onChange={(e) => setFormData({ ...formData, terms: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab' && e.shiftKey) {
+                    e.preventDefault();
+                    // Move back to Notes field
+                    setTimeout(() => {
+                      const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+                      if (notesInput) notesInput.focus();
+                    }, 50);
+                  } else if (e.key === 'Tab' && !e.shiftKey) {
+                    e.preventDefault();
+                    setTimeout(() => {
+                      if (isSalesInvoice) {
+                        const overallDiscountInput = document.querySelector('[data-field="overall-discount"]') as HTMLInputElement;
+                        if (overallDiscountInput) overallDiscountInput.focus();
+                      } else {
+                        const createButton = document.querySelector('[data-action="create"]') as HTMLButtonElement;
+                        if (createButton) createButton.focus();
+                      }
+                    }, 50);
+                  }
+                }}
+                rows={3}
+                data-field="terms"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                placeholder="Terms and conditions..."
+              />
+            </div>
           </div>
+          
 
           {/* Overall Discount - Only for Sales Invoices */}
           {/* {isSalesInvoice && (

@@ -319,10 +319,26 @@ const generatePaymentConfirmationTemplate = (
 
 // Main email service class
 export class InvoiceEmailService {
+  // Helper function to get primary address email
+  private static getPrimaryAddressEmail(customer: any): string | null {
+    if (!customer?.addresses || !Array.isArray(customer.addresses)) {
+      return null;
+    }
+    
+    // Find primary address
+    const primaryAddress = customer.addresses.find((addr: any) => addr.isPrimary);
+    if (primaryAddress?.email) {
+      return primaryAddress.email;
+    }
+    
+    // If no primary address with email, return null
+    return null;
+  }
+
   private static async getCustomerInfo(invoice: IInvoice): Promise<any> {
     
     if (invoice.customer) {
-      return await Customer.findById(invoice.customer).lean();
+      return await Customer.findById(invoice.customer).select('name email phone addresses').lean();
     }
     
     // If customer is null, create a customer object from supplierEmail
@@ -368,8 +384,11 @@ export class InvoiceEmailService {
       // Get customer information
       const customer = await this.getCustomerInfo(invoice);
 
-      if (!customer?.email) {
-        return { success: false, message: 'Customer email not found' };
+      // Get primary address email
+      const primaryEmail = this.getPrimaryAddressEmail(customer);
+      
+      if (!primaryEmail) {
+        return { success: false, message: 'Customer primary address email not found' };
       }
 
       // Generate secure payment token
@@ -384,7 +403,7 @@ export class InvoiceEmailService {
       const { subject, html } = generateInvoiceEmailTemplate(invoice, customer, paymentLink, companyInfo.name);
 
       // Send email
-      await sendEmail(customer.email, subject, html);
+      await sendEmail(primaryEmail, subject, html);
 
       // Update invoice status to 'sent' if it's currently 'draft'
       if (invoice.status === 'draft') {
@@ -417,8 +436,11 @@ export class InvoiceEmailService {
 
       const customer = await this.getCustomerInfo(invoice);
       
-      if (!customer?.email) {
-        return { success: false, message: 'Customer email not found' };
+      // Get primary address email
+      const primaryEmail = this.getPrimaryAddressEmail(customer);
+      
+      if (!primaryEmail) {
+        return { success: false, message: 'Customer primary address email not found' };
       }
 
       // Calculate days overdue
@@ -438,7 +460,7 @@ export class InvoiceEmailService {
       const companyInfo = await this.getCompanyInfo();
       const { subject, html } = generatePaymentReminderTemplate(invoice, customer, paymentLink, daysOverdue, companyInfo.name);
 
-      await sendEmail(customer.email, subject, html);
+      await sendEmail(primaryEmail, subject, html);
 
       return { success: true, message: 'Payment reminder sent successfully' };
 
@@ -464,8 +486,12 @@ export class InvoiceEmailService {
       }
 
       const customer = await this.getCustomerInfo(invoice);
-      if (!customer?.email) {
-        return { success: false, message: 'Customer email not found' };
+      
+      // Get primary address email
+      const primaryEmail = this.getPrimaryAddressEmail(customer);
+      
+      if (!primaryEmail) {
+        return { success: false, message: 'Customer primary address email not found' };
       }
 
       const companyInfo = await this.getCompanyInfo();
@@ -477,7 +503,7 @@ export class InvoiceEmailService {
         companyInfo.name
       );
 
-      await sendEmail(customer.email, subject, html);
+      await sendEmail(primaryEmail, subject, html);
 
       return { success: true, message: 'Payment confirmation sent successfully' };
 

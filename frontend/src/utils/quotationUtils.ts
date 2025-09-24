@@ -175,8 +175,8 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
   const errors: ValidationError[] = [];
 
   // Customer validation
-  if (!data.customer) {
-    errors.push({ field: 'customer', message: 'Customer information is required' });
+  if (!data.customer || !data.customer._id) {
+    errors.push({ field: 'customer', message: 'Customer is required' });
   } else {
     if (!data.customer.name || (typeof data.customer.name === 'string' && !data.customer.name.trim())) {
       errors.push({ field: 'customer.name', message: 'Customer name is required' });
@@ -193,15 +193,15 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
   //   errors.push({ field: 'location', message: 'From location is required' });
   // }
 
-  // Validate billToAddress - Made optional
-  // if (!data.billToAddress || !data.billToAddress.address || (typeof data.billToAddress.address === 'string' && !data.billToAddress.address.trim())) {
-  //   errors.push({ field: 'billToAddress.address', message: 'Bill to address is required' });
-  // }
+  // Validate billToAddress - Required
+  if (!data.billToAddress || !data.billToAddress.address || (typeof data.billToAddress.address === 'string' && !data.billToAddress.address.trim())) {
+    errors.push({ field: 'billToAddress.address', message: 'Bill to address is required' });
+  }
 
-  // Validate shipToAddress - Made optional
-  // if (!data.shipToAddress || !data.shipToAddress.address || (typeof data.shipToAddress.address === 'string' && !data.shipToAddress.address.trim())) {
-  //   errors.push({ field: 'shipToAddress.address', message: 'Ship to address is required' });
-  // }
+  // Validate shipToAddress - Required
+  if (!data.shipToAddress || !data.shipToAddress.address || (typeof data.shipToAddress.address === 'string' && !data.shipToAddress.address.trim())) {
+    errors.push({ field: 'shipToAddress.address', message: 'Ship to address is required' });
+  }
 
   // Validate assigned engineer (optional)
   // No validation needed - field is optional
@@ -256,10 +256,31 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
     });
   }
 
-  // Financial validation - Allow 0 total for quotations without items
-  // if (data.grandTotal !== undefined && data.grandTotal <= 0) {
-  //   errors.push({ field: 'grandTotal', message: 'Grand total must be greater than 0' });
-  // }
+  // Financial validation - grand total must be > 0
+  if (data.grandTotal === undefined || Number(data.grandTotal) <= 0) {
+    errors.push({ field: 'grandTotal', message: 'Grand total must be greater than 0' });
+  }
+
+  // Service charges validation - require description if a row exists or has any values
+  if (Array.isArray(data.serviceCharges) && (data.serviceCharges?.length ?? 0) > 0) {
+    (data.serviceCharges || []).forEach((service, index) => {
+      const hasAnyValue = (
+        (service?.description && String(service.description).trim() !== '') ||
+        Number(service?.quantity) > 0 ||
+        Number(service?.unitPrice) > 0 ||
+        Number(service?.discount) > 0 ||
+        Number(service?.taxRate) > 0 ||
+        (service?.hsnNumber && String(service.hsnNumber).trim() !== '')
+      );
+
+      // If the row has any value or simply exists, ensure description is present
+      if ((data.serviceCharges?.length ?? 0) > 0 && !service?.description?.toString().trim()) {
+        if (hasAnyValue || (data.serviceCharges?.length ?? 0) > 0) {
+          errors.push({ field: `serviceCharges[${index}].description`, message: 'Service description is required' });
+        }
+      }
+    });
+  }
 
   return {
     isValid: errors.length === 0,
@@ -544,14 +565,28 @@ export const sanitizeQuotationData = (data: any): any => {
       taxRate: Number(item.taxRate) || 0
     })) : [],
     // New fields for service charges and battery buy back
-    serviceCharges: Array.isArray(data.serviceCharges) ? data.serviceCharges.map((service: any) => ({
-      description: String(service.description || '').trim(),
-      hsnNumber: String(service.hsnNumber || '').trim(), // Add HSN field for service charges
-      quantity: Number(service.quantity) || 1,
-      unitPrice: Number(service.unitPrice) || 0,
-      discount: Number(service.discount) || 0,
-      taxRate: Number(service.taxRate) || 18
-    })) : [],
+    // Filter out completely empty service rows to avoid backend validation errors
+    serviceCharges: Array.isArray(data.serviceCharges)
+      ? data.serviceCharges
+          .filter((service: any) => {
+            const desc = String(service?.description || '').trim();
+            const hasNumbers =
+              (Number(service?.quantity) || 0) > 0 ||
+              (Number(service?.unitPrice) || 0) > 0 ||
+              (Number(service?.discount) || 0) > 0 ||
+              (Number(service?.taxRate) || 0) > 0;
+            const hasHSN = String(service?.hsnNumber || '').trim() !== '';
+            return desc !== '' || hasNumbers || hasHSN;
+          })
+          .map((service: any) => ({
+            description: String(service.description || '').trim(),
+            hsnNumber: String(service.hsnNumber || '').trim(), // Add HSN field for service charges
+            quantity: Number(service.quantity) || 1,
+            unitPrice: Number(service.unitPrice) || 0,
+            discount: Number(service.discount) || 0,
+            taxRate: Number(service.taxRate) || 18
+          }))
+      : [],
     location: data.location && data.location.trim() ? data.location.trim() : undefined,
     batteryBuyBack: data.batteryBuyBack ? {
       description: String(data.batteryBuyBack.description || 'Battery Buy Back').trim(),

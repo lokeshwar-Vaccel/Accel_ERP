@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
@@ -133,6 +134,7 @@ interface AMCQuotationData extends Omit<QuotationData, 'batteryBuyBack'> {
     offerItems: AMCOfferItem[];
     sparesItems: AMCSpareItem[];
     selectedCustomerDG: any;
+    subject?: string;
     refOfQuote: string;
     paymentTermsText: string;
     validityText: string;
@@ -202,6 +204,7 @@ const AMCQuotationForm: React.FC = () => {
         }],
         sparesItems: [],
         selectedCustomerDG: null,
+        subject: '',
         refOfQuote: '',
         paymentTermsText: '',
         validityText: '',
@@ -209,6 +212,7 @@ const AMCQuotationForm: React.FC = () => {
         amcPeriodTo: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
         gstIncluded: true
     });
+    console.log("quotationData:",quotationData);
     const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
     const [customerSearchTerm, setCustomerSearchTerm] = useState<string | undefined>(undefined);
@@ -217,8 +221,11 @@ const AMCQuotationForm: React.FC = () => {
     const [showLocationDropdown, setShowLocationDropdown] = useState(false);
     const [locationSearchTerm, setLocationSearchTerm] = useState('');
     const [customerDGDetails, setCustomerDGDetails] = useState<any[]>([]);
-    const [showDGDropdown, setShowDGDropdown] = useState(false);
-    const [dgSearchTerm, setDgSearchTerm] = useState('');
+    const [dgRowSearchTerms, setDgRowSearchTerms] = useState<Record<number, string>>({});
+    const [showDGRowDropdowns, setShowDGRowDropdowns] = useState<Record<number, boolean>>({});
+    const [dgDropdownPosition, setDgDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null);
+    const [activeDGRowIndex, setActiveDGRowIndex] = useState<number | null>(null);
+    const [activeDGInputEl, setActiveDGInputEl] = useState<HTMLInputElement | null>(null);
     const [showEngineerDropdown, setShowEngineerDropdown] = useState(false);
     const [engineerSearchTerm, setEngineerSearchTerm] = useState<string | undefined>(undefined);
     const [sparesProductSearchTerms, setSparesProductSearchTerms] = useState<Record<number, string>>({});
@@ -260,9 +267,9 @@ const AMCQuotationForm: React.FC = () => {
             let customersData: Customer[] = [];
             if (response.success && response.data) {
                 // Handle different response structures
-                const customersArray = Array.isArray(response.data) ? response.data : 
-                                     ((response.data as any).customers ? (response.data as any).customers : []);
-                
+                const customersArray = Array.isArray(response.data) ? response.data :
+                    ((response.data as any).customers ? (response.data as any).customers : []);
+
                 customersData = customersArray.map((customer: any) => ({
                     _id: customer._id || '',
                     name: customer.name || '',
@@ -288,8 +295,8 @@ const AMCQuotationForm: React.FC = () => {
             try {
                 const stockResp = await apiClient.stock.getStock({ limit: 10000, page: 1 });
                 const stockData = (stockResp as any)?.data;
-                const stockArray = stockResp.success && stockData && Array.isArray((stockData as any).stock)
-                    ? (stockData as any).stock
+                const stockArray = stockResp.success && stockData && Array.isArray((stockData as any).stockLevels)
+                    ? (stockData as any).stockLevels
                     : [];
                 if (stockArray.length > 0) {
                     productsData = stockArray.map((item: any) => ({
@@ -312,7 +319,14 @@ const AMCQuotationForm: React.FC = () => {
             // Fallback to products list if stock is empty or failed
             if (productsData.length === 0) {
                 try {
-                    const prodResp = await apiClient.products.getAll({ limit: 10000, page: 1 });
+                    // Try getForDropdown first (simpler response)
+                    let prodResp;
+                    try {
+                        prodResp = await apiClient.products.getForDropdown();
+                    } catch (dropdownError) {
+                        prodResp = await apiClient.products.getAll({ limit: 10000, page: 1 });
+                    }
+                    
                     const data = (prodResp as any)?.data;
                     const productsArray = Array.isArray(data)
                         ? data
@@ -336,6 +350,48 @@ const AMCQuotationForm: React.FC = () => {
                 }
             }
 
+            // If still no products, create some mock data for testing
+            if (productsData.length === 0) {
+                productsData = [
+                    {
+                        _id: 'mock1',
+                        name: 'Engine Oil Filter',
+                        price: 150,
+                        category: 'Filters',
+                        brand: 'Mahindra',
+                        gst: 18,
+                        partNo: 'FIL001',
+                        hsnNumber: '84212300',
+                        uom: 'nos',
+                        availableQuantity: 50
+                    },
+                    {
+                        _id: 'mock2',
+                        name: 'Air Filter Element',
+                        price: 200,
+                        category: 'Filters',
+                        brand: 'Mahindra',
+                        gst: 18,
+                        partNo: 'AIR002',
+                        hsnNumber: '84212300',
+                        uom: 'nos',
+                        availableQuantity: 25
+                    },
+                    {
+                        _id: 'mock3',
+                        name: 'Fuel Filter',
+                        price: 180,
+                        category: 'Filters',
+                        brand: 'Mahindra',
+                        gst: 18,
+                        partNo: 'FUEL003',
+                        hsnNumber: '84212300',
+                        uom: 'nos',
+                        availableQuantity: 30
+                    }
+                ];
+            }
+
             setProducts(productsData);
         } catch (error) {
             console.error('Error fetching products:', error);
@@ -349,9 +405,9 @@ const AMCQuotationForm: React.FC = () => {
             let locationsData: StockLocationData[] = [];
             if (response.success && response.data) {
                 // Handle different response structures
-                const locationsArray = Array.isArray(response.data) ? response.data : 
-                                     ((response.data as any).locations ? (response.data as any).locations : []);
-                
+                const locationsArray = Array.isArray(response.data) ? response.data :
+                    ((response.data as any).locations ? (response.data as any).locations : []);
+
                 locationsData = locationsArray.map((location: any) => ({
                     _id: location._id,
                     name: location.name,
@@ -495,8 +551,8 @@ const AMCQuotationForm: React.FC = () => {
 
         // Recalculate totals for this item
         const item = updatedItems[index];
-        const safeQty = (item.qty as unknown as number) || 0;
-        const safeCost = (item.amcCostPerDG as unknown as number) || 0;
+        const safeQty = Number(item.qty) || 0;
+        const safeCost = Number(item.amcCostPerDG) || 0;
         const totalAMCAmountPerDG = safeQty * safeCost;
         const gst18 = totalAMCAmountPerDG * 0.18;
         const totalAMCCost = totalAMCAmountPerDG + gst18;
@@ -508,10 +564,51 @@ const AMCQuotationForm: React.FC = () => {
             totalAMCCost
         };
 
+        // Calculate AMC totals
+        const amcTotals = calculateAMCTotals(updatedItems, quotationData.gstIncluded);
+
         setQuotationData(prev => ({
             ...prev,
-            offerItems: updatedItems
+            offerItems: updatedItems,
+            subtotal: amcTotals.subtotal,
+            totalTax: amcTotals.totalTax,
+            grandTotal: amcTotals.grandTotal
         }));
+    };
+
+    // Calculate AMC totals from offer items
+    const calculateAMCTotals = (items: AMCOfferItem[], gstIncluded: boolean = true) => {
+        let subtotal = 0;
+        let totalTax = 0;
+        let grandTotal = 0;
+
+        items.forEach(item => {
+            const qty = Number(item.qty) || 0;
+            const costPerDG = Number(item.amcCostPerDG) || 0;
+            const itemSubtotal = qty * costPerDG;
+            
+            let itemTax = 0;
+            let itemTotal = itemSubtotal;
+            
+            if (gstIncluded) {
+                // GST is included in the cost per DG
+                itemTax = itemSubtotal * 0.18; // 18% GST
+                itemTotal = itemSubtotal + itemTax;
+            } else {
+                // GST is not included, so the cost per DG is the final amount
+                itemTotal = itemSubtotal;
+            }
+
+            subtotal += itemSubtotal;
+            totalTax += itemTax;
+            grandTotal += itemTotal;
+        });
+
+        return {
+            subtotal: Math.round(subtotal * 100) / 100,
+            totalTax: Math.round(totalTax * 100) / 100,
+            grandTotal: Math.round(grandTotal * 100) / 100
+        };
     };
 
     const addOfferItem = () => {
@@ -527,16 +624,28 @@ const AMCQuotationForm: React.FC = () => {
             totalAMCCost: 0
         };
 
+        const updatedItems = [...quotationData.offerItems, newItem];
+        const amcTotals = calculateAMCTotals(updatedItems, quotationData.gstIncluded);
+
         setQuotationData(prev => ({
             ...prev,
-            offerItems: [...prev.offerItems, newItem]
+            offerItems: updatedItems,
+            subtotal: amcTotals.subtotal,
+            totalTax: amcTotals.totalTax,
+            grandTotal: amcTotals.grandTotal
         }));
     };
 
     const removeOfferItem = (index: number) => {
+        const updatedItems = quotationData.offerItems.filter((_, i) => i !== index);
+        const amcTotals = calculateAMCTotals(updatedItems, quotationData.gstIncluded);
+
         setQuotationData(prev => ({
             ...prev,
-            offerItems: prev.offerItems.filter((_, i) => i !== index)
+            offerItems: updatedItems,
+            subtotal: amcTotals.subtotal,
+            totalTax: amcTotals.totalTax,
+            grandTotal: amcTotals.grandTotal
         }));
     };
 
@@ -571,8 +680,8 @@ const AMCQuotationForm: React.FC = () => {
             ...old,
             productId: product._id,
             partNo: product.partNo || '',
-            // Keep description manual - do not override from product
-            description: old.description || '',
+            // Auto-fill description from product name if not already set
+            description: old.description || product.name || '',
             hsnCode: product.hsnNumber || '',
             uom: product.uom || 'nos',
             availableQuantity: product.availableQuantity || 0,
@@ -586,7 +695,7 @@ const AMCQuotationForm: React.FC = () => {
             ...prev,
             sparesItems: updatedItems
         }));
-        setSparesProductSearchTerms(prev => ({ ...prev, [index]: '' }));
+        setSparesProductSearchTerms(prev => ({ ...prev, [index]: product.partNo || product.name || '' }));
         setShowSparesProductDropdowns(prev => ({ ...prev, [index]: false }));
     };
 
@@ -766,30 +875,77 @@ const AMCQuotationForm: React.FC = () => {
         try {
             // Validate AMC-specific data
             const amcValidationErrors = validateAMCQuotationData(quotationData);
-            
+
             // Also validate basic quotation data
             const basicValidationResult = validateQuotationData(quotationData as Partial<QuotationData>);
-            
+
             // Combine all validation errors
             const allErrors = [...amcValidationErrors, ...basicValidationResult.errors];
-            
-            if (allErrors.length > 0) {
-                setValidationErrors(allErrors);
-                toast.error(`Please fix ${allErrors.length} validation error(s)`);
+
+            // AMC-specific: ignore these generic quotation validations
+            const ignoredFieldsForAMC = new Set([
+                'billToAddress.address',
+                'shipToAddress.address',
+                'grandTotal'
+            ]);
+            const filteredErrors = allErrors.filter(err => !ignoredFieldsForAMC.has(err.field));
+
+            if (filteredErrors.length > 0) {
+                setValidationErrors(filteredErrors);
+                toast.error(`Please fix ${filteredErrors.length} validation error(s)`);
                 return;
             }
 
             setSubmitting(true);
 
+            // Calculate AMC totals from offer items
+            const amcTotals = calculateAMCTotals(quotationData.offerItems, quotationData.gstIncluded);
+
             // Sanitize data
             const sanitizedData = sanitizeQuotationData(quotationData);
 
-            // Add AMC-specific fields
+            // Add AMC-specific fields with calculated totals
             const amcQuotationData = {
                 ...sanitizedData,
                 quotationType: 'amc',
-                ...quotationData
+                // AMC-specific fields
+                amcType: quotationData.amcType,
+                contractDuration: quotationData.contractDuration,
+                contractStartDate: quotationData.contractStartDate,
+                contractEndDate: quotationData.contractEndDate,
+                billingCycle: quotationData.billingCycle,
+                numberOfVisits: quotationData.numberOfVisits,
+                numberOfOilServices: quotationData.numberOfOilServices,
+                responseTime: quotationData.responseTime,
+                coverageArea: quotationData.coverageArea,
+                emergencyContactHours: quotationData.emergencyContactHours,
+                exclusions: quotationData.exclusions,
+                performanceMetrics: quotationData.performanceMetrics,
+                warrantyTerms: quotationData.warrantyTerms,
+                paymentTerms: quotationData.paymentTerms,
+                renewalTerms: quotationData.renewalTerms,
+                discountPercentage: quotationData.discountPercentage,
+                offerItems: quotationData.offerItems,
+                sparesItems: quotationData.sparesItems,
+                selectedCustomerDG: quotationData.selectedCustomerDG,
+                subject: quotationData.subject,
+                refOfQuote: quotationData.refOfQuote,
+                paymentTermsText: quotationData.paymentTermsText,
+                validityText: quotationData.validityText,
+                amcPeriodFrom: quotationData.amcPeriodFrom,
+                amcPeriodTo: quotationData.amcPeriodTo,
+                gstIncluded: quotationData.gstIncluded,
+                // Calculated totals
+                subtotal: amcTotals.subtotal,
+                totalTax: amcTotals.totalTax,
+                grandTotal: amcTotals.grandTotal,
+                totalDiscount: 0, // AMC doesn't use item-level discounts
+                overallDiscount: 0,
+                overallDiscountAmount: 0,
+                roundOff: 0
             };
+
+            console.log('Submitting AMC Quotation Data:', amcQuotationData);
 
             if (isEditMode && quotationFromState?._id) {
                 await apiClient.amcQuotations.update(quotationFromState._id, amcQuotationData);
@@ -799,8 +955,7 @@ const AMCQuotationForm: React.FC = () => {
                 await apiClient.amcQuotations.create(amcQuotationData);
                 toast.success('AMC quotation created successfully');
             }
-navigate('/billing');
-            // Navigation will be handled by the parent component
+            navigate('/amc-quotations');
         } catch (error: any) {
             console.error('Error submitting quotation:', error);
             toast.error(error.response?.data?.message || 'Failed to submit quotation');
@@ -818,10 +973,18 @@ navigate('/billing');
     };
 
     const getFilteredProducts = (searchTerm: string = '') => {
+        if (!searchTerm.trim()) {
+            // Show all products when no search term
+            return products;
+        }
+        
+        const term = searchTerm.toLowerCase();
         return products.filter(product =>
-            (product.name && product.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            (product.partNo && product.partNo.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            (product.brand && product.brand.toLowerCase().includes(searchTerm.toLowerCase()))
+            (product.name && product.name.toLowerCase().includes(term)) ||
+            (product.partNo && product.partNo.toLowerCase().includes(term)) ||
+            (product.brand && product.brand.toLowerCase().includes(term)) ||
+            (product.category && product.category.toLowerCase().includes(term)) ||
+            (product.hsnNumber && product.hsnNumber.toLowerCase().includes(term))
         );
     };
 
@@ -833,18 +996,63 @@ navigate('/billing');
     };
 
     const getFilteredDGDetails = () => {
+        return customerDGDetails;
+    };
+
+    const filterDGs = (term: string) => {
+        const lowerTerm = (term || '').toLowerCase();
         return customerDGDetails.filter(dg => {
-            const engineSerial = dg.engineSerialNumber || dg.engineSlNo || '';
+            const engineSerial = (dg.engineSerialNumber || dg.engineSlNo || dg.engineSerialNo || dg.engineNo || dg.engine || dg.serialNumber || dg.serialNo || dg.serial || '').toString();
             const make = dg.dgMake || dg.make || '';
             const model = dg.dgModel || dg.model || '';
-            
             return (
-                (engineSerial && engineSerial.toLowerCase().includes(dgSearchTerm.toLowerCase())) ||
-                (make && make.toLowerCase().includes(dgSearchTerm.toLowerCase())) ||
-                (model && model.toLowerCase().includes(dgSearchTerm.toLowerCase()))
+                (engineSerial && engineSerial.toLowerCase().includes(lowerTerm)) ||
+                (make && make.toLowerCase().includes(lowerTerm)) ||
+                (model && model.toLowerCase().includes(lowerTerm))
             );
         });
     };
+
+    const getDGEngineSerial = (dg: any): string => {
+        const candidates = [
+            dg?.engineSlNo,
+            dg?.engineSerialNumber,
+            dg?.engineSerialNo,
+            dg?.engineNo,
+            dg?.engine_serial_no,
+            dg?.engine,
+            dg?.serialNumber,
+            dg?.serialNo,
+            dg?.serial
+        ];
+        const val = candidates.find(v => v !== undefined && v !== null && String(v).trim() !== '');
+        return val !== undefined && val !== null ? String(val) : '';
+    };
+
+    const getDGKVA = (dg: any): number => {
+        const candidates = [dg?.dgRatingKVA, dg?.kva, dg?.rating, dg?.dgRating];
+        const val = candidates.find(v => typeof v === 'number' && !isNaN(v));
+        return typeof val === 'number' ? val : 0;
+    };
+
+    // Reposition DG dropdown on scroll/resize to follow the active input
+    useEffect(() => {
+        if (!activeDGInputEl || activeDGRowIndex === null || !showDGRowDropdowns[activeDGRowIndex]) {
+            return;
+        }
+        const updatePosition = () => {
+            const rect = activeDGInputEl.getBoundingClientRect();
+            setDgDropdownPosition({ top: rect.bottom, left: rect.left, width: rect.width });
+        };
+        updatePosition();
+        const opts: any = { capture: true, passive: true };
+        window.addEventListener('scroll', updatePosition, true);
+        window.addEventListener('resize', updatePosition);
+        return () => {
+            window.removeEventListener('scroll', updatePosition, true);
+            window.removeEventListener('resize', updatePosition);
+        };
+    }, [activeDGInputEl, activeDGRowIndex, showDGRowDropdowns]);
 
     const getFilteredEngineers = () => {
         const term = (engineerSearchTerm || '').toLowerCase();
@@ -926,7 +1134,15 @@ navigate('/billing');
                     <div className="flex items-center">
                         <select
                             value={quotationData.amcType}
-                            onChange={(e) => handleInputChange('amcType', e.target.value as 'AMC' | 'CAMC')}
+                            onChange={(e) => {
+                                const newAmcType = e.target.value as 'AMC' | 'CAMC';
+                                handleInputChange('amcType', newAmcType);
+                                
+                                // If switching to CAMC and no spares items exist, add one
+                                if (newAmcType === 'CAMC' && quotationData.sparesItems.length === 0) {
+                                    addSpareItem();
+                                }
+                            }}
                             className={`px-4 py-2 border rounded-full font-medium ${hasFieldError('amcType') ? 'border-red-500 bg-red-50 text-red-700' : 'border-blue-300 bg-blue-50 text-blue-700'}`}
                         >
                             <option value="AMC">AMC</option>
@@ -943,18 +1159,18 @@ navigate('/billing');
             <div className="mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Left Column */}
-                        <div className="space-y-4">
+                    <div className="space-y-4">
                         <div className="flex items-center space-x-4">
                             <span className="font-medium w-20">To, M/S</span>
                             <div className="relative flex-1">
-                                    <input
-                                        type="text"
+                                <input
+                                    type="text"
                                     value={customerSearchTerm !== undefined ? customerSearchTerm : (quotationData.customer.name || '')}
-                                        onChange={(e) => {
+                                    onChange={(e) => {
                                         const value = e.target.value;
                                         setCustomerSearchTerm(value);
-                                            setShowCustomerDropdown(true);
-                                        
+                                        setShowCustomerDropdown(true);
+
                                         // If user clears the input, clear the selected customer
                                         if (!value) {
                                             setQuotationData(prev => ({
@@ -981,13 +1197,13 @@ navigate('/billing');
                                         setTimeout(() => setShowCustomerDropdown(false), 200);
                                     }}
                                     placeholder="From customer list Drop Down"
-                                        className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${getErrorClass('customer.name')}`}
-                                    />
-                                    {getFieldError('customer.name') && (
-                                        <p className="mt-1 text-sm text-red-600">{getFieldError('customer.name')}</p>
-                                    )}
-                                    {showCustomerDropdown && (
-                                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${getErrorClass('customer.name')}`}
+                                />
+                                {getFieldError('customer.name') && (
+                                    <p className="mt-1 text-sm text-red-600">{getFieldError('customer.name')}</p>
+                                )}
+                                {showCustomerDropdown && (
+                                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
                                         {getFilteredCustomers().length > 0 ? (
                                             getFilteredCustomers().map((customer) => (
                                                 <div
@@ -1018,12 +1234,12 @@ navigate('/billing');
                                         ) : (
                                             <div className="px-3 py-2 text-gray-500 text-sm">
                                                 No customers found
-                                        </div>
-                                    )}
-                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
+                            </div>
                         </div>
-                    </div>
 
                         <div className="flex items-center space-x-4">
                             <span className="font-medium w-20">Ref of quote</span>
@@ -1035,7 +1251,7 @@ navigate('/billing');
                                         const value = e.target.value;
                                         setEngineerSearchTerm(value);
                                         setShowEngineerDropdown(true);
-                                        
+
                                         // If user clears the input, clear the selected engineer
                                         if (!value) {
                                             setQuotationData(prev => ({
@@ -1086,74 +1302,22 @@ navigate('/billing');
                                 )}
                             </div>
                         </div>
-                            </div>
+                    </div>
 
                     {/* Right Column */}
                     <div className="space-y-4">
                         <div className="flex items-center space-x-4">
                             <span className="font-medium w-20">Subject</span>
                             <div className="relative flex-1">
-                                    <input
+                                <input
                                     type="text"
-                                    value={quotationData.selectedCustomerDG ? `Offer for AMC / CAMC for your DG set capacity - ${quotationData.selectedCustomerDG.dgMake || quotationData.selectedCustomerDG.make || 'N/A'} ${quotationData.selectedCustomerDG.dgModel || quotationData.selectedCustomerDG.model || 'N/A'} (${quotationData.selectedCustomerDG.dgRatingKVA || quotationData.selectedCustomerDG.kva || quotationData.selectedCustomerDG.rating || 'N/A'} KVA)` : dgSearchTerm}
-                                    onChange={(e) => {
-                                        const value = e.target.value;
-                                        setDgSearchTerm(value);
-                                        setShowDGDropdown(true);
-                                        
-                                        // If user clears the input, clear the selected DG
-                                        if (!value) {
-                                            setQuotationData(prev => ({
-                                                ...prev,
-                                                selectedCustomerDG: null
-                                            }));
-                                        }
-                                    }}
-                                    onFocus={() => setShowDGDropdown(true)}
-                                    onBlur={() => {
-                                        setTimeout(() => setShowDGDropdown(false), 200);
-                                    }}
-                                    placeholder="Drop down from customer DG list"
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
-                                {showDGDropdown && customerDGDetails.length > 0 && (
-                                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                                        {getFilteredDGDetails().length > 0 ? (
-                                            getFilteredDGDetails().map((dg) => (
-                                                <div
-                                                    key={dg._id}
-                                                    className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
-                                                    onMouseDown={(e) => {
-                                                        e.preventDefault();
-                                                        setQuotationData(prev => ({
-                                                            ...prev,
-                                                            selectedCustomerDG: dg,
-                                                            offerItems: prev.offerItems.map((item, index) => 
-                                                                index === 0 ? {
-                                                                    ...item,
-                                                                    make: dg.dgMake || dg.make || '',
-                                                                    engineSlNo: dg.engineSerialNumber || dg.engineSlNo || '',
-                                                                    dgRatingKVA: dg.dgRatingKVA || dg.kva || dg.rating || 0
-                                                                } : item
-                                                            )
-                                                        }));
-                                                        setDgSearchTerm('');
-                                                        setShowDGDropdown(false);
-                                                    }}
-                                                >
-                                                    <div className="font-medium">{dg.dgMake || dg.make || 'N/A'} {dg.dgModel || dg.model || 'N/A'}</div>
-                                                    <div className="text-sm text-gray-500">Engine: {dg.engineSerialNumber || dg.engineSlNo || 'N/A'} | {dg.dgRatingKVA || dg.kva || dg.rating || 'N/A'} KVA</div>
-                                </div>
-                                            ))
-                                        ) : (
-                                            <div className="px-3 py-2 text-gray-500 text-sm">
-                                                No DG sets found
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                                </div>
+                                    value={quotationData.subject || ''}
+                                    onChange={(e) => handleInputChange('subject' as any, e.target.value)}
+                                    placeholder="Enter subject manually"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
                             </div>
+                        </div>
 
                         <div className="flex items-center space-x-4">
                             <span className="font-medium w-20">Create Date</span>
@@ -1168,13 +1332,13 @@ navigate('/billing');
                         </div>
                     </div>
                 </div>
-                            </div>
+            </div>
 
             {/* Offer Details Table */}
             <div className="mb-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Offer Details</h3>
-                <div className="overflow-x-auto">
-                    <table className="w-full border border-gray-300">
+                <div className="overflow-x-auto overflow-y-visible">
+                    <table className="w-full border border-gray-300 overflow-visible">
                         <thead className="bg-gray-50">
                             <tr>
                                 <th className="border border-gray-300 px-4 py-2 text-left">Make</th>
@@ -1189,23 +1353,48 @@ navigate('/billing');
                                 <th className="border border-gray-300 px-4 py-2 text-left">Actions</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody className="overflow-visible">
                             {quotationData.offerItems.map((item, index) => (
                                 <tr key={index}>
-                                    <td className="border border-gray-300 px-4 py-2">
-                                    <input
-                                            type="text"
-                                            value={item.make}
-                                            onChange={(e) => handleOfferItemChange(index, 'make', e.target.value)}
-                                            className={`w-full border-none focus:outline-none ${hasFieldError(`offerItems[${index}].make`) ? 'bg-red-50' : ''}`}
-                                            placeholder="Select from customer DG list"
-                                        />
-                                        {getFieldError(`offerItems[${index}].make`) && (
-                                            <p className="text-xs text-red-600 mt-1">{getFieldError(`offerItems[${index}].make`)}</p>
-                                        )}
+                                    <td className="border border-gray-300 px-4 py-2 relative overflow-visible z-10">
+                                        <div className="relative z-50">
+                                            <input
+                                                type="text"
+                                                value={dgRowSearchTerms[index] ?? item.make}
+                                                onChange={(e) => {
+                                                    const value = e.target.value;
+                                                    setDgRowSearchTerms(prev => ({ ...prev, [index]: value }));
+                                                    setShowDGRowDropdowns(prev => ({ ...prev, [index]: true }));
+                                                    handleOfferItemChange(index, 'make', value);
+                                                }}
+                                                onFocus={(e) => {
+                                                    const rect = e.target.getBoundingClientRect();
+                                                    setActiveDGInputEl(e.target as HTMLInputElement);
+                                                    setDgDropdownPosition({
+                                                        top: rect.bottom,
+                                                        left: rect.left,
+                                                        width: rect.width
+                                                    });
+                                                    setActiveDGRowIndex(index);
+                                                    setDgRowSearchTerms(prev => ({ ...prev, [index]: item.make || '' }));
+                                                    setShowDGRowDropdowns(prev => ({ ...prev, [index]: true }));
+                                                }}
+                                                onBlur={() => setTimeout(() => {
+                                                    setShowDGRowDropdowns(prev => ({ ...prev, [index]: false }));
+                                                    setDgDropdownPosition(null);
+                                                    setActiveDGRowIndex(null);
+                                                    setActiveDGInputEl(null);
+                                                }, 200)}
+                                                className={`w-full border-none focus:outline-none ${hasFieldError(`offerItems[${index}].make`) ? 'bg-red-50' : ''}`}
+                                                placeholder="Search/select from customer DG list or type manually"
+                                            />
+                                            {getFieldError(`offerItems[${index}].make`) && (
+                                                <p className="text-xs text-red-600 mt-1">{getFieldError(`offerItems[${index}].make`)}</p>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
-                                    <input
+                                        <input
                                             type="text"
                                             value={item.engineSlNo}
                                             onChange={(e) => handleOfferItemChange(index, 'engineSlNo', e.target.value)}
@@ -1217,8 +1406,8 @@ navigate('/billing');
                                         )}
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
-                                <input
-                                    type="number"
+                                        <input
+                                            type="number"
                                             value={item.dgRatingKVA ?? ''}
                                             onChange={(e) => {
                                                 const v = e.target.value;
@@ -1232,8 +1421,8 @@ navigate('/billing');
                                         )}
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
-                                <input
-                                    type="text"
+                                        <input
+                                            type="text"
                                             value={item.typeOfVisits}
                                             onChange={(e) => handleOfferItemChange(index, 'typeOfVisits', e.target.value)}
                                             className={`w-full border-none focus:outline-none ${hasFieldError(`offerItems[${index}].typeOfVisits`) ? 'bg-red-50' : ''}`}
@@ -1244,7 +1433,7 @@ navigate('/billing');
                                         )}
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
-                                <input
+                                        <input
                                             type="number"
                                             value={item.qty ?? ''}
                                             onChange={(e) => {
@@ -1259,7 +1448,7 @@ navigate('/billing');
                                         )}
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
-                                <input
+                                        <input
                                             type="number"
                                             value={item.amcCostPerDG ?? ''}
                                             onChange={(e) => {
@@ -1274,7 +1463,7 @@ navigate('/billing');
                                         )}
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
-                                    <input
+                                        <input
                                             type="number"
                                             value={item.totalAMCAmountPerDG}
                                             readOnly
@@ -1283,7 +1472,7 @@ navigate('/billing');
                                         />
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
-                                    <input
+                                        <input
                                             type="number"
                                             value={item.gst18}
                                             readOnly
@@ -1292,8 +1481,8 @@ navigate('/billing');
                                         />
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
-                                <input
-                                    type="number"
+                                        <input
+                                            type="number"
                                             value={item.totalAMCCost}
                                             readOnly
                                             className="w-full border-none bg-gray-50"
@@ -1314,80 +1503,80 @@ navigate('/billing');
                             ))}
                         </tbody>
                     </table>
-                            </div>
-                <div className="mt-4">
-                            <Button
-                        onClick={addOfferItem}
-                                className="flex items-center space-x-2"
-                            >
-                                <Plus className="w-4 h-4" />
-                        <span>Add DG Set</span>
-                            </Button>
                 </div>
-                        </div>
+                <div className="mt-4">
+                    <Button
+                        onClick={addOfferItem}
+                        className="flex items-center space-x-2"
+                    >
+                        <Plus className="w-4 h-4" />
+                        <span>Add DG Set</span>
+                    </Button>
+                </div>
+            </div>
 
             {/* Terms & Conditions */}
             <div className="mb-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 underline">TERMS & CONDITIONS:</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Left Column */}
-                        <div className="space-y-4">
+                    <div className="space-y-4">
                         <div className="flex items-center space-x-4">
                             <span className="font-medium w-24">PAYMENT:</span>
-                                            <input
-                                                type="text"
+                            <input
+                                type="text"
                                 value={quotationData.paymentTermsText}
                                 onChange={(e) => handleInputChange('paymentTermsText', e.target.value)}
                                 className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${getErrorClass('paymentTermsText')}`}
                                 placeholder="Manual Entry"
-                                            />
-                                            {getFieldError('paymentTermsText') && (
-                                                <p className="mt-1 text-sm text-red-600">{getFieldError('paymentTermsText')}</p>
-                                            )}
-                                        </div>
+                            />
+                            {getFieldError('paymentTermsText') && (
+                                <p className="mt-1 text-sm text-red-600">{getFieldError('paymentTermsText')}</p>
+                            )}
+                        </div>
                         <div className="flex items-center space-x-4">
                             <span className="font-medium w-24">AMC Start Date:</span>
-                                            <input
+                            <input
                                 type="date"
                                 value={quotationData.amcPeriodFrom ? new Date(quotationData.amcPeriodFrom).toISOString().split('T')[0] : ''}
                                 onChange={(e) => handleInputChange('amcPeriodFrom', new Date(e.target.value))}
                                 className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${getErrorClass('amcPeriodFrom')}`}
-                                            />
-                                            {getFieldError('amcPeriodFrom') && (
-                                                <p className="mt-1 text-sm text-red-600">{getFieldError('amcPeriodFrom')}</p>
-                                            )}
-                                        </div>
-                                        </div>
+                            />
+                            {getFieldError('amcPeriodFrom') && (
+                                <p className="mt-1 text-sm text-red-600">{getFieldError('amcPeriodFrom')}</p>
+                            )}
+                        </div>
+                    </div>
 
                     {/* Right Column */}
                     <div className="space-y-4">
                         <div className="flex items-center space-x-4">
                             <span className="font-medium w-24">VALIDITY:</span>
-                                            <input
+                            <input
                                 type="text"
                                 value={quotationData.validityText}
                                 onChange={(e) => handleInputChange('validityText', e.target.value)}
                                 className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${getErrorClass('validityText')}`}
                                 placeholder="Manual Entry"
-                                            />
-                                            {getFieldError('validityText') && (
-                                                <p className="mt-1 text-sm text-red-600">{getFieldError('validityText')}</p>
-                                            )}
-                                        </div>
+                            />
+                            {getFieldError('validityText') && (
+                                <p className="mt-1 text-sm text-red-600">{getFieldError('validityText')}</p>
+                            )}
+                        </div>
                         <div className="flex items-center space-x-4">
                             <span className="font-medium w-24">AMC End Date:</span>
-                                            <input
+                            <input
                                 type="date"
                                 value={quotationData.amcPeriodTo ? new Date(quotationData.amcPeriodTo).toISOString().split('T')[0] : ''}
                                 onChange={(e) => handleInputChange('amcPeriodTo', new Date(e.target.value))}
                                 className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${getErrorClass('amcPeriodTo')}`}
-                                            />
-                                            {getFieldError('amcPeriodTo') && (
-                                                <p className="mt-1 text-sm text-red-600">{getFieldError('amcPeriodTo')}</p>
-                                            )}
-                                        </div>
-                                        </div>
-                                        </div>
+                            />
+                            {getFieldError('amcPeriodTo') && (
+                                <p className="mt-1 text-sm text-red-600">{getFieldError('amcPeriodTo')}</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
 
                 {/* GST Section */}
                 <div className="mt-4">
@@ -1395,15 +1584,27 @@ navigate('/billing');
                         <span className="font-medium w-24">GST:</span>
                         <select
                             value={quotationData.gstIncluded ? 'included' : 'not_included'}
-                            onChange={(e) => handleInputChange('gstIncluded', e.target.value === 'included')}
+                            onChange={(e) => {
+                                const gstIncluded = e.target.value === 'included';
+                                handleInputChange('gstIncluded', gstIncluded);
+                                // Recalculate totals when GST setting changes
+                                const amcTotals = calculateAMCTotals(quotationData.offerItems, gstIncluded);
+                                setQuotationData(prev => ({
+                                    ...prev,
+                                    gstIncluded,
+                                    subtotal: amcTotals.subtotal,
+                                    totalTax: amcTotals.totalTax,
+                                    grandTotal: amcTotals.grandTotal
+                                }));
+                            }}
                             className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                             <option value="included">Included</option>
                             <option value="not_included">Not Included</option>
                         </select>
-                                        </div>
-                                    </div>
-                        </div>
+                    </div>
+                </div>
+            </div>
 
 
             {/* CAMC Spares Section */}
@@ -1413,9 +1614,9 @@ navigate('/billing');
                         <h3 className="text-lg font-semibold text-gray-900">Spares replaced in this periodical service One:</h3>
                         <div className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
                             Only for CAMC Contract
-                                </div>
-                                </div>
-                    <div className="overflow-x-auto">
+                        </div>
+                    </div>
+                    <div className="overflow-x-auto overflow-y-visible relative">
                         <table className="w-full border border-gray-300">
                             <thead className="bg-gray-50">
                                 <tr>
@@ -1424,6 +1625,7 @@ navigate('/billing');
                                     <th className="border border-gray-300 px-4 py-2 text-left">Description</th>
                                     <th className="border border-gray-300 px-4 py-2 text-left">HSN Code</th>
                                     <th className="border border-gray-300 px-4 py-2 text-left">Qty</th>
+                                    <th className="border border-gray-300 px-4 py-2 text-left">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1431,10 +1633,11 @@ navigate('/billing');
                                     <tr key={index}>
                                         <td className="border border-gray-300 px-4 py-2 text-center">{index + 1}</td>
                                         {/* Part No (searchable) */}
-                                        <td className="border border-gray-300 px-4 py-2">
+                                        <td className="border border-gray-300 px-4 py-2 relative">
                                             <div className="relative">
                                                 <input
                                                     type="text"
+                                                    data-spare-index={index}
                                                     value={sparesProductSearchTerms[index] ?? item.partNo ?? ''}
                                                     onChange={(e) => {
                                                         setSparesProductSearchTerms(prev => ({ ...prev, [index]: e.target.value }));
@@ -1453,18 +1656,26 @@ navigate('/billing');
                                                 {getFieldError(`sparesItems[${index}].partNo`) && (
                                                     <p className="text-xs text-red-600 mt-1">{getFieldError(`sparesItems[${index}].partNo`)}</p>
                                                 )}
-                                                {showSparesProductDropdowns[index] && (
-                                                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg overflow-hidden">
+                                                {showSparesProductDropdowns[index] && createPortal(
+                                                    <div className="fixed z-50 bg-white border border-gray-300 rounded-md shadow-lg overflow-hidden" 
+                                                         style={{
+                                                             top: `${(document.querySelector(`input[data-spare-index="${index}"]`) as HTMLElement)?.getBoundingClientRect().bottom + window.scrollY + 4}px`,
+                                                             left: `${(document.querySelector(`input[data-spare-index="${index}"]`) as HTMLElement)?.getBoundingClientRect().left + window.scrollX}px`,
+                                                             width: `${(document.querySelector(`input[data-spare-index="${index}"]`) as HTMLElement)?.getBoundingClientRect().width}px`,
+                                                             maxHeight: '400px'
+                                                         }}>
                                                         <div className="px-3 py-2 text-xs text-gray-600 bg-gray-50 border-b border-gray-200">
                                                             {getFilteredProducts(sparesProductSearchTerms[index] || '').length} products found
+                                                            {!sparesProductSearchTerms[index]?.trim() && ' (showing all products)'}
                                                         </div>
-                                                        <div className="max-h-72 overflow-auto">
+                                                        <div className="max-h-80 overflow-auto">
                                                             <div
                                                                 className={`px-3 py-2 text-sm hover:bg-gray-50 cursor-pointer border-b border-gray-100 ${!item.productId ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}
                                                                 onMouseDown={(e) => {
                                                                     e.preventDefault();
                                                                     handleSpareItemChange(index, 'productId', '');
                                                                     handleSpareItemChange(index, 'partNo', '');
+                                                                    handleSpareItemChange(index, 'description', '');
                                                                     handleSpareItemChange(index, 'hsnCode', '');
                                                                     handleSpareItemChange(index, 'unitPrice', 0);
                                                                     handleSpareItemChange(index, 'gstRate', 0);
@@ -1473,7 +1684,10 @@ navigate('/billing');
                                                                     setShowSparesProductDropdowns(prev => ({ ...prev, [index]: false }));
                                                                 }}
                                                             >
-                                                                Select product
+                                                                <div className="flex items-center space-x-2">
+                                                                    <span className="text-blue-600">✕</span>
+                                                                    <span>Clear selection</span>
+                                                                </div>
                                                             </div>
                                                             {getFilteredProducts(sparesProductSearchTerms[index] || '').map((p) => (
                                                                 <div
@@ -1482,10 +1696,21 @@ navigate('/billing');
                                                                     onMouseDown={(e) => { e.preventDefault(); handleSelectSpareProduct(index, p); }}
                                                                 >
                                                                     <div className="flex items-start justify-between">
-                                                                        <div>
-                                                                            <div className="text-sm font-semibold text-gray-900">Part No:{p.partNo ? ` ${p.partNo}` : ' -'}</div>
-                                                                            <div className="text-xs text-gray-600 mt-0.5">Product Name: {p.name || '-'}</div>
-                                                                            <div className="text-xs text-gray-500">Category: {p.category || '-'}</div>
+                                                                        <div className="flex-1">
+                                                                            <div className="text-sm font-semibold text-gray-900">
+                                                                                {p.partNo ? `Part No: ${p.partNo}` : 'No Part No'}
+                                                                            </div>
+                                                                            <div className="text-xs text-gray-600 mt-0.5">
+                                                                                <strong>Name:</strong> {p.name || 'Unnamed Product'}
+                                                                            </div>
+                                                                            <div className="text-xs text-gray-500">
+                                                                                <strong>Category:</strong> {p.category || 'Uncategorized'}
+                                                                            </div>
+                                                                            {p.brand && (
+                                                                                <div className="text-xs text-gray-500">
+                                                                                    <strong>Brand:</strong> {p.brand}
+                                                                                </div>
+                                                                            )}
                                                                             <div className="mt-1 text-xs flex items-center space-x-2">
                                                                                 <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${p.availableQuantity && p.availableQuantity > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-700'}`}>
                                                                                     {p.availableQuantity && p.availableQuantity > 0 ? `${p.availableQuantity} in stock` : 'OUT OF STOCK'}
@@ -1498,12 +1723,21 @@ navigate('/billing');
                                                                         <div className="ml-3 text-right">
                                                                             <div className="text-green-600 font-bold text-sm">₹{(p.price || 0).toLocaleString()}</div>
                                                                             <div className="text-[10px] text-gray-500">per unit</div>
+                                                                            {p.gst && (
+                                                                                <div className="text-[10px] text-gray-500">GST: {p.gst}%</div>
+                                                                            )}
                                                                         </div>
                                                                     </div>
                                                                 </div>
                                                             ))}
+                                                            {getFilteredProducts(sparesProductSearchTerms[index] || '').length === 0 && (
+                                                                <div className="px-3 py-4 text-center text-gray-500 text-sm">
+                                                                    No products found matching "{sparesProductSearchTerms[index]}"
+                                                                </div>
+                                                            )}
                                                         </div>
-                                                    </div>
+                                                    </div>,
+                                                    document.body
                                                 )}
                                             </div>
                                         </td>
@@ -1549,11 +1783,22 @@ navigate('/billing');
                                                 <p className="text-xs text-red-600 mt-1">{getFieldError(`sparesItems[${index}].qty`)}</p>
                                             )}
                                         </td>
+                                        {/* Actions */}
+                                        <td className="border border-gray-300 px-4 py-2">
+                                            <Button
+                                                onClick={() => removeSpareItem(index)}
+                                                variant="outline"
+                                                size="sm"
+                                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
-                            </div>
+                    </div>
                     <div className="mt-4">
                         <Button
                             onClick={addSpareItem}
@@ -1562,7 +1807,7 @@ navigate('/billing');
                             <Plus className="w-4 h-4" />
                             <span>Add Spare Item</span>
                         </Button>
-                        </div>
+                    </div>
                     <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
                         <p className="text-sm text-yellow-800">
                             <strong>Note:</strong> Any spares other than the above mentioned spares required for restoration of DG will be at extra cost.
@@ -1570,6 +1815,33 @@ navigate('/billing');
                     </div>
                 </div>
             )}
+
+            {/* Financial Summary */}
+            <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Financial Summary</h3>
+                <div className="bg-gray-50 p-4 rounded-lg">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="text-center">
+                            <div className="text-sm text-gray-600">Subtotal</div>
+                            <div className="text-lg font-semibold text-gray-900">
+                                ₹{quotationData.subtotal?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}
+                            </div>
+                        </div>
+                        <div className="text-center">
+                            <div className="text-sm text-gray-600">Total Tax (18%)</div>
+                            <div className="text-lg font-semibold text-gray-900">
+                                ₹{quotationData.totalTax?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}
+                            </div>
+                        </div>
+                        <div className="text-center">
+                            <div className="text-sm text-gray-600">Grand Total</div>
+                            <div className="text-xl font-bold text-blue-600">
+                                ₹{quotationData.grandTotal?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             {/* Closing Statement */}
             <div className="mb-6">
@@ -1592,6 +1864,62 @@ navigate('/billing');
                     <span>{submitting ? 'Saving...' : 'Save AMC Quotation'}</span>
                 </Button>
             </div>
+
+            {/* Portal-based DG Dropdown */}
+            {dgDropdownPosition && activeDGRowIndex !== null && showDGRowDropdowns[activeDGRowIndex] && customerDGDetails.length > 0 && createPortal(
+                <div
+                    className="fixed z-[9999] bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"
+                    style={{
+                        top: dgDropdownPosition.top,
+                        left: dgDropdownPosition.left,
+                        width: dgDropdownPosition.width,
+                        minWidth: '300px'
+                    }}
+                >
+                    {filterDGs(dgRowSearchTerms[activeDGRowIndex] || '').length > 0 ? (
+                        filterDGs(dgRowSearchTerms[activeDGRowIndex] || '').map((dg) => (
+                            <div
+                                key={dg._id}
+                                className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100"
+                                onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    const makeValue = dg.dgMake || dg.make || '';
+                                    const engineValue = getDGEngineSerial(dg);
+                                    const kvaValue = getDGKVA(dg);
+
+                                    // Single atomic update to avoid race conditions
+                                    setQuotationData(prev => ({
+                                        ...prev,
+                                        offerItems: prev.offerItems.map((item, i) =>
+                                            i === (activeDGRowIndex ?? 0)
+                                                ? {
+                                                    ...item,
+                                                    make: makeValue,
+                                                    engineSlNo: engineValue,
+                                                    dgRatingKVA: kvaValue
+                                                }
+                                                : item
+                                        )
+                                    }));
+
+                                    setDgRowSearchTerms(prev => ({ ...prev, [activeDGRowIndex as number]: makeValue }));
+                                    setShowDGRowDropdowns(prev => ({ ...prev, [activeDGRowIndex]: false }));
+                                    setDgDropdownPosition(null);
+                                    setActiveDGRowIndex(null);
+                                }}
+                            >
+                                <div className="font-medium">{dg.dgMake || dg.make || 'N/A'} {dg.dgModel || dg.model || 'N/A'}</div>
+                                <div className="text-sm text-gray-500">Engine: {getDGEngineSerial(dg) || 'N/A'} | {getDGKVA(dg) || 'N/A'} KVA</div>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="px-3 py-2 text-gray-500 text-sm">
+                            No DG sets found
+                        </div>
+                    )}
+                </div>,
+                document.body
+            )}
         </div>
     );
 };

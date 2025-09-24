@@ -6,7 +6,9 @@ import {
   updateAMCQuotation,
   deleteAMCQuotation,
   updateAMCQuotationPayment,
-  getAMCQuotationStats
+  getAMCQuotationStats,
+  sendAMCQuotationEmailToCustomer,
+  updateAMCQuotationStatus
 } from '../controllers/amcQuotationController';
 import { protect } from '../middleware/auth';
 import { validateRequest } from '../middleware/validateRequest';
@@ -45,6 +47,16 @@ router.put('/:id', updateAMCQuotation);
 // @desc    Update AMC quotation payment
 // @access  Private
 router.put('/:id/payment', updateAMCQuotationPayment);
+
+// @route   POST /api/v1/amc-quotations/:id/send-email
+// @desc    Send AMC quotation email to customer
+// @access  Private
+router.post('/:id/send-email', sendAMCQuotationEmailToCustomer);
+
+// @route   PUT /api/v1/amc-quotations/:id/status
+// @desc    Update AMC quotation status
+// @access  Private
+router.put('/:id/status', updateAMCQuotationStatus);
 
 // @route   DELETE /api/v1/amc-quotations/:id
 // @desc    Delete an AMC quotation

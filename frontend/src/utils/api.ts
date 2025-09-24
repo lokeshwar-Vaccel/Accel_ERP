@@ -2292,6 +2292,51 @@ class ApiClient {
 
     getStats: () =>
       this.makeRequest<{ success: boolean; data: any }>('/amc-quotations/stats'),
+
+    sendEmail: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any; message: string }>(`/amc-quotations/${id}/send-email`, {
+        method: 'POST',
+      }),
+
+    updateStatus: (id: string, statusData: any) =>
+      this.makeRequest<{ success: boolean; data: any; message: string }>(`/amc-quotations/${id}/status`, {
+        method: 'PUT',
+        body: JSON.stringify(statusData),
+      }),
+  };
+
+  // AMC Quotation Payments APIs
+  amcQuotationPayments = {
+    getAll: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: { payments: any[]; pagination: any } }>(`/amc-quotation-payments${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    getById: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc-quotation-payments/${id}`),
+
+    getByQuotation: (quotationId: string) =>
+      this.makeRequest<{ success: boolean; data: any[] }>(`/amc-quotation-payments/quotation/${quotationId}`),
+
+    create: (paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/amc-quotation-payments', {
+        method: 'POST',
+        body: JSON.stringify(paymentData),
+      }),
+
+    updateStatus: (id: string, statusData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc-quotation-payments/${id}/status`, {
+        method: 'PUT',
+        body: JSON.stringify(statusData),
+      }),
+
+    delete: (id: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/amc-quotation-payments/${id}`, {
+        method: 'DELETE',
+      }),
+
+    generateReceipt: (id: string) =>
+      this.makeRequest<Blob>(`/amc-quotation-payments/${id}/receipt`, {
+        responseType: 'blob',
+      }),
   };
 
   // Feedback APIs

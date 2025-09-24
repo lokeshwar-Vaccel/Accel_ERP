@@ -415,7 +415,7 @@ const DGQuotationManagement: React.FC = () => {
               <Download className="w-4 h-4" />
               Export
             </Button>
-            <Button
+            {/* <Button
               onClick={() => {
                 setSelectedQuotation(null);
                 setQuotationFormMode('create');
@@ -425,7 +425,7 @@ const DGQuotationManagement: React.FC = () => {
             >
               <Plus className="w-4 h-4" />
               Create Quotation
-            </Button>
+            </Button> */}
           </div>
         </div>
 

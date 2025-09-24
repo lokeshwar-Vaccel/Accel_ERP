@@ -7,6 +7,16 @@ export interface IDeliveryChallanItem {
   partNo: string;
   hsnSac: string;
   quantity: number;
+  stockAllocation?: {
+    allocations: Array<{
+      location: string;
+      room: string;
+      rack: string;
+      allocatedQuantity: number;
+      availableQuantity: number;
+    }>;
+    canFulfill: boolean;
+  };
 }
 
 export interface IDeliveryChallan extends Document {
@@ -24,6 +34,7 @@ export interface IDeliveryChallan extends Document {
   termsOfDelivery: string;
   consignee: string;
   customer: mongoose.Types.ObjectId;
+  location: mongoose.Types.ObjectId; // Reference to StockLocation model
   spares: IDeliveryChallanItem[];
   services: IDeliveryChallanItem[];
   status: 'draft' | 'sent' | 'delivered' | 'cancelled';
@@ -60,6 +71,39 @@ const deliveryChallanItemSchema = new Schema<IDeliveryChallanItem>({
     type: Number,
     required: true,
     min: 0
+  },
+  stockAllocation: {
+    type: {
+      allocations: [{
+        location: {
+          type: String,
+          required: true
+        },
+        room: {
+          type: String,
+          required: true
+        },
+        rack: {
+          type: String,
+          required: true
+        },
+        allocatedQuantity: {
+          type: Number,
+          required: true,
+          min: 0
+        },
+        availableQuantity: {
+          type: Number,
+          required: true,
+          min: 0
+        }
+      }],
+      canFulfill: {
+        type: Boolean,
+        required: true
+      }
+    },
+    required: false
   }
 }, { _id: false });
 
@@ -123,6 +167,11 @@ const deliveryChallanSchema = new Schema<IDeliveryChallan>({
   customer: {
     type: Schema.Types.ObjectId,
     ref: 'Customer',
+    required: true
+  },
+  location: {
+    type: Schema.Types.ObjectId,
+    ref: 'StockLocation',
     required: true
   },
   spares: {

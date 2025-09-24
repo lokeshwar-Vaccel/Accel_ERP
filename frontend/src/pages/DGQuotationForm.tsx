@@ -2446,7 +2446,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                       
                       // If input is cleared, clear the warranty selection
                       if (!value) {
-                        setFormData(prev => ({ ...prev, warrantyFromInvoice: '30' }));
+                        setFormData(prev => ({ ...prev, warrantyFromInvoice: '' }));
                       }
                       
                       if (!showWarrantyInvoiceDropdown) setShowWarrantyInvoiceDropdown(true);
@@ -2465,7 +2465,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                       <button
                         type="button"
                         onClick={() => {
-                          setFormData(prev => ({ ...prev, warrantyFromInvoice: '30' }));
+                          setFormData(prev => ({ ...prev, warrantyFromInvoice: '' }));
                           setWarrantyInvoiceSearchTerm('');
                         }}
                         className="text-gray-400 hover:text-gray-600 mr-2"
@@ -2562,7 +2562,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                       
                       // If input is cleared, clear the warranty selection
                       if (!value) {
-                        setFormData(prev => ({ ...prev, warrantyHours: '5000' }));
+                        setFormData(prev => ({ ...prev, warrantyHours: '' }));
                       }
                       
                       if (!showWarrantyHoursDropdown) setShowWarrantyHoursDropdown(true);
@@ -2580,7 +2580,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                       <button
                         type="button"
                         onClick={() => {
-                          setFormData(prev => ({ ...prev, warrantyHours: '5000' }));
+                          setFormData(prev => ({ ...prev, warrantyHours: '' }));
                           setWarrantyHoursSearchTerm('');
                         }}
                         className="text-gray-400 hover:text-gray-600 mr-2"
@@ -2640,7 +2640,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                       
                       // If input is cleared, clear the tax rate selection
                       if (!value) {
-                        setFormData(prev => ({ ...prev, taxRate: '18' }));
+                        setFormData(prev => ({ ...prev, taxRate: '' }));
                       }
                       
                       if (!showTaxRateDropdown) setShowTaxRateDropdown(true);
@@ -2659,7 +2659,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                       <button
                         type="button"
                         onClick={() => {
-                          setFormData(prev => ({ ...prev, taxRate: '18' }));
+                          setFormData(prev => ({ ...prev, taxRate: '' }));
                           setTaxRateSearchTerm('');
                         }}
                         className="text-gray-400 hover:text-gray-600 mr-2"
@@ -2713,7 +2713,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                       
                       // If input is cleared, clear the freight terms selection
                       if (!value) {
-                        setFormData(prev => ({ ...prev, freightTerms: 'extra' }));
+                        setFormData(prev => ({ ...prev, freightTerms: '' }));
                       }
                       
                       if (!showFreightTermsDropdown) setShowFreightTermsDropdown(true);
@@ -2732,7 +2732,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                       <button
                         type="button"
                         onClick={() => {
-                          setFormData(prev => ({ ...prev, freightTerms: 'extra' }));
+                          setFormData(prev => ({ ...prev, freightTerms: '' }));
                           setFreightTermsSearchTerm('');
                         }}
                         className="text-gray-400 hover:text-gray-600 mr-2"
@@ -2786,7 +2786,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                       
                       // If input is cleared, clear the delivery period selection
                       if (!value) {
-                        setFormData(prev => ({ ...prev, deliveryPeriod: '6' }));
+                        setFormData(prev => ({ ...prev, deliveryPeriod: '' }));
                       }
                       
                       if (!showDeliveryPeriodDropdown) setShowDeliveryPeriodDropdown(true);
@@ -2805,7 +2805,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                       <button
                         type="button"
                         onClick={() => {
-                          setFormData(prev => ({ ...prev, deliveryPeriod: '6' }));
+                          setFormData(prev => ({ ...prev, deliveryPeriod: '' }));
                           setDeliveryPeriodSearchTerm('');
                         }}
                         className="text-gray-400 hover:text-gray-600 mr-2"
@@ -2859,7 +2859,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                       
                       // If input is cleared, clear the validity days selection
                       if (!value) {
-                        setFormData(prev => ({ ...prev, validityDays: '30' }));
+                        setFormData(prev => ({ ...prev, validityDays: '' }));
                       }
                       
                       if (!showValidityDaysDropdown) setShowValidityDaysDropdown(true);
@@ -2878,7 +2878,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                       <button
                         type="button"
                         onClick={() => {
-                          setFormData(prev => ({ ...prev, validityDays: '30' }));
+                          setFormData(prev => ({ ...prev, validityDays: '' }));
                           setValidityDaysSearchTerm('');
                         }}
                         className="text-gray-400 hover:text-gray-600 mr-2"

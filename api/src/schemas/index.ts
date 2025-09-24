@@ -216,7 +216,25 @@ export * from './oemOrderSchemas';
 
 
 
-// DG Enquiry import schema (stub)
+// Address schema for DG Enquiry
+const dgEnquiryAddressSchema = Joi.object({
+  id: Joi.number().required(),
+  address: Joi.string().required(),
+  state: Joi.string().required(),
+  district: Joi.string().required(),
+  pincode: Joi.string().allow('').optional(),
+  isPrimary: Joi.boolean().default(false),
+  gstNumber: Joi.string().allow('').optional(),
+  notes: Joi.string().allow('').optional(),
+  contactPersonName: Joi.string().allow('').optional(),
+  designation: Joi.string().allow('').optional(),
+  email: Joi.string().email().allow('').optional(),
+  phone: Joi.string().allow('').optional(),
+  tehsil: Joi.string().allow('').optional(),
+  registrationStatus: Joi.string().valid('registered', 'non_registered').default('non_registered')
+});
+
+// DG Enquiry import schema
 export const dgEnquiryImportSchema = Joi.object({
   zone: Joi.string().allow('').optional(),
   state: Joi.string().allow('').optional(),
@@ -252,7 +270,7 @@ export const dgEnquiryImportSchema = Joi.object({
   referenceEmployeeMobileNumber: Joi.string().allow('').optional(),
   sourceFrom: Joi.string().allow('').optional(),
   events: Joi.string().allow('').optional(),
-  numberOfFollowUps: Joi.number().optional(),
+  numberOfFollowUps: Joi.number().default(0),
   segment: Joi.string().allow('').optional(),
   subSegment: Joi.string().allow('').optional(),
   dgOwnership: Joi.string().allow('').optional(),
@@ -262,5 +280,9 @@ export const dgEnquiryImportSchema = Joi.object({
   enquiryClosureDate: Joi.date().optional(),
   financeRequired: Joi.string().allow('').optional(),
   financeCompany: Joi.string().allow('').optional(),
-  referredBy: Joi.string().allow('').optional()
+  referredBy: Joi.string().allow('').optional(),
+  // New fields for comprehensive form
+  addresses: Joi.array().items(dgEnquiryAddressSchema).optional(),
+  numberOfDG: Joi.number().default(1),
+  notes: Joi.string().allow('').optional()
 }); 

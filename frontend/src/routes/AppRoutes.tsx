@@ -34,6 +34,9 @@ import POFromCustomerManagement from "pages/POFromCustomerManagement";
 import CreateDGProformaForm from "pages/CreateDGProformaForm";
 import CreateDGInvoiceForm from "pages/CreateDGInvoiceForm";
 import DGQuotationManagement from "pages/DGQuotationManagement";
+import AMCQuotationManagement from "pages/AMCQuotationManagement";
+import AMCQuotationForm from "components/quotations/AMCQuotationForm";
+import AMCQuotationPrintPage from "pages/AMCQuotationPrintPage";
 import OEMOrderManagement from "pages/OEMOrderManagement";
 
 const AppRoutes: React.FC = () => {
@@ -66,6 +69,12 @@ const AppRoutes: React.FC = () => {
             <Route path="/billing/quotation/edit" element={<QuotationFormPage />} />
             <Route path="/billing/challan/create" element={<DeliveryChallanForm />} />
             <Route path="/billing/challan/edit/:id" element={<DeliveryChallanForm />} />
+
+            {/* AMC Quotation Management */}
+            <Route path="/amc-quotations" element={<AMCQuotationManagement />} />
+            <Route path="/amc-quotations/create" element={<AMCQuotationForm />} />
+            <Route path="/amc-quotations/edit/:id" element={<AMCQuotationForm />} />
+            <Route path="/amc-quotations/:id/print" element={<AMCQuotationPrintPage />} />
 
             {/* Purchase Invoice Management */}
             <Route path="/purchase-invoice/create" element={<CreatePurchaseinvoiceForm />} />

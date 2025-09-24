@@ -19,7 +19,7 @@ export const sendFeedbackEmail = async (
     const { ticketId } = req.body;
 
     const ticket = await ServiceTicket.findById(ticketId)
-      .populate('customer', 'name email phone')
+      .populate('customer', 'name email phone addresses')
       .populate('product', 'name category')
       .populate('assignedTo', 'firstName lastName');
 
@@ -28,8 +28,21 @@ export const sendFeedbackEmail = async (
     }
 
     const customer = ticket.customer as any;
-    if (!customer || !customer.email) {
-      return next(new AppError('Customer email not found', 400));
+    
+    // Get primary address email if available
+    const getPrimaryAddressEmail = (customer: any): string | null => {
+      if (!customer?.addresses || !Array.isArray(customer.addresses)) {
+        return customer?.email || null;
+      }
+      
+      const primaryAddress = customer.addresses.find((addr: any) => addr.isPrimary);
+      return primaryAddress?.email || customer?.email || null;
+    };
+    
+    const customerEmail = getPrimaryAddressEmail(customer);
+    
+    if (!customer || !customerEmail) {
+      return next(new AppError('Customer primary address email not found', 400));
     }
 
     if (!customer.name) {
@@ -37,7 +50,6 @@ export const sendFeedbackEmail = async (
     }
 
     // At this point, we know both email and name exist
-    const customerEmail = customer.email as string;
     const customerName = customer.name as string;
 
     // Generate unique token for feedback form

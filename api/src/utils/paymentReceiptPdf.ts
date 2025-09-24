@@ -3,6 +3,7 @@ import { IPurchaseOrderPayment } from '../models/PurchaseOrderPayment';
 import { IQuotationPayment } from '../models/QuotationPayment';
 import { IInvoicePayment } from '../models/InvoicePayment';
 import { IDGInvoicePayment } from '../models/DGInvoicePayment';
+import { IAMCQuotationPayment } from '../models/AMCQuotationPayment';
 
 interface PopulatedPayment extends Omit<IPurchaseOrderPayment, 'purchaseOrderId' | 'supplierId' | 'createdBy'> {
   purchaseOrderId: {
@@ -752,4 +753,230 @@ const getPaymentMethodDetails = (paymentMethod: string, paymentMethodDetails: an
   }
   
   return details;
+};
+
+// Interface for AMC Quotation Payment
+interface PopulatedAMCQuotationPayment extends Omit<IAMCQuotationPayment, 'amcQuotationId' | 'customerId' | 'createdBy'> {
+  amcQuotationId: {
+    _id: string;
+    quotationNumber: string;
+    grandTotal: number;
+    company?: {
+      name?: string;
+      address?: string;
+      phone?: string;
+      email?: string;
+    };
+  };
+  customerId: {
+    _id: string;
+    name: string;
+    email: string;
+    phone?: string;
+    addresses?: Array<{
+      address: string;
+      state: string;
+      district: string;
+      pincode: string;
+      gstNumber?: string;
+    }>;
+  };
+  createdBy: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+}
+
+// Generate PDF for AMC quotation payments
+export const generateAMCQuotationPaymentReceiptPDF = (payment: PopulatedAMCQuotationPayment): Promise<Buffer> => {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ 
+        size: 'A4', 
+        margin: 40,
+        info: {
+          Title: `AMC Quotation Payment Receipt - ${payment.quotationNumber}`,
+          Author: 'Sun Power Services ERP',
+          Subject: 'Payment Receipt',
+          Keywords: 'payment, receipt, AMC quotation'
+        }
+      });
+
+      const buffers: Buffer[] = [];
+      doc.on('data', buffers.push.bind(buffers));
+      doc.on('end', () => {
+        const pdfData = Buffer.concat(buffers);
+        resolve(pdfData);
+      });
+
+      // Header
+      doc.fontSize(20)
+         .font('Helvetica-Bold')
+         .text('PAYMENT RECEIPT', { align: 'center' })
+         .moveDown(0.5);
+
+      doc.fontSize(14)
+         .font('Helvetica-Bold')
+         .text('AMC Quotation Payment Receipt', { align: 'center' })
+         .moveDown(1);
+
+      // Company Information
+      if (payment.amcQuotationId.company) {
+        doc.fontSize(12)
+           .font('Helvetica-Bold')
+           .text(payment.amcQuotationId.company.name || 'Sun Power Services', { align: 'center' });
+        
+        if (payment.amcQuotationId.company.address) {
+          doc.fontSize(10)
+             .font('Helvetica')
+             .text(payment.amcQuotationId.company.address, { align: 'center' });
+        }
+        
+        if (payment.amcQuotationId.company.phone || payment.amcQuotationId.company.email) {
+          const contactInfo = [];
+          if (payment.amcQuotationId.company.phone) contactInfo.push(`Phone: ${payment.amcQuotationId.company.phone}`);
+          if (payment.amcQuotationId.company.email) contactInfo.push(`Email: ${payment.amcQuotationId.company.email}`);
+          
+          doc.fontSize(10)
+             .font('Helvetica')
+             .text(contactInfo.join(' | '), { align: 'center' });
+        }
+      }
+
+      doc.moveDown(1);
+
+      // Receipt Details
+      doc.fontSize(12)
+         .font('Helvetica-Bold')
+         .text('Receipt Details', { underline: true })
+         .moveDown(0.5);
+
+      const receiptDetails = [
+        ['Receipt Number:', payment.receiptNumber || `AMC-${payment.quotationNumber}-${payment._id}`],
+        ['AMC Quotation Number:', payment.quotationNumber],
+        ['Payment Date:', new Date(payment.paymentDate).toLocaleDateString('en-IN')],
+        ['Payment Method:', payment.paymentMethod.charAt(0).toUpperCase() + payment.paymentMethod.slice(1)],
+        ['Amount:', `${payment.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`],
+        ['Currency:', payment.currency],
+        ['Payment Status:', payment.paymentStatus.charAt(0).toUpperCase() + payment.paymentStatus.slice(1)]
+      ];
+
+      receiptDetails.forEach(([label, value]) => {
+        doc.fontSize(10)
+           .font('Helvetica-Bold')
+           .text(label, 50, doc.y)
+           .font('Helvetica')
+           .text(value, 200, doc.y);
+        doc.moveDown(0.3);
+      });
+
+      doc.moveDown(0.5);
+
+      // Customer Information
+      doc.fontSize(12)
+         .font('Helvetica-Bold')
+         .text('Customer Information', { underline: true })
+         .moveDown(0.5);
+
+      const customerDetails = [
+        ['Customer Name:', payment.customerId.name],
+        ['Email:', payment.customerId.email || 'N/A'],
+        ['Phone:', payment.customerId.phone || 'N/A']
+      ];
+
+      customerDetails.forEach(([label, value]) => {
+        doc.fontSize(10)
+           .font('Helvetica-Bold')
+           .text(label, 50, doc.y)
+           .font('Helvetica')
+           .text(value, 200, doc.y);
+        doc.moveDown(0.3);
+      });
+
+      // Customer Address
+      if (payment.customerId.addresses && payment.customerId.addresses.length > 0) {
+        const primaryAddress = payment.customerId.addresses.find((addr: any) => addr.isPrimary) || payment.customerId.addresses[0];
+        doc.fontSize(10)
+           .font('Helvetica-Bold')
+           .text('Address:', 50, doc.y)
+           .font('Helvetica')
+           .text(primaryAddress.address, 200, doc.y);
+        doc.moveDown(0.2);
+        doc.font('Helvetica')
+           .text(`${primaryAddress.district}, ${primaryAddress.state} - ${primaryAddress.pincode}`, 200, doc.y);
+        if (primaryAddress.gstNumber) {
+          doc.moveDown(0.2);
+          doc.font('Helvetica')
+             .text(`GST: ${primaryAddress.gstNumber}`, 200, doc.y);
+        }
+        doc.moveDown(0.5);
+      }
+
+      // Payment Method Details
+      doc.fontSize(12)
+         .font('Helvetica-Bold')
+         .text('Payment Method Details', { underline: true })
+         .moveDown(0.5);
+
+      const methodDetails = getPaymentMethodDetails(payment.paymentMethod, payment.paymentMethodDetails);
+      methodDetails.forEach(detail => {
+        doc.fontSize(10)
+           .font('Helvetica')
+           .text(detail, 50, doc.y);
+        doc.moveDown(0.3);
+      });
+
+      doc.moveDown(0.5);
+
+      // AMC Quotation Summary
+      doc.fontSize(12)
+         .font('Helvetica-Bold')
+         .text('AMC Quotation Summary', { underline: true })
+         .moveDown(0.5);
+
+      const quotationSummary = [
+        ['AMC Quotation Total:', `${payment.amcQuotationId.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`],
+        ['Amount Paid:', `${payment.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`],
+        ['Remaining Amount:', `${(payment.amcQuotationId.grandTotal - payment.amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`]
+      ];
+
+      quotationSummary.forEach(([label, value]) => {
+        doc.fontSize(10)
+           .font('Helvetica-Bold')
+           .text(label, 50, doc.y)
+           .font('Helvetica')
+           .text(value, 200, doc.y);
+        doc.moveDown(0.3);
+      });
+
+      // Notes
+      if (payment.notes) {
+        doc.moveDown(0.5);
+        doc.fontSize(12)
+           .font('Helvetica-Bold')
+           .text('Notes', { underline: true })
+           .moveDown(0.5);
+        
+        doc.fontSize(10)
+           .font('Helvetica')
+           .text(payment.notes, { width: 500 });
+      }
+
+      // Footer
+      doc.moveDown(2);
+      doc.fontSize(8)
+         .font('Helvetica')
+         .text('This is a computer-generated receipt and does not require a signature.', { align: 'center' })
+         .moveDown(0.5);
+      
+      doc.text(`Generated on: ${new Date().toLocaleString('en-IN')}`, { align: 'center' })
+         .text(`Generated by: ${payment.createdBy.firstName} ${payment.createdBy.lastName}`, { align: 'center' });
+
+      doc.end();
+    } catch (error) {
+      reject(error);
+    }
+  });
 };
