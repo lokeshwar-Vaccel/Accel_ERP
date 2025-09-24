@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Wrench, Package, Settings, ArrowLeft } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Botton';
@@ -38,14 +38,16 @@ const quotationOptions: QuotationOption[] = [
 
 const QuotationPage: React.FC = () => {
   const navigate = useNavigate();
-  const [selectedType, setSelectedType] = useState<QuotationType>('service');
+  const location = useLocation();
+  const quotationType = location.state?.quotationType as QuotationType;
+  const [selectedType, setSelectedType] = useState<QuotationType>(quotationType || 'service');
 
   const renderQuotationForm = () => {
     switch (selectedType) {
       case 'service':
-        return <QuotationForm showHeader={false} />;
+        return <QuotationForm showHeader={false} selectedType={selectedType} />;
       case 'spare':
-        return <QuotationForm showHeader={false} />;
+        return <QuotationForm showHeader={false} selectedType={selectedType} />;
       case 'amc':
         return <AMCQuotationForm />;
       default:

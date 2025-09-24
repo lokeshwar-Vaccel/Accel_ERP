@@ -37,8 +37,8 @@ export interface IAMCQuotation extends Document {
   customer: {
     _id?: string | Types.ObjectId;
     name: string;
-    email: string;
-    phone: string;
+    email?: string;
+    phone?: string;
     pan?: string;
   };
   company: {
@@ -84,6 +84,7 @@ export interface IAMCQuotation extends Document {
   offerItems: IAMCOfferItem[];
   sparesItems: IAMCSpareItem[];
   selectedCustomerDG: any;
+  subject?: string;
   refOfQuote: string;
   paymentTermsText: string;
   validityText: string;
@@ -202,8 +203,8 @@ const AMCQuotationSchema = new Schema<IAMCQuotation>({
   customer: {
     _id: { type: Schema.Types.ObjectId, ref: 'Customer' },
     name: { type: String, required: true },
-    email: { type: String, required: true },
-    phone: { type: String, required: true },
+    email: { type: String },
+    phone: { type: String },
     pan: { type: String }
   },
   
@@ -251,6 +252,7 @@ const AMCQuotationSchema = new Schema<IAMCQuotation>({
   offerItems: [AMCOfferItemSchema],
   sparesItems: [AMCSpareItemSchema],
   selectedCustomerDG: { type: Schema.Types.Mixed },
+  subject: { type: String },
   refOfQuote: { type: String, default: '' },
   paymentTermsText: { type: String, default: '' },
   validityText: { type: String, default: '' },
@@ -367,24 +369,41 @@ AMCQuotationSchema.pre('save', function(next) {
     });
   }
   
-  // Calculate standard quotation totals
-  let itemsTotal = 0;
-  if (this.items && this.items.length > 0) {
-    itemsTotal = this.items.reduce((sum, item) => sum + (item.totalPrice || 0), 0);
+  // Calculate AMC totals from offerItems
+  let amcSubtotal = 0;
+  let amcTotalTax = 0;
+  let amcGrandTotal = 0;
+
+  if (this.offerItems && this.offerItems.length > 0) {
+    const gstIncluded = this.gstIncluded !== false; // Default to true if not specified
+    
+    this.offerItems.forEach(item => {
+      const qty = Number(item.qty) || 0;
+      const costPerDG = Number(item.amcCostPerDG) || 0;
+      const itemSubtotal = qty * costPerDG;
+      
+      let itemTax = 0;
+      let itemTotal = itemSubtotal;
+      
+      if (gstIncluded) {
+        // GST is included in the cost per DG
+        itemTax = itemSubtotal * 0.18; // 18% GST
+        itemTotal = itemSubtotal + itemTax;
+      } else {
+        // GST is not included, so the cost per DG is the final amount
+        itemTotal = itemSubtotal;
+      }
+
+      amcSubtotal += itemSubtotal;
+      amcTotalTax += itemTax;
+      amcGrandTotal += itemTotal;
+    });
   }
-  
-  let serviceChargesTotal = 0;
-  if (this.serviceCharges && this.serviceCharges.length > 0) {
-    serviceChargesTotal = this.serviceCharges.reduce((sum, service) => sum + (service.totalPrice || 0), 0);
-  }
-  
-  let batteryBuyBackTotal = 0;
-  if (this.batteryBuyBack) {
-    batteryBuyBackTotal = this.batteryBuyBack.totalPrice || 0;
-  }
-  
-  this.subtotal = itemsTotal + serviceChargesTotal;
-  this.grandTotal = this.subtotal - batteryBuyBackTotal;
+
+  // Set AMC totals
+  this.subtotal = Math.round(amcSubtotal * 100) / 100;
+  this.totalTax = Math.round(amcTotalTax * 100) / 100;
+  this.grandTotal = Math.round(amcGrandTotal * 100) / 100;
   
   // Calculate remaining amount
   this.remainingAmount = Math.max(0, this.grandTotal - (this.paidAmount || 0));

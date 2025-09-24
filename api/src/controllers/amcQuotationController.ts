@@ -5,6 +5,7 @@ import { AMCQuotation, IAMCQuotation } from '../models/AMCQuotation';
 import { generateReferenceId } from '../utils/generateReferenceId';
 import { Customer } from '../models/Customer';
 import { QuotationService } from '../services/quotationService';
+import { sendQuotationEmail as sendQuotationEmailViaNodemailer } from '../utils/nodemailer';
 
 // @desc    Get all AMC quotations with pagination and filtering
 // @route   GET /api/v1/amc-quotations
@@ -186,33 +187,58 @@ export const createAMCQuotation = async (req: AuthenticatedRequest, res: Respons
       sanitizedData.amcPeriodTo = sanitizedData.contractEndDate;
     }
 
-    // Step 6: Calculate financial details
-    const calculationResult = QuotationService.calculateQuotationTotals(
-      sanitizedData.items || [], 
-      sanitizedData.serviceCharges || [], 
-      sanitizedData.batteryBuyBack || undefined,
-      sanitizedData.overallDiscount || 0
-    );
+    // Step 6: Calculate AMC financial details from offerItems
+    let amcSubtotal = 0;
+    let amcTotalTax = 0;
+    let amcGrandTotal = 0;
 
-    console.log("Calculation result:", calculationResult);
+    if (sanitizedData.offerItems && sanitizedData.offerItems.length > 0) {
+      const gstIncluded = sanitizedData.gstIncluded !== false; // Default to true if not specified
+      
+      sanitizedData.offerItems.forEach((item: any) => {
+        const qty = Number(item.qty) || 0;
+        const costPerDG = Number(item.amcCostPerDG) || 0;
+        const itemSubtotal = qty * costPerDG;
+        
+        let itemTax = 0;
+        let itemTotal = itemSubtotal;
+        
+        if (gstIncluded) {
+          // GST is included in the cost per DG
+          itemTax = itemSubtotal * 0.18; // 18% GST
+          itemTotal = itemSubtotal + itemTax;
+        } else {
+          // GST is not included, so the cost per DG is the final amount
+          itemTotal = itemSubtotal;
+        }
+
+        amcSubtotal += itemSubtotal;
+        amcTotalTax += itemTax;
+        amcGrandTotal += itemTotal;
+      });
+    }
+
+    // Round to 2 decimal places
+    amcSubtotal = Math.round(amcSubtotal * 100) / 100;
+    amcTotalTax = Math.round(amcTotalTax * 100) / 100;
+    amcGrandTotal = Math.round(amcGrandTotal * 100) / 100;
+
+    console.log("AMC Calculation result:", { amcSubtotal, amcTotalTax, amcGrandTotal });
     
     // Step 7: Prepare final quotation data
     const quotationData = {
       ...sanitizedData,
       quotationType: 'amc',
-      subtotal: calculationResult.subtotal,
-      totalDiscount: calculationResult.totalDiscount,
-      overallDiscount: sanitizedData.overallDiscount || 0,
-      overallDiscountAmount: calculationResult.overallDiscountAmount,
-      totalTax: calculationResult.totalTax,
-      grandTotal: calculationResult.grandTotal,
-      roundOff: calculationResult.roundOff,
-      items: calculationResult.items,
-      serviceCharges: calculationResult.serviceCharges,
-      batteryBuyBack: calculationResult.batteryBuyBack,
+      subtotal: amcSubtotal,
+      totalDiscount: 0, // AMC doesn't use item-level discounts
+      overallDiscount: 0,
+      overallDiscountAmount: 0,
+      totalTax: amcTotalTax,
+      grandTotal: amcGrandTotal,
+      roundOff: 0,
       // Set default payment values
       paidAmount: sanitizedData.paidAmount || 0,
-      remainingAmount: calculationResult.grandTotal - (sanitizedData.paidAmount || 0),
+      remainingAmount: amcGrandTotal - (sanitizedData.paidAmount || 0),
       paymentStatus: sanitizedData.paidAmount && sanitizedData.paidAmount > 0 ? 'partial' : 'pending',
       status: sanitizedData.status || 'draft',
       createdBy: req.user?.id
@@ -297,24 +323,44 @@ export const updateAMCQuotation = async (req: AuthenticatedRequest, res: Respons
       }
     }
 
-    // Calculate totals if items are provided (only for full updates)
-    if (!isStatusOnlyUpdate && sanitizedData.items && sanitizedData.items.length > 0) {
-      const calculationResult = QuotationService.calculateQuotationTotals(
-        sanitizedData.items, 
-        sanitizedData.serviceCharges || [], 
-        sanitizedData.batteryBuyBack || undefined,
-        sanitizedData.overallDiscount || 0
-      );
-      sanitizedData.subtotal = calculationResult.subtotal;
-      sanitizedData.totalDiscount = calculationResult.totalDiscount;
-      sanitizedData.overallDiscount = sanitizedData.overallDiscount || 0;
-      sanitizedData.overallDiscountAmount = calculationResult.overallDiscountAmount;
-      sanitizedData.totalTax = calculationResult.totalTax;
-      sanitizedData.grandTotal = calculationResult.grandTotal;
-      sanitizedData.roundOff = calculationResult.roundOff;
-      sanitizedData.items = calculationResult.items;
-      sanitizedData.serviceCharges = calculationResult.serviceCharges;
-      sanitizedData.batteryBuyBack = calculationResult.batteryBuyBack;
+    // Calculate AMC totals from offerItems (only for full updates)
+    if (!isStatusOnlyUpdate && sanitizedData.offerItems && sanitizedData.offerItems.length > 0) {
+      let amcSubtotal = 0;
+      let amcTotalTax = 0;
+      let amcGrandTotal = 0;
+
+      const gstIncluded = sanitizedData.gstIncluded !== false; // Default to true if not specified
+      
+      sanitizedData.offerItems.forEach((item: any) => {
+        const qty = Number(item.qty) || 0;
+        const costPerDG = Number(item.amcCostPerDG) || 0;
+        const itemSubtotal = qty * costPerDG;
+        
+        let itemTax = 0;
+        let itemTotal = itemSubtotal;
+        
+        if (gstIncluded) {
+          // GST is included in the cost per DG
+          itemTax = itemSubtotal * 0.18; // 18% GST
+          itemTotal = itemSubtotal + itemTax;
+        } else {
+          // GST is not included, so the cost per DG is the final amount
+          itemTotal = itemSubtotal;
+        }
+
+        amcSubtotal += itemSubtotal;
+        amcTotalTax += itemTax;
+        amcGrandTotal += itemTotal;
+      });
+
+      // Round to 2 decimal places
+      sanitizedData.subtotal = Math.round(amcSubtotal * 100) / 100;
+      sanitizedData.totalTax = Math.round(amcTotalTax * 100) / 100;
+      sanitizedData.grandTotal = Math.round(amcGrandTotal * 100) / 100;
+      sanitizedData.totalDiscount = 0;
+      sanitizedData.overallDiscount = 0;
+      sanitizedData.overallDiscountAmount = 0;
+      sanitizedData.roundOff = 0;
     }
 
     // Handle advance payment calculations if advance amount is provided (only for full updates)
@@ -768,4 +814,340 @@ const validateAMCQuotationData = (data: any): { isValid: boolean; errors: any[] 
 // Validation helper functions
 const isValidNumber = (value: any): boolean => {
   return typeof value === 'number' && !isNaN(value) && isFinite(value);
+};
+
+// @desc    Send AMC quotation email to customer
+// @route   POST /api/v1/amc-quotations/:id/send-email
+// @access  Private
+export const sendAMCQuotationEmailToCustomer = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    // Find the AMC quotation
+    const quotation = await AMCQuotation.findById(id)
+      .populate('customer', 'name email phone addresses');
+
+    if (!quotation) {
+      return next(new AppError('AMC Quotation not found', 404));
+    }
+
+    // Get customer primary address email
+    const customer = quotation.customer as any;
+    let primaryEmail = null;
+
+    if (customer.addresses && customer.addresses.length > 0) {
+      const primaryAddress = customer.addresses.find((addr: any) => addr.isPrimary);
+      if (primaryAddress && primaryAddress.email) {
+        primaryEmail = primaryAddress.email;
+      }
+    }
+
+    // If no primary address email, try customer's main email
+    if (!primaryEmail && customer.email) {
+      primaryEmail = customer.email;
+    }
+
+    if (!primaryEmail) {
+      const response: APIResponse = {
+        success: false,
+        message: 'Customer email not available for this AMC quotation',
+        data: null
+      };
+      res.status(400).json(response);
+      return;
+    }
+
+    // Create email subject
+    const subject = `AMC Quotation ${quotation.quotationNumber} - Sun Power Services`;
+
+    // Create HTML email content
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>AMC Quotation ${quotation.quotationNumber}</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              line-height: 1.6;
+              color: #333;
+              max-width: 600px;
+              margin: 0 auto;
+              padding: 20px;
+            }
+            .header {
+              background-color: #f8f9fa;
+              padding: 20px;
+              border-radius: 8px;
+              margin-bottom: 20px;
+            }
+            .quotation-details {
+              background-color: #ffffff;
+              border: 1px solid #dee2e6;
+              border-radius: 8px;
+              padding: 20px;
+              margin-bottom: 20px;
+            }
+            .footer {
+              background-color: #f8f9fa;
+              padding: 15px;
+              border-radius: 8px;
+              text-align: center;
+              font-size: 14px;
+              color: #6c757d;
+            }
+            .highlight {
+              color: #007bff;
+              font-weight: bold;
+            }
+            .amount {
+              color: #28a745;
+              font-weight: bold;
+              font-size: 18px;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin: 15px 0;
+            }
+            th, td {
+              border: 1px solid #dee2e6;
+              padding: 8px;
+              text-align: left;
+            }
+            th {
+              background-color: #f8f9fa;
+              font-weight: bold;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>AMC Quotation</h1>
+            <p>Dear ${customer.name},</p>
+            <p>Thank you for your interest in our AMC services. Please find below the details of your AMC quotation.</p>
+          </div>
+
+          <div class="quotation-details">
+            <h2>Quotation Details</h2>
+            <table>
+              <tr>
+                <td><strong>Quotation Number:</strong></td>
+                <td class="highlight">${quotation.quotationNumber}</td>
+              </tr>
+              <tr>
+                <td><strong>Issue Date:</strong></td>
+                <td>${new Date(quotation.issueDate).toLocaleDateString('en-IN')}</td>
+              </tr>
+              <tr>
+                <td><strong>Valid Until:</strong></td>
+                <td>${new Date(quotation.validUntil).toLocaleDateString('en-IN')}</td>
+              </tr>
+              <tr>
+                <td><strong>AMC Type:</strong></td>
+                <td>${quotation.amcType}</td>
+              </tr>
+              <tr>
+                <td><strong>Contract Duration:</strong></td>
+                <td>${quotation.contractDuration} months</td>
+              </tr>
+              <tr>
+                <td><strong>Billing Cycle:</strong></td>
+                <td>${quotation.billingCycle}</td>
+              </tr>
+              <tr>
+                <td><strong>Grand Total:</strong></td>
+                <td class="amount">₹${quotation.grandTotal?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}</td>
+              </tr>
+            </table>
+
+            ${quotation.offerItems && quotation.offerItems.length > 0 ? `
+              <h3>AMC Offer Items</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Make</th>
+                    <th>Engine S/N</th>
+                    <th>DG Rating (KVA)</th>
+                    <th>Type of Visits</th>
+                    <th>Qty</th>
+                    <th>AMC Cost per DG</th>
+                    <th>Total AMC Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${quotation.offerItems.map((item: any) => `
+                    <tr>
+                      <td>${item.make || 'N/A'}</td>
+                      <td>${item.engineSlNo || 'N/A'}</td>
+                      <td>${item.dgRatingKVA || 'N/A'}</td>
+                      <td>${item.typeOfVisits || 'N/A'}</td>
+                      <td>${item.qty || 0}</td>
+                      <td>₹${(item.amcCostPerDG || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                      <td>₹${(item.totalAMCAmountPerDG || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            ` : ''}
+
+            ${quotation.sparesItems && quotation.sparesItems.length > 0 ? `
+              <h3>Spares Items</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Part No</th>
+                    <th>Description</th>
+                    <th>HSN Code</th>
+                    <th>Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${quotation.sparesItems.map((item: any) => `
+                    <tr>
+                      <td>${item.partNo || 'N/A'}</td>
+                      <td>${item.description || 'N/A'}</td>
+                      <td>${item.hsnCode || 'N/A'}</td>
+                      <td>${item.qty || 0}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            ` : ''}
+
+            ${quotation.notes ? `
+              <h3>Notes</h3>
+              <p>${quotation.notes}</p>
+            ` : ''}
+
+            ${quotation.terms ? `
+              <h3>Terms & Conditions</h3>
+              <p>${quotation.terms}</p>
+            ` : ''}
+          </div>
+
+          <div class="footer">
+            <p>This is an automated email. Please do not reply to this email.</p>
+            <p>For any queries, please contact us at our office.</p>
+            <p>© ${new Date().getFullYear()} Sun Power Services. All rights reserved.</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    // Send the email
+    await sendQuotationEmailViaNodemailer(
+      primaryEmail,
+      subject,
+      htmlContent
+    );
+
+    // Log the email sending attempt
+    console.log(`Attempting to send AMC quotation email to ${primaryEmail} for quotation ${quotation.quotationNumber}`);
+
+    // Always update quotation status to 'sent' after sending email
+    await AMCQuotation.findByIdAndUpdate(id, { status: 'sent' });
+
+    // Log the email sending
+    console.log(`AMC quotation email sent successfully to ${primaryEmail} for quotation ${quotation.quotationNumber}`);
+
+    const response: APIResponse = {
+      success: true,
+      message: `AMC quotation email sent successfully to ${primaryEmail}`,
+      data: {
+        quotationNumber: quotation.quotationNumber,
+        customerEmail: primaryEmail,
+        status: 'sent'
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('Error sending AMC quotation email:', error);
+    
+    // Provide more specific error messages based on the error type
+    let errorMessage = 'Failed to send AMC quotation email';
+    let statusCode = 500;
+    
+    if (error instanceof Error) {
+      if (error.message.includes('Missing required SMTP environment variables')) {
+        errorMessage = 'Email service configuration is incomplete. Please contact administrator.';
+        statusCode = 503; // Service Unavailable
+      } else if (error.message.includes('SMTP connection failed')) {
+        errorMessage = 'Email service is temporarily unavailable. Please check SMTP configuration.';
+        statusCode = 503; // Service Unavailable
+      } else if (error.message.includes('Missing required email parameters')) {
+        errorMessage = 'Invalid email data provided.';
+        statusCode = 400; // Bad Request
+      } else if (error.message.includes('Email sending failed')) {
+        errorMessage = 'Failed to send email. Please try again.';
+        statusCode = 500; // Internal Server Error
+      } else if (error.message.includes('Authentication failed')) {
+        errorMessage = 'Email authentication failed. Please check SMTP credentials.';
+        statusCode = 503; // Service Unavailable
+      } else {
+        errorMessage = `Email error: ${error.message}`;
+        statusCode = 500; // Internal Server Error
+      }
+    }
+
+    const response: APIResponse = {
+      success: false,
+      message: errorMessage,
+      data: null
+    };
+
+    res.status(statusCode).json(response);
+  }
+};
+
+// @desc    Update AMC quotation status
+// @route   PUT /api/v1/amc-quotations/:id/status
+// @access  Private
+export const updateAMCQuotationStatus = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { status, notes } = req.body;
+
+    // Validate status
+    const validStatuses = ['draft', 'sent', 'accepted', 'rejected'];
+    if (!validStatuses.includes(status)) {
+      return next(new AppError('Invalid status. Must be one of: draft, sent, accepted, rejected', 400));
+    }
+
+    // Find and update the quotation
+    const quotation = await AMCQuotation.findByIdAndUpdate(
+      id,
+      { 
+        status,
+        ...(notes && { notes })
+      },
+      { new: true }
+    ).populate('customer', 'name email phone addresses');
+
+    if (!quotation) {
+      return next(new AppError('AMC Quotation not found', 404));
+    }
+
+    const response: APIResponse = {
+      success: true,
+      message: 'AMC quotation status updated successfully',
+      data: quotation
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('Error updating AMC quotation status:', error);
+    next(new AppError('Failed to update AMC quotation status', 500));
+  }
 };

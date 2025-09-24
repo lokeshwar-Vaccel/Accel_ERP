@@ -30,7 +30,8 @@ import {
   Calculator,
   Battery,
   Trash2,
-  RefreshCw
+  RefreshCw,
+  Settings
 } from 'lucide-react';
 import { Button } from '../components/ui/Botton';
 import { Modal } from '../components/ui/Modal';
@@ -46,25 +47,87 @@ import { Pagination } from 'components/ui/Pagination';
 import apiClientQuotation from '../utils/api';
 import UpdatePaymentModal from '../components/UpdatePaymentModal';
 import QuotationPrintModal from '../components/QuotationPrintModal';
+import AMCQuotationManagement from './AMCQuotationManagement';
 import * as XLSX from 'xlsx';
 
 // Helper function to convert invoice data to Excel with proper formatting
 const convertInvoiceToExcel = (data: any[]) => {
   if (!data || data.length === 0) return new Blob([], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  
+
+  // Process data to ensure proper number formatting
+  const processedData = data.map((item, index) => {
+    const processedItem = { ...item };
+    
+    // Convert amount fields to numbers
+    const amountFields = ['Total Amount', 'Paid Amount', 'Remaining Amount', 'Subtotal', 'Tax Amount', 'Discount Amount', 'Overall Discount Amount'];
+    amountFields.forEach(field => {
+      if (processedItem[field] !== undefined && processedItem[field] !== null) {
+        // Remove currency symbols and convert to number
+        const cleanValue = String(processedItem[field]).replace(/[₹,]/g, '');
+        const numValue = parseFloat(cleanValue);
+        processedItem[field] = isNaN(numValue) ? 0 : numValue;
+      }
+    });
+
+    // Convert quantity fields to numbers
+    const quantityFields = ['Quantity'];
+    quantityFields.forEach(field => {
+      if (processedItem[field] !== undefined && processedItem[field] !== null) {
+        const numValue = parseFloat(String(processedItem[field]));
+        processedItem[field] = isNaN(numValue) ? 0 : numValue;
+      }
+    });
+
+    // Add assigned engineer name if available
+    if (processedItem['Referred By']) {
+      const engineer = processedItem['Referred By'];
+      if (typeof engineer === 'object' && engineer.firstName && engineer.lastName) {
+        processedItem['Referred By'] = `${engineer.firstName} ${engineer.lastName}`.trim();
+      } else if (typeof engineer === 'string') {
+        processedItem['Referred By'] = engineer;
+      }
+    }
+
+    return processedItem;
+  });
+
   // Create a new workbook
   const wb = XLSX.utils.book_new();
-  
-  // Convert data to worksheet
-  const ws = XLSX.utils.json_to_sheet(data);
-  
+
+  // Convert processed data to worksheet
+  const ws = XLSX.utils.json_to_sheet(processedData);
+
   // Check if quotation number column exists in the data
-  const hasQuotationNumber = data.length > 0 && 'Quotation Number' in data[0];
-  
-  // Set column widths for invoice export (dynamic based on whether quotation number is included)
+  const hasQuotationNumber = processedData.length > 0 && 'Quotation Number' in processedData[0];
+  const hasReferredBy = processedData.length > 0 && 'Referred By' in processedData[0];
+
+  // Set column widths for invoice export (dynamic based on included fields)
   let columnWidths;
-  if (hasQuotationNumber) {
-    // Column widths with quotation number
+  if (hasQuotationNumber && hasReferredBy) {
+    // Column widths with quotation number and referred by
+    columnWidths = [
+      { wch: 8 },   // S.No
+      { wch: 20 },  // Invoice Number
+      { wch: 20 },  // Quotation Number
+      { wch: 25 },  // Customer/Supplier Name
+      { wch: 30 },  // Customer/Supplier Email
+      { wch: 15 },  // Customer/Supplier Phone
+      { wch: 20 },  // Referred By
+      { wch: 12 },  // Issue Date
+      { wch: 12 },  // Due Date
+      { wch: 12 },  // Status
+      { wch: 15 },  // Payment Status
+      { wch: 18 },  // Total Amount
+      { wch: 15 },  // Paid Amount
+      { wch: 18 },  // Remaining Amount
+      { wch: 20 },  // External Invoice Number
+      { wch: 15 },  // PO Number
+      { wch: 12 },  // Invoice Type
+      { wch: 20 },  // Created By
+      { wch: 12 },  // Created At
+    ];
+  } else if (hasQuotationNumber) {
+    // Column widths with quotation number only
     columnWidths = [
       { wch: 8 },   // S.No
       { wch: 20 },  // Invoice Number
@@ -85,8 +148,30 @@ const convertInvoiceToExcel = (data: any[]) => {
       { wch: 20 },  // Created By
       { wch: 12 },  // Created At
     ];
+  } else if (hasReferredBy) {
+    // Column widths with referred by only
+    columnWidths = [
+      { wch: 8 },   // S.No
+      { wch: 20 },  // Invoice Number
+      { wch: 25 },  // Customer/Supplier Name
+      { wch: 30 },  // Customer/Supplier Email
+      { wch: 15 },  // Customer/Supplier Phone
+      { wch: 20 },  // Referred By
+      { wch: 12 },  // Issue Date
+      { wch: 12 },  // Due Date
+      { wch: 12 },  // Status
+      { wch: 15 },  // Payment Status
+      { wch: 18 },  // Total Amount
+      { wch: 15 },  // Paid Amount
+      { wch: 18 },  // Remaining Amount
+      { wch: 20 },  // External Invoice Number
+      { wch: 15 },  // PO Number
+      { wch: 12 },  // Invoice Type
+      { wch: 20 },  // Created By
+      { wch: 12 },  // Created At
+    ];
   } else {
-    // Column widths without quotation number
+    // Column widths without quotation number or referred by
     columnWidths = [
       { wch: 8 },   // S.No
       { wch: 20 },  // Invoice Number
@@ -107,22 +192,22 @@ const convertInvoiceToExcel = (data: any[]) => {
       { wch: 12 },  // Created At
     ];
   }
-  
+
   ws['!cols'] = columnWidths;
-  
+
   // Set row heights for better readability
   const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
   for (let row = range.s.r; row <= range.e.r; row++) {
     ws[`!rows`] = ws[`!rows`] || [];
     ws[`!rows`][row] = { hpt: 20 }; // Set row height to 20 points
   }
-  
+
   // Add header styling (bold headers)
   const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
   for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
     const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
     if (!ws[cellAddress]) continue;
-    
+
     ws[cellAddress].s = {
       font: { bold: true, color: { rgb: "FFFFFF" } },
       fill: { fgColor: { rgb: "366092" } },
@@ -135,10 +220,38 @@ const convertInvoiceToExcel = (data: any[]) => {
       }
     };
   }
+
+  // Add number formatting for amount columns
+  const dataRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  const headers = Object.keys(processedData[0] || {});
   
+  // Find amount column indices
+  const amountColumns = ['Total Amount', 'Paid Amount', 'Remaining Amount', 'Subtotal', 'Tax Amount', 'Discount Amount', 'Overall Discount Amount'];
+  const quantityColumns = ['Quantity'];
+  
+  for (let row = 1; row <= dataRange.e.r; row++) {
+    for (let col = 0; col < headers.length; col++) {
+      const headerName = headers[col];
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+      
+      if (ws[cellAddress]) {
+        // Format amount columns as currency
+        if (amountColumns.includes(headerName)) {
+          ws[cellAddress].z = '#,##0.00';
+          ws[cellAddress].t = 'n'; // Set as number type
+        }
+        // Format quantity columns as numbers
+        else if (quantityColumns.includes(headerName)) {
+          ws[cellAddress].z = '#,##0';
+          ws[cellAddress].t = 'n'; // Set as number type
+        }
+      }
+    }
+  }
+
   // Add the worksheet to the workbook
   XLSX.utils.book_append_sheet(wb, ws, 'Invoices');
-  
+
   // Convert to Excel file
   const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -147,13 +260,37 @@ const convertInvoiceToExcel = (data: any[]) => {
 // Helper function to convert quotation data to Excel with proper formatting
 const convertToExcel = (data: any[]) => {
   if (!data || data.length === 0) return new Blob([], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  
+
+  // Process data to ensure proper number formatting
+  const processedData = data.map((item, index) => {
+    const processedItem = { ...item };
+    
+    // Convert amount fields to numbers
+    const amountFields = ['Total Amount', 'Paid Amount', 'Remaining Amount'];
+    amountFields.forEach(field => {
+      if (processedItem[field] !== undefined && processedItem[field] !== null) {
+        // Remove currency symbols and convert to number
+        const cleanValue = String(processedItem[field]).replace(/[₹,]/g, '');
+        const numValue = parseFloat(cleanValue);
+        processedItem[field] = isNaN(numValue) ? 0 : numValue;
+      }
+    });
+
+    // Convert "Assigned Engineer" to "Referred By"
+    if (processedItem['Assigned Engineer']) {
+      processedItem['Referred By'] = processedItem['Assigned Engineer'];
+      delete processedItem['Assigned Engineer'];
+    }
+
+    return processedItem;
+  });
+
   // Create a new workbook
   const wb = XLSX.utils.book_new();
-  
-  // Convert data to worksheet
-  const ws = XLSX.utils.json_to_sheet(data);
-  
+
+  // Convert processed data to worksheet
+  const ws = XLSX.utils.json_to_sheet(processedData);
+
   // Set column widths for better display
   const columnWidths = [
     { wch: 8 },   // S.No
@@ -169,25 +306,25 @@ const convertToExcel = (data: any[]) => {
     { wch: 15 },  // Paid Amount
     { wch: 18 },  // Remaining Amount
     { wch: 20 },  // Location
-    { wch: 25 },  // Assigned Engineer
+    { wch: 25 },  // Referred By
     { wch: 12 },  // Created At
   ];
-  
+
   ws['!cols'] = columnWidths;
-  
+
   // Set row heights for better readability
   const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
   for (let row = range.s.r; row <= range.e.r; row++) {
     ws[`!rows`] = ws[`!rows`] || [];
     ws[`!rows`][row] = { hpt: 20 }; // Set row height to 20 points
   }
-  
+
   // Add header styling (bold headers)
   const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
   for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
     const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
     if (!ws[cellAddress]) continue;
-    
+
     ws[cellAddress].s = {
       font: { bold: true, color: { rgb: "FFFFFF" } },
       fill: { fgColor: { rgb: "366092" } },
@@ -200,9 +337,31 @@ const convertToExcel = (data: any[]) => {
       }
     };
   }
+
+  // Add number formatting for amount columns
+  const dataRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  const headers = Object.keys(processedData[0] || {});
   
+  // Find amount column indices
+  const amountColumns = ['Total Amount', 'Paid Amount', 'Remaining Amount'];
+  
+  for (let row = 1; row <= dataRange.e.r; row++) {
+    for (let col = 0; col < headers.length; col++) {
+      const headerName = headers[col];
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+      
+      if (ws[cellAddress]) {
+        // Format amount columns as currency
+        if (amountColumns.includes(headerName)) {
+          ws[cellAddress].z = '#,##0.00';
+          ws[cellAddress].t = 'n'; // Set as number type
+        }
+      }
+    }
+  }
+
   // Add summary row
-  const summaryRow = data.length + 2; // Add 2 rows after data
+  const summaryRow = processedData.length + 2; // Add 2 rows after data
   const summaryData = {
     'S.No': '',
     'Quotation Number': 'SUMMARY',
@@ -213,32 +372,32 @@ const convertToExcel = (data: any[]) => {
     'Valid Until': '',
     'Status': '',
     'Payment Status': '',
-    'Total Amount': `₹${data.reduce((sum, item) => {
-      const amount = parseFloat(item['Total Amount']?.replace(/[₹,]/g, '') || '0');
-      return sum + amount;
-    }, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-    'Paid Amount': `₹${data.reduce((sum, item) => {
-      const amount = parseFloat(item['Paid Amount']?.replace(/[₹,]/g, '') || '0');
-      return sum + amount;
-    }, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-    'Remaining Amount': `₹${data.reduce((sum, item) => {
-      const amount = parseFloat(item['Remaining Amount']?.replace(/[₹,]/g, '') || '0');
-      return sum + amount;
-    }, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+    'Total Amount': processedData.reduce((sum, item) => {
+      const amount = typeof item['Total Amount'] === 'number' ? item['Total Amount'] : parseFloat(String(item['Total Amount'] || '0').replace(/[₹,]/g, ''));
+      return sum + (isNaN(amount) ? 0 : amount);
+    }, 0),
+    'Paid Amount': processedData.reduce((sum, item) => {
+      const amount = typeof item['Paid Amount'] === 'number' ? item['Paid Amount'] : parseFloat(String(item['Paid Amount'] || '0').replace(/[₹,]/g, ''));
+      return sum + (isNaN(amount) ? 0 : amount);
+    }, 0),
+    'Remaining Amount': processedData.reduce((sum, item) => {
+      const amount = typeof item['Remaining Amount'] === 'number' ? item['Remaining Amount'] : parseFloat(String(item['Remaining Amount'] || '0').replace(/[₹,]/g, ''));
+      return sum + (isNaN(amount) ? 0 : amount);
+    }, 0),
     'Location': '',
-    'Assigned Engineer': '',
+    'Referred By': '',
     'Created At': '',
   };
-  
+
   // Add summary row to worksheet
   XLSX.utils.sheet_add_json(ws, [summaryData], { origin: -1, skipHeader: true });
-  
+
   // Style the summary row
   const summaryRowRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
   for (let col = summaryRowRange.s.c; col <= summaryRowRange.e.c; col++) {
     const cellAddress = XLSX.utils.encode_cell({ r: summaryRow - 1, c: col });
     if (!ws[cellAddress]) continue;
-    
+
     ws[cellAddress].s = {
       font: { bold: true },
       fill: { fgColor: { rgb: "F2F2F2" } },
@@ -251,34 +410,35 @@ const convertToExcel = (data: any[]) => {
       }
     };
   }
-  
+
   // Add the worksheet to workbook
   XLSX.utils.book_append_sheet(wb, ws, 'Quotations');
-  
+
   // Generate Excel file buffer
-  const excelBuffer = XLSX.write(wb, { 
-    bookType: 'xlsx', 
+  const excelBuffer = XLSX.write(wb, {
+    bookType: 'xlsx',
     type: 'array',
     cellStyles: true,
     compression: true
   });
-  
+
   return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 };
 // Helper function to convert delivery challan data to Excel without summary row
 const convertToExcelForDeliveryChallans = (data: any) => {
   if (!data || data.length === 0) return;
-  
+
   // Create a new workbook
   const wb = XLSX.utils.book_new();
-  
+
   // Convert data to worksheet
   const ws = XLSX.utils.json_to_sheet(data);
-  
+
   // Set column widths for better display
   const columnWidths = [
     { wch: 8 },   // S.No
     { wch: 20 },  // Challan Number
+    { wch: 20 },  // Invoice Number
     { wch: 12 },  // Date
     { wch: 25 },  // Customer Name
     { wch: 30 },  // Customer Email
@@ -301,22 +461,22 @@ const convertToExcelForDeliveryChallans = (data: any) => {
     { wch: 20 },  // Created By
     { wch: 12 },  // Created At
   ];
-  
+
   ws['!cols'] = columnWidths;
-  
+
   // Set row heights for better readability
   const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
   for (let row = range.s.r; row <= range.e.r; row++) {
     ws['!rows'] = ws['!rows'] || [];
     ws['!rows'][row] = { hpt: 20 }; // Set row height to 20 points
   }
-  
+
   // Style headers
   const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
   for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
     const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
     if (!ws[cellAddress]) continue;
-    
+
     ws[cellAddress].s = {
       font: { bold: true, color: { rgb: "FFFFFF" } },
       fill: { fgColor: { rgb: "366092" } },
@@ -329,18 +489,18 @@ const convertToExcelForDeliveryChallans = (data: any) => {
       }
     };
   }
-  
+
   // Add the worksheet to workbook
   XLSX.utils.book_append_sheet(wb, ws, 'Delivery Challans');
-  
+
   // Generate Excel file buffer
-  const excelBuffer = XLSX.write(wb, { 
-    bookType: 'xlsx', 
+  const excelBuffer = XLSX.write(wb, {
+    bookType: 'xlsx',
     type: 'array',
     cellStyles: true,
     compression: true
   });
-  
+
   return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 };
 
@@ -776,6 +936,9 @@ const InvoiceManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
+  // Quotation type toggle state
+  const [quotationType, setQuotationType] = useState<'quotation' | 'amc'>('quotation');
+
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [searchQuotationTerm, setSearchQuotationTerm] = useState('');
@@ -793,7 +956,7 @@ const InvoiceManagement: React.FC = () => {
   const [toDatePurchase, setToDatePurchase] = useState('');
   const [deliveryChallans, setDeliveryChallans] = useState<any[]>([]);
   const [deliveryChallanLoading, setDeliveryChallanLoading] = useState(false);
-  
+
   // Date validation states
   const [dateRangeError, setDateRangeError] = useState<string>('');
   const [viewDeliveryChallan, setViewDeliveryChallan] = useState<any>(null);
@@ -833,20 +996,20 @@ const InvoiceManagement: React.FC = () => {
     return (savedInvoiceType as 'quotation' | 'sale' | 'purchase' | 'challan') || 'quotation';
   });
 
-  console.log("selectedInvoice123:",selectedInvoice);
-  
+  console.log("selectedInvoice123:", selectedInvoice);
+
   // Date range validation function
   const validateDateRange = (fromDate: string, toDate: string): boolean => {
     if (!fromDate || !toDate) return true; // Allow empty dates
-    
+
     const from = new Date(fromDate);
     const to = new Date(toDate);
-    
+
     if (from > to) {
       setDateRangeError('From date must be before or equal to To date');
       return false;
     }
-    
+
     setDateRangeError('');
     return true;
   };
@@ -983,12 +1146,12 @@ const InvoiceManagement: React.FC = () => {
     type: 'danger' | 'warning' | 'info';
   } | null>(null);
 
-  
+
 
   // Old advance payment states removed - now using unified UpdatePaymentModal
   const [showAdvancePaymentModal, setShowAdvancePaymentModal] = useState(false);
   const [selectedQuotationForPayment, setSelectedQuotationForPayment] = useState<Quotation | null>(null);
-  
+
   // Print modal state
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [selectedQuotationForPrint, setSelectedQuotationForPrint] = useState<Quotation | null>(null);
@@ -1421,13 +1584,13 @@ const InvoiceManagement: React.FC = () => {
         await fetchQuotations();
       } else if (invoiceType === 'challan') {
         fetchDeliveryChallans();
-      }  else {
+      } else {
         await fetchInvoices();
       }
       // Fetch stats after data is loaded
       await fetchStats();
     };
-    
+
     loadDataAndStats();
   }, [currentPage, limit, sort, searchTerm, statusFilter, paymentFilter, invoiceType, searchQuotationTerm, fromDate, toDate, fromDateSale, toDateSale, fromDatePurchase, toDatePurchase]);
 
@@ -1462,7 +1625,7 @@ const InvoiceManagement: React.FC = () => {
         sort,
         search: searchQuotationTerm,
       };
-      
+
       if (fromDate) params.startDate = fromDate;
       if (toDate) params.endDate = toDate;
       if (statusFilter && statusFilter !== 'all') params.status = statusFilter;
@@ -1673,7 +1836,7 @@ const InvoiceManagement: React.FC = () => {
       console.log('Fetching quotation stats from API...');
       const response = await apiClient.quotations.getStats();
       console.log('Quotation stats response:', response);
-      
+
       setStats((prev: any) => ({
         ...prev,
         totalQuotations: response.data.totalQuotations || 0,
@@ -1735,7 +1898,7 @@ const InvoiceManagement: React.FC = () => {
     console.log("typeToUse:", typeToUse);
 
     let path: string;
-    
+
     if (typeToUse === 'quotation') {
       path = '/billing/quotation';
     } else if (typeToUse === 'challan') {
@@ -1785,25 +1948,25 @@ const InvoiceManagement: React.FC = () => {
       const exportParams: any = {
         search: searchQuotationTerm,
       };
-      
+
       if (fromDate) exportParams.startDate = fromDate;
       if (toDate) exportParams.endDate = toDate;
 
       // Call the export API
       const response = await apiClientQuotation.quotations.export(exportParams);
-      
+
       // Convert JSON data to Excel format with proper column widths
       const blob = convertToExcel(response.data);
-      
+
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      
+
       // Generate filename with current date and filters
       const currentDate = new Date().toISOString().split('T')[0];
       const filterSuffix = fromDate || toDate ? `_${fromDate || 'start'}_to_${toDate || 'end'}` : '';
       link.download = `quotations_${currentDate}${filterSuffix}.xlsx`;
-      
+
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -1820,7 +1983,7 @@ const InvoiceManagement: React.FC = () => {
   const handleExportSaleInvoices = async () => {
     try {
       const loadingToast = toast.loading('Exporting sale invoices to Excel...');
-      
+
       // Prepare export parameters with current filters
       const exportParams: any = {
         search: searchTerm,
@@ -1828,7 +1991,7 @@ const InvoiceManagement: React.FC = () => {
         paymentStatus: paymentFilter !== 'all' ? paymentFilter : undefined,
         invoiceType: 'sale',
       };
-      
+
       if (fromDateSale) exportParams.startDate = fromDateSale;
       if (toDateSale) exportParams.endDate = toDateSale;
 
@@ -1836,28 +1999,28 @@ const InvoiceManagement: React.FC = () => {
 
       // Call the export API
       const response = await apiClient.invoices.export(exportParams);
-      
+
       // Debug: Log the response data to check quotation numbers
       console.log('Export response data (first 3 items):', response.data.slice(0, 3));
       console.log('Available columns:', response.data.length > 0 ? Object.keys(response.data[0]) : 'No data');
-      
+
       // Convert JSON data to Excel format with proper column widths
       const blob = convertInvoiceToExcel(response.data);
-      
+
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      
+
       // Generate filename with current date and filters
       const currentDate = new Date().toISOString().split('T')[0];
       const filterSuffix = fromDateSale || toDateSale ? `_${fromDateSale || 'start'}_to_${toDateSale || 'end'}` : '';
       link.download = `sale_invoices_${currentDate}${filterSuffix}.xlsx`;
-      
+
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      
+
       toast.dismiss(loadingToast);
       toast.success('Sale invoices exported successfully!');
     } catch (error) {
@@ -1869,7 +2032,7 @@ const InvoiceManagement: React.FC = () => {
   const handleExportPurchaseInvoices = async () => {
     try {
       const loadingToast = toast.loading('Exporting purchase invoices to Excel...');
-      
+
       // Prepare export parameters with current filters
       const exportParams: any = {
         search: searchTerm,
@@ -1877,7 +2040,7 @@ const InvoiceManagement: React.FC = () => {
         paymentStatus: paymentFilter !== 'all' ? paymentFilter : undefined,
         invoiceType: 'purchase',
       };
-      
+
       if (fromDatePurchase) exportParams.startDate = fromDatePurchase;
       if (toDatePurchase) exportParams.endDate = toDatePurchase;
 
@@ -1885,24 +2048,24 @@ const InvoiceManagement: React.FC = () => {
 
       // Call the export API
       const response = await apiClient.invoices.export(exportParams);
-      
+
       // Convert JSON data to Excel format with proper column widths
       const blob = convertInvoiceToExcel(response.data);
-      
+
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      
+
       // Generate filename with current date and filters
       const currentDate = new Date().toISOString().split('T')[0];
       const filterSuffix = fromDatePurchase || toDatePurchase ? `_${fromDatePurchase || 'start'}_to_${toDatePurchase || 'end'}` : '';
       link.download = `purchase_invoices_${currentDate}${filterSuffix}.xlsx`;
-      
+
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      
+
       toast.dismiss(loadingToast);
       toast.success('Purchase invoices exported successfully!');
     } catch (error) {
@@ -1914,7 +2077,7 @@ const InvoiceManagement: React.FC = () => {
   const handleExportDeliveryChallans = async () => {
     try {
       const loadingToast = toast.loading('Exporting delivery challans to Excel...');
-      
+
       // Prepare export parameters with current filters
       const exportParams: any = {
         search: searchTerm,
@@ -1924,23 +2087,23 @@ const InvoiceManagement: React.FC = () => {
 
       // Call the export API
       const response = await apiClient.deliveryChallans.export(exportParams);
-      
+
       // Convert JSON data to Excel format with proper column widths
       const blob = convertToExcelForDeliveryChallans(response.data);
-      
+
       const url = window.URL.createObjectURL(blob || new Blob());
       const link = document.createElement('a');
       link.href = url;
-      
+
       // Generate filename with current date
       const currentDate = new Date().toISOString().split('T')[0];
       link.download = `delivery_challans_${currentDate}.xlsx`;
-      
+
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      
+
       toast.dismiss(loadingToast);
       toast.success('Delivery challans exported successfully!');
     } catch (error) {
@@ -2071,9 +2234,9 @@ const InvoiceManagement: React.FC = () => {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center space-x-3">
                 <div className={`w-3 h-3 rounded-full ${payment.paymentStatus === 'completed' ? 'bg-green-500' :
-                    payment.paymentStatus === 'pending' ? 'bg-yellow-500' :
-                      payment.paymentStatus === 'failed' ? 'bg-red-500' :
-                        'bg-gray-500'
+                  payment.paymentStatus === 'pending' ? 'bg-yellow-500' :
+                    payment.paymentStatus === 'failed' ? 'bg-red-500' :
+                      'bg-gray-500'
                   }`}></div>
                 <div>
                   <h4 className="text-sm font-medium text-gray-900">
@@ -2155,9 +2318,9 @@ const InvoiceManagement: React.FC = () => {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center space-x-3">
                 <div className={`w-3 h-3 rounded-full ${payment.paymentStatus === 'completed' ? 'bg-green-500' :
-                    payment.paymentStatus === 'pending' ? 'bg-yellow-500' :
-                      payment.paymentStatus === 'failed' ? 'bg-red-500' :
-                        'bg-gray-500'
+                  payment.paymentStatus === 'pending' ? 'bg-yellow-500' :
+                    payment.paymentStatus === 'failed' ? 'bg-red-500' :
+                      'bg-gray-500'
                   }`}></div>
                 <div>
                   <h4 className="text-sm font-medium text-gray-900">
@@ -2427,11 +2590,11 @@ const InvoiceManagement: React.FC = () => {
     try {
       setSubmitting(true);
       const pdfBlob = await apiClient.deliveryChallans.exportPDF(challanId);
-      
+
       // Find the challan for filename
       const challan = deliveryChallans.find(c => c._id === challanId);
       const filename = `delivery-challan-${challan?.challanNumber || 'draft'}.pdf`;
-      
+
       // Create download link
       const url = window.URL.createObjectURL(pdfBlob);
       const link = document.createElement('a');
@@ -2441,7 +2604,7 @@ const InvoiceManagement: React.FC = () => {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      
+
       toast.success('PDF exported successfully');
     } catch (error: any) {
       console.error('Error exporting PDF:', error);
@@ -2568,12 +2731,31 @@ const InvoiceManagement: React.FC = () => {
     }
   };
 
+  // Helper function to get primary address email
+  const getPrimaryAddressEmail = (customer: any): string | null => {
+    if (!customer?.addresses || !Array.isArray(customer.addresses)) {
+      return null;
+    }
+
+    // Find primary address
+    const primaryAddress = customer.addresses.find((addr: any) => addr.isPrimary);
+    if (primaryAddress?.email) {
+      return primaryAddress.email;
+    }
+
+    // If no primary address with email, return null
+    return null;
+  };
+
   // Handle sending quotation email
   const handleSendQuotationEmail = async (quotation: any) => {
     try {
-      // Check if customer has email
-      if (!quotation.customer?.email) {
-        toast.error('Customer email not available for this quotation');
+      // Get primary address email
+      const primaryEmail = getPrimaryAddressEmail(quotation.customer);
+
+      // Check if customer has primary address email
+      if (!primaryEmail) {
+        toast.error('Customer primary address email not available for this quotation');
         return;
       }
 
@@ -2586,8 +2768,8 @@ const InvoiceManagement: React.FC = () => {
       const response = await apiClient.quotations.sendEmail(quotation._id);
 
       if (response.success) {
-        toast.success(`Quotation email sent successfully to ${quotation.customer.email}. Status updated to 'sent'.`, { id: 'quotation-email' });
-        
+        toast.success(`Quotation email sent successfully to ${primaryEmail}. Status updated to 'sent'.`, { id: 'quotation-email' });
+
         // Refresh quotations to get updated status
         fetchQuotations();
       } else {
@@ -2778,7 +2960,7 @@ const InvoiceManagement: React.FC = () => {
   // Validate payment method details
   const validatePaymentMethodDetails = (): boolean => {
     const errors: Record<string, string> = {};
-    
+
     if (!paymentUpdate.paymentMethod) {
       errors.paymentMethod = 'Payment method is required';
       setFormErrors(prev => ({ ...prev, ...errors }));
@@ -2786,7 +2968,7 @@ const InvoiceManagement: React.FC = () => {
     }
 
     const methodDetails = paymentUpdate.paymentMethodDetails;
-    
+
     switch (paymentUpdate.paymentMethod) {
       case 'cheque':
         if (!methodDetails?.cheque?.chequeNumber?.trim()) {
@@ -2799,7 +2981,7 @@ const InvoiceManagement: React.FC = () => {
           errors.issueDate = 'Issue date is required';
         }
         break;
-        
+
       case 'bank_transfer':
         if (!methodDetails?.bankTransfer?.bankName?.trim()) {
           errors.bankName = 'Bank name is required';
@@ -2817,7 +2999,7 @@ const InvoiceManagement: React.FC = () => {
           errors.transferDate = 'Transfer date is required';
         }
         break;
-        
+
       case 'upi':
         if (!methodDetails?.upi?.upiId?.trim()) {
           errors.upiId = 'UPI ID is required';
@@ -2826,7 +3008,7 @@ const InvoiceManagement: React.FC = () => {
           errors.transactionId = 'Transaction ID is required';
         }
         break;
-        
+
       case 'card':
         if (!methodDetails?.card?.cardType?.trim()) {
           errors.cardType = 'Card type is required';
@@ -2841,19 +3023,19 @@ const InvoiceManagement: React.FC = () => {
           errors.transactionId = 'Transaction ID is required';
         }
         break;
-        
+
       case 'other':
         if (!methodDetails?.other?.methodName?.trim()) {
           errors.methodName = 'Method name is required';
         }
         break;
     }
-    
+
     if (Object.keys(errors).length > 0) {
       setFormErrors(prev => ({ ...prev, ...errors }));
       return false;
     }
-    
+
     return true;
   };
 
@@ -2886,13 +3068,13 @@ const InvoiceManagement: React.FC = () => {
         await fetchInvoices();
         await fetchStats();
         setShowPaymentModal(false);
-        setPaymentUpdate({ 
-          paymentStatus: '', 
-          paymentMethod: '', 
-          paymentDate: '', 
-          paidAmount: 0, 
-          notes: '', 
-          useRazorpay: false, 
+        setPaymentUpdate({
+          paymentStatus: '',
+          paymentMethod: '',
+          paymentDate: '',
+          paidAmount: 0,
+          notes: '',
+          useRazorpay: false,
           paymentMethodDetails: {
             cash: { receivedBy: '', receiptNumber: '' },
             cheque: { chequeNumber: '', bankName: '', issueDate: new Date() },
@@ -2985,19 +3167,19 @@ const InvoiceManagement: React.FC = () => {
   const handleUpdateQuotationStatus = async (quotationId: string, status: string) => {
     try {
       console.log('Updating quotation status:', { quotationId, status });
-      
+
       // Validate inputs
       if (!quotationId || !status) {
         toast.error('Invalid quotation ID or status');
         return;
       }
-      
+
       setUpdatingQuotationStatus(quotationId);
       setOpenStatusDropdown(null); // Close dropdown
-      
+
       const response = await apiClient.quotations.update(quotationId, { status });
       console.log('Quotation update response:', response);
-      
+
       await fetchQuotations();
       toast.success(`Quotation status updated to ${status} successfully!`);
     } catch (error: any) {
@@ -3025,7 +3207,7 @@ const InvoiceManagement: React.FC = () => {
     if (currentStatus === 'accepted' || currentStatus === 'rejected') {
       return allOptions.filter(option => option.value === currentStatus);
     }
-    
+
     return allOptions.filter(option => option.value !== currentStatus);
   };
 
@@ -3574,7 +3756,7 @@ const InvoiceManagement: React.FC = () => {
       invoice?.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       invoice?.supplier?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (invoiceType === 'purchase' && invoice?.poNumber?.toLowerCase().includes(searchTerm.toLowerCase()));
-    
+
     const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
     const matchesPayment = paymentFilter === 'all' || invoice.paymentStatus === paymentFilter;
     const matchesType = invoice.invoiceType === invoiceType;
@@ -3587,10 +3769,10 @@ const InvoiceManagement: React.FC = () => {
     const matchesSearch =
       quotation?.quotationNumber?.toLowerCase().includes(searchQuotationTerm.toLowerCase()) ||
       quotation?.customer?.name?.toLowerCase().includes(searchQuotationTerm.toLowerCase());
-    
+
     const matchesStatus = statusFilter === 'all' || quotation?.status === statusFilter;
     const matchesPayment = paymentFilter === 'all' || quotation?.paymentStatus === paymentFilter;
-    
+
     return matchesSearch && matchesStatus && matchesPayment;
   });
 
@@ -3602,7 +3784,7 @@ const InvoiceManagement: React.FC = () => {
       challan?.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       challan?.referenceNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       challan?.buyersOrderNo?.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     return matchesSearch;
   });
 
@@ -3623,7 +3805,7 @@ const InvoiceManagement: React.FC = () => {
 
   const getStatCards = () => {
     console.log('getStatCards called with invoiceType:', invoiceType, 'stats:', stats);
-    
+
     if (invoiceType === 'quotation') {
       const cards = [
         {
@@ -3802,7 +3984,7 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const getStatusFilterLabel = (value: string) => {
-    const options = (invoiceType === 'quotation' || invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'challan') ? 
+    const options = (invoiceType === 'quotation' || invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'challan') ?
       (invoiceType === 'quotation' ? [
         { value: 'all', label: 'All Status' },
         { value: 'draft', label: 'Draft' },
@@ -3829,7 +4011,7 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const getPaymentFilterLabel = (value: string) => {
-    const options = (invoiceType === 'quotation' || invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'challan') ? 
+    const options = (invoiceType === 'quotation' || invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'challan') ?
       (invoiceType === 'quotation' ? [
         { value: 'all', label: 'All Payments' },
         { value: 'pending', label: 'Pending' },
@@ -3902,7 +4084,7 @@ const InvoiceManagement: React.FC = () => {
   // Calculate total tax amount from selected invoice items
   const getSelectedInvoiceTotalTax = () => {
     if (!selectedInvoice || !selectedInvoice.items) return 0;
-    
+
     return selectedInvoice.items.reduce((total: number, item: any) => {
       const itemTotal = (item.quantity || 0) * (item.unitPrice || 0);
       const discountAmount = (itemTotal * (item.discount || 0)) / 100;
@@ -4187,9 +4369,9 @@ const InvoiceManagement: React.FC = () => {
   // Print invoice function
   const printInvoice = () => {
     if (!selectedInvoice) return;
-    
+
     const printWindow = window.open('', '_blank');
-    
+
     const printContent = `
       <!DOCTYPE html>
       <html>
@@ -4226,8 +4408,6 @@ const InvoiceManagement: React.FC = () => {
           .header {
             text-align: center;
             margin-bottom: 30px;
-            border-bottom: 2px solid #000;
-            padding-bottom: 15px;
           }
           
           .invoice-title {
@@ -4264,31 +4444,18 @@ const InvoiceManagement: React.FC = () => {
             padding-left: 20px;
           }
           
-          .from-to-section {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
-            gap: 15px;
-          }
-          
-          .from-to-box {
-            flex: 1;
-            min-width: 200px;
-            padding: 10px;
-            border: 1px solid #000;
-          }
-          
-          .from-to-box h3 {
-            margin: 0 0 8px 0;
-            font-size: 12px;
+          .subject-line {
             font-weight: bold;
-            border-bottom: 1px solid #000;
-            padding-bottom: 3px;
+            margin: 20px 0 10px 0;
+            font-size: 13px;
           }
           
-          .from-to-box div {
-            font-size: 10px;
-            line-height: 1.3;
+          .greeting {
+            margin: 15px 0 5px 0;
+          }
+          
+          .intro-text {
+            margin: 5px 0 20px 0;
           }
           
           .items-table {
@@ -4330,78 +4497,91 @@ const InvoiceManagement: React.FC = () => {
             font-size: 12px;
           }
           
-          .summary-section {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
-            gap: 20px;
+          .terms-section {
+            margin: 5px 0;
           }
           
-          .notes-box {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #000;
-            min-height: 120px;
-          }
-          
-          .notes-box h4 {
-            margin: 0 0 8px 0;
-            font-size: 12px;
+          .terms-title {
             font-weight: bold;
-            border-bottom: 1px solid #000;
-            padding-bottom: 3px;
+            margin-bottom: 10px;
           }
           
-          .notes-box div {
+          .terms-table {
+            width: 100%;
+            margin-bottom: 20px;
+          }
+          
+          .terms-table td {
+            padding: 3px 0;
+            vertical-align: top;
+          }
+          
+          .terms-number {
+            width: 20px;
+            text-align: left;
+          }
+          
+          .terms-label {
+            width: 150px;
+            text-align: left;
+          }
+          
+          .terms-colon {
+            width: 15px;
+            text-align: left;
+          }
+          
+          .terms-value {
+            text-align: left;
+          }
+          
+          .closing-text {
+            margin: 15px 0;
+            line-height: 1.4;
+          }
+          
+          .footer-section {
+            display: table;
+            width: 100%;
+            margin-top: 30px;
+            border-top: 1px solid #ddd;
+            padding-top: 15px;
+          }
+          
+          .footer-left {
+            display: table-cell;
+            width: 40%;
+            vertical-align: top;
+            padding-right: 20px;
+          }
+          
+          .footer-center {
+            display: table-cell;
+            width: 20%;
+            text-align: center;
+            vertical-align: top;
+          }
+          
+          .footer-right {
+            display: table-cell;
+            width: 40%;
+            text-align: center;
+            vertical-align: top;
+          }
+          
+          .signature-line {
+            margin-top: 40px;
+            text-align: center;
+            border-top: 1px solid #333;
+            padding-top: 5px;
+            width: 200px;
+            margin-left: auto;
+            margin-right: auto;
+          }
+          
+          .company-details {
             font-size: 10px;
             line-height: 1.3;
-          }
-          
-          .summary-box {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #000;
-            min-height: 120px;
-          }
-          
-          .summary-table {
-            width: 100%;
-            border-collapse: collapse;
-          }
-          
-          .summary-table td {
-            padding: 5px 8px;
-            font-size: 11px;
-            border-bottom: 1px solid #ccc;
-          }
-          
-          .summary-table td:first-child {
-            font-weight: bold;
-          }
-          
-          .summary-table .total-row {
-            font-weight: bold;
-            background-color: #f0f0f0;
-            border-top: 2px solid #000;
-            font-size: 12px;
-          }
-          
-          .summary-table .amount-words {
-            border-top: 1px solid #000;
-            font-size: 9px;
-            line-height: 1.2;
-            word-wrap: break-word;
-            max-width: 180px;
-          }
-          
-          .footer {
-            margin-top: 30px;
-            text-align: center;
-            font-size: 11px;
-          }
-          
-          .footer div {
-            margin: 8px 0;
           }
           
           .section-title {
@@ -4412,182 +4592,97 @@ const InvoiceManagement: React.FC = () => {
             border-bottom: 1px solid #d1d5db;
             padding-bottom: 5px;
           }
+          
+          .qr-code-container {
+            border: 1px solid #333;
+            padding: 10px;
+            margin: 10px;
+            text-align: center;
+            background: white;
+          }
+          
+          .qr-code-image {
+            max-width: 100px;
+            max-height: 100px;
+            display: block;
+            margin: 0 auto;
+          }
         </style>
       </head>
       <body>
         <div class="invoice-container">
-          <div class="header">
-            <h1>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</h1>
-            ${selectedInvoice.company?.address || generalSettings?.companyAddress ? `<div>${selectedInvoice.company?.address || generalSettings?.companyAddress || ''}</div>` : ''}
-            ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `<div>Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone || ''} | Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail || ''}</div>` : ''}
-            ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `<div>PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN || ''} | GSTIN: ${selectedInvoice.company?.gstin || generalSettings?.companyGSTIN || ''}</div>` : ''}
-          </div>
-          
           <div class="invoice-title">INVOICE</div>
           
           <div class="info-section">
             <div class="info-row">
               <div class="info-cell info-left">
-                <strong>Invoice No:</strong> ${selectedInvoice.invoiceNumber || 'N/A'}
+                <strong>Ref:</strong> ${selectedInvoice.invoiceNumber || 'N/A'}
               </div>
               <div class="info-cell info-right">
-                <strong>Issue Date:</strong> ${selectedInvoice.issueDate ? new Date(selectedInvoice.issueDate).toLocaleDateString() : 'N/A'}
+                <strong>Date:</strong> ${selectedInvoice.issueDate ? new Date(selectedInvoice.issueDate).toLocaleDateString() : 'N/A'}
               </div>
             </div>
             <div class="info-row">
               <div class="info-cell info-left">
-                <strong>Due Date:</strong> ${selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : 'N/A'}
-              </div>
-              <div class="info-cell info-right">
-                <strong>Status:</strong> ${selectedInvoice.status ? selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1) : 'N/A'}
+                <strong>Reference Name:</strong> ${selectedInvoice.assignedEngineer ? `${selectedInvoice.assignedEngineer.firstName || ''} ${selectedInvoice.assignedEngineer.lastName || ''}`.trim() : 'N/A'}
               </div>
             </div>
-            ${selectedInvoice.poNumber ? `
+          </div>
+          
+          <div class="info-section">
             <div class="info-row">
               <div class="info-cell info-left">
-                <strong>PO Number:</strong> ${selectedInvoice.poNumber}
+                <strong>Customer Billing Address:</strong><br>
+                ${selectedInvoice.customer?.name || 'N/A'}<br>
+                ${selectedInvoice.billToAddress ? `${selectedInvoice.billToAddress.address || ''}<br>${selectedInvoice.billToAddress.district || ''}, ${selectedInvoice.billToAddress.pincode || ''}<br>${selectedInvoice.billToAddress.state || ''}${selectedInvoice.billToAddress.gstNumber ? `<br><strong>GST:</strong> ${selectedInvoice.billToAddress.gstNumber}` : ''}` : 'Same as billing address'}
               </div>
               <div class="info-cell info-right">
-                <strong>Payment Status:</strong> ${selectedInvoice.paymentStatus ? selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1) : 'N/A'}
+                <strong>Customer Delivery Address:</strong><br>
+                ${selectedInvoice.shipToAddress ? `${selectedInvoice.shipToAddress.address || ''}<br>${selectedInvoice.shipToAddress.district || ''}, ${selectedInvoice.shipToAddress.pincode || ''}<br>${selectedInvoice.shipToAddress.state || ''}${selectedInvoice.shipToAddress.gstNumber ? `<br><strong>GST:</strong> ${selectedInvoice.shipToAddress.gstNumber}` : ''}` : 'Same as billing address'}
               </div>
             </div>
-            ` : ''}
           </div>
           
-          <div class="from-to-section">
-            <div class="from-to-box">
-              <h3>From:</h3>
-              ${selectedInvoice.invoiceType === 'purchase' ? `
-                <div>
-                  <strong>${selectedInvoice.supplier?.name || 'N/A'}</strong><br>
-                  ${selectedInvoice.supplierEmail ? `Email: ${selectedInvoice.supplierEmail}<br>` : ''}
-                  ${selectedInvoice.supplierAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.supplierAddress.address || 'N/A'}<br>${selectedInvoice.supplierAddress.district && selectedInvoice.supplierAddress.pincode ? `${selectedInvoice.supplierAddress.district}, ${selectedInvoice.supplierAddress.pincode}<br>` : ''}${selectedInvoice.supplierAddress.state || 'N/A'}<br>${selectedInvoice.supplierAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.supplierAddress.gstNumber}` : ''}` : ''}
-                </div>
-              ` : `
-                <div>
-                  <strong>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong><br>
-                  ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone}<br>` : ''}
-                  ${selectedInvoice.company?.email || generalSettings?.companyEmail ? `Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail}<br>` : ''}
-                  ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN}<br>` : ''}
-                  ${selectedInvoice.location ? `<br><strong>Address:</strong><br>${selectedInvoice.location.name || 'N/A'}<br>${selectedInvoice.location.address || 'N/A'}` : ''}
-                </div>
-              `}
-            </div>
-            
-            <div class="from-to-box">
-              <h3>${selectedInvoice.invoiceType === 'purchase' ? 'To' : 'Bill To'}:</h3>
-              ${selectedInvoice.invoiceType === 'purchase' ? `
-                <div>
-                  <strong>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong><br>
-                  ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone}<br>` : ''}
-                  ${selectedInvoice.company?.email || generalSettings?.companyEmail ? `Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail}<br>` : ''}
-                  ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN}<br>` : ''}
-                  ${selectedInvoice.location ? `<br><strong>Address:</strong><br>${selectedInvoice.location.name || 'N/A'}<br>${selectedInvoice.location.address || 'N/A'}` : ''}
-                </div>
-              ` : `
-                <div>
-                  <strong>${selectedInvoice.customer?.name || 'N/A'}</strong><br>
-                  ${selectedInvoice.customer?.email ? `Email: ${selectedInvoice.customer?.email}<br>` : ''}
-                  ${selectedInvoice.customer?.phone ? `Phone: ${selectedInvoice.customer?.phone}<br>` : ''}
-                  ${selectedInvoice.billToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.billToAddress.address || 'N/A'}<br>${selectedInvoice.billToAddress.district && selectedInvoice.billToAddress.pincode ? `${selectedInvoice.billToAddress.district}, ${selectedInvoice.billToAddress.pincode}<br>` : ''}${selectedInvoice.billToAddress.state || 'N/A'}<br>${selectedInvoice.billToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.billToAddress.gstNumber}` : ''}` : ''}
-                </div>
-              `}
-            </div>
-            
-            ${selectedInvoice.invoiceType !== 'purchase' ? `
-            <div class="from-to-box">
-              <h3>Ship To:</h3>
-              <div>
-                <strong>${selectedInvoice.customer?.name || 'N/A'}</strong><br>
-                ${selectedInvoice.shipToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.shipToAddress.address || 'N/A'}<br>${selectedInvoice.shipToAddress.district && selectedInvoice.shipToAddress.pincode ? `${selectedInvoice.shipToAddress.district}, ${selectedInvoice.shipToAddress.pincode}<br>` : ''}${selectedInvoice.shipToAddress.state || 'N/A'}<br>${selectedInvoice.shipToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.shipToAddress.gstNumber}` : ''}` : ''}
+          <div class="info-section">
+            <div class="info-row">
+              <div class="info-cell info-left">
+                <strong>Engine Seriel Number:</strong> ${selectedInvoice?.engineSerialNumber || 'N/A'}
+              </div>
+              <div class="info-cell info-right">
+                <strong>Last Service Done Date:</strong> ${selectedInvoice?.serviceRequestDate ? new Date(selectedInvoice.serviceRequestDate).toLocaleDateString() : 'N/A'}
               </div>
             </div>
-            ` : ''}
+            <div class="info-row">
+              <div class="info-cell info-left">
+                <strong>DG Rating:</strong> ${selectedInvoice?.kva || 'N/A'}
+              </div>
+              <div class="info-cell info-right">
+                <strong>Last Service Done HMR:</strong> ${selectedInvoice?.hourMeterReading || 'N/A'}
+              </div>
+            </div>
           </div>
           
+          <div class="subject-line">
+            Sub: ${selectedInvoice.subject || 'INVOICE FOR DG SET SERVICES'}
+          </div>
+          
+          <div class="greeting">Dear Sir,</div>
+          <div class="intro-text">
+            With reference to the subject D.G. set we are here by furnishing our invoice for Services
+          </div>
+          
+          ${selectedInvoice.items && selectedInvoice.items.length > 0 ? `
           <table class="items-table">
             <thead>
               <tr>
                 <th style="width: 6%;">Sr.No</th>
-                <th style="width: 8%;">Part No</th>
+                <th style="width: 15%;">Part No</th>
                 <th style="width: 25%;">Description</th>
-                <th style="width: 8%;">HSN Code</th>
-                <th style="width: 5%;">Qty</th>
-                <th style="width: 6%;">UOM</th>
-                <th style="width: 10%;">Unit Price</th>
-                ${(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
-                <th style="width: 8%;">Total Basic</th>
-                <th style="width: 5%;">GST</th>
-                <th style="width: 8%;">GST Amount</th>
-                <th style="width: 10%;">Total Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${(selectedInvoice.items || []).map((item: any, idx: number) => {
-                const basicAmount = item.unitPrice || 0;
-                const discountPercent = item.discount || 0;
-                const totalBasic = basicAmount * (1 - discountPercent / 100);
-                const gstRate = item.taxRate || 0;
-                const gstAmount = totalBasic * (gstRate / 100);
-                const totalAmount = totalBasic + gstAmount;
-                const showDiscount = (selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0);
-                
-                return `
-                  <tr>
-                    <td class="center-cell">${idx + 1}</td>
-                    <td class="center-cell">${item.partNo || item?.product?.partNo || '-'}</td>
-                    <td>${item.description || ''}</td>
-                    <td class="center-cell">${item.hsnNumber || item?.product?.hsnNumber || '-'}</td>
-                    <td class="center-cell">${item.quantity || 0}</td>
-                    <td class="center-cell">${item.uom || 'NOS'}</td>
-                    <td class="number-cell">₹${basicAmount.toFixed(2)}</td>
-                    ${showDiscount ? `<td class="center-cell">${discountPercent}%</td>` : ''}
-                    <td class="number-cell">₹${totalBasic.toFixed(2)}</td>
-                    <td class="center-cell">${gstRate}%</td>
-                    <td class="number-cell">₹${gstAmount.toFixed(2)}</td>
-                    <td class="number-cell">₹${totalAmount.toFixed(2)}</td>
-                  </tr>
-                `;
-              }).join('')}
-              <tr class="totals-row">
-                <td colspan="${(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) ? '8' : '7'}" style="text-align: left; font-weight: bold;">Total Amount</td>
-                <td class="number-cell">₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => {
-                  const basicAmount = item.unitPrice || 0;
-                  const discountPercent = item.discount || 0;
-                  return sum + (basicAmount * (1 - discountPercent / 100));
-                }, 0).toFixed(2)}</td>
-                <td></td>
-                <td class="number-cell">₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => {
-                  const basicAmount = item.unitPrice || 0;
-                  const discountPercent = item.discount || 0;
-                  const totalBasic = basicAmount * (1 - discountPercent / 100);
-                  const gstRate = item.taxRate || 0;
-                  return sum + (totalBasic * (gstRate / 100));
-                }, 0).toFixed(2)}</td>
-                <td class="number-cell">₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => {
-                  const basicAmount = item.unitPrice || 0;
-                  const discountPercent = item.discount || 0;
-                  const totalBasic = basicAmount * (1 - discountPercent / 100);
-                  const gstRate = item.taxRate || 0;
-                  const gstAmount = totalBasic * (gstRate / 100);
-                  return sum + (totalBasic + gstAmount);
-                }, 0).toFixed(2)}</td>
-              </tr>
-            </tbody>
-          </table>
-          
-          ${selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 ? `
-          <div class="section-title" style="color: #059669;">SERVICE CHARGES</div>
-          <table class="items-table">
-            <thead>
-              <tr>
-                <th style="width: 8%;">Sr.No</th>
-                <th style="width: 35%;">Description</th>
                 <th style="width: 8%;">HSN Code</th>
                 <th style="width: 6%;">UOM</th>
                 <th style="width: 5%;">Qty</th>
                 <th style="width: 10%;">Basic Amount</th>
-                ${(selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
+                ${(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
                 <th style="width: 9%;">Total Basic</th>
                 <th style="width: 5%;">GST</th>
                 <th style="width: 9%;">GST Amount</th>
@@ -4595,154 +4690,311 @@ const InvoiceManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              ${selectedInvoice.serviceCharges.map((service: any, idx: number) => {
-                const basicAmount = service.unitPrice || 0;
-                const discountPercent = service.discount || 0;
-                const totalBasic = basicAmount * (1 - discountPercent / 100);
-                const gstRate = service.taxRate || 0;
-                const gstAmount = totalBasic * (gstRate / 100);
-                const totalAmount = totalBasic + gstAmount;
-                const showDiscount = (selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0);
-                
-                return `
+              ${(selectedInvoice.items || []).map((item: any, idx: number) => {
+      const basicAmount = item.unitPrice || 0;
+      const discountPercent = item.discount || 0;
+      const totalBasic = basicAmount * (1 - discountPercent / 100);
+      const gstRate = item.taxRate || 0;
+      const gstAmount = item.taxAmount || totalBasic * (gstRate / 100);
+      const totalAmount = item.totalPrice || item.quantity * (totalBasic + gstAmount);
+      const showDiscount = (selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0);
+
+      return `
                   <tr>
                     <td class="center-cell">${idx + 1}</td>
-                    <td>${service.description || ''}</td>
-                    <td class="center-cell">-</td>
-                    <td class="center-cell">NOS</td>
-                    <td class="center-cell">${service.quantity || 0}</td>
-                    <td class="number-cell">₹${basicAmount.toFixed(2)}</td>
+                    <td>${item.partNo || item?.product?.partNo || '-'}</td>
+                    <td>${item.description || ''}</td>
+                    <td class="center-cell">${item.hsnNumber || item?.product?.hsnNumber || '-'}</td>
+                    <td class="center-cell">${item.uom || 'NOS'}</td>
+                    <td class="center-cell">${item.quantity || 0}</td>
+                    <td class="number-cell">${basicAmount.toFixed(2)}</td>
                     ${showDiscount ? `<td class="center-cell">${discountPercent}%</td>` : ''}
-                    <td class="number-cell">₹${totalBasic.toFixed(2)}</td>
+                    <td class="number-cell">${totalBasic.toFixed(2)}</td>
                     <td class="center-cell">${gstRate}%</td>
-                    <td class="number-cell">₹${gstAmount.toFixed(2)}</td>
-                    <td class="number-cell">₹${totalAmount.toFixed(2)}</td>
+                    <td class="number-cell">${gstAmount.toFixed(2)}</td>
+                    <td class="number-cell">${totalAmount.toFixed(2)}</td>
                   </tr>
                 `;
-              }).join('')}
+    }).join('')}
+              <tr class="totals-row">
+                <td colspan="${(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) ? '8' : '7'}" style="text-align: left; font-weight: bold;">Total Amount</td>
+                <td class="number-cell">${(selectedInvoice.items || []).reduce((sum: number, item: any) => {
+      const basicAmount = item.unitPrice || 0;
+      const discountPercent = item.discount || 0;
+      return sum + (basicAmount * (1 - discountPercent / 100));
+    }, 0).toFixed(2)}</td>
+                <td></td>
+                <td class="number-cell">${(selectedInvoice.items || []).reduce((sum: number, item: any) => {
+      const basicAmount = item.unitPrice || 0;
+      const discountPercent = item.discount || 0;
+      const quantity = item.quantity || 0;
+      const totalBasic = basicAmount * (1 - discountPercent / 100);
+      const gstRate = item.taxRate || 0;
+      return sum + (totalBasic * (gstRate / 100)) * (quantity || 0);
+    }, 0).toFixed(2)}</td>
+                <td class="number-cell">${(selectedInvoice.items || []).reduce((sum: number, item: any) => {
+      const basicAmount = item.unitPrice || 0;
+      const quantity = item.quantity || 0;
+      const discountPercent = item.discount || 0;
+      const totalBasic = basicAmount * (1 - discountPercent / 100);
+      const gstRate = item.taxRate || 0;
+      const gstAmount = item.taxAmount || totalBasic * (gstRate / 100);
+      return sum + (totalBasic + gstAmount) * (quantity || 0);
+    }, 0).toFixed(2)}</td>
+              </tr>
             </tbody>
-          </table>
+          </table>` : ''}
+          
+          ${selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 ? `
+            <div style="margin: 10px 0 5px 0; font-weight: bold; color: #059669;">SERVICE CHARGES</div>
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th style="width: 8%;">Sr.No</th>
+                  <th style="width: 35%;">Description</th>
+                  <th style="width: 8%;">HSN Code</th>
+                  <th style="width: 6%;">UOM</th>
+                  <th style="width: 5%;">Qty</th>
+                  <th style="width: 10%;">Basic Amount</th>
+                  ${(selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
+                  <th style="width: 9%;">Total Basic</th>
+                  <th style="width: 5%;">GST</th>
+                  <th style="width: 9%;">GST Amount</th>
+                  <th style="width: 10%;">Total Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${selectedInvoice.serviceCharges.map((service: any, idx: number) => {
+      const basicAmount = service.unitPrice || 0;
+      const discountPercent = service.discount || 0;
+      const totalBasic = basicAmount * (1 - discountPercent / 100);
+      const gstRate = service.taxRate || 0;
+      const gstAmount = service?.taxAmount || totalBasic * (gstRate / 100);
+      const totalAmount = service.quantity * (totalBasic + gstAmount);
+      const showDiscount = (selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0);
+
+      return `
+                    <tr>
+                      <td class="center-cell">${idx + 1}</td>
+                      <td>${service.description || ''}</td>
+                      <td class="center-cell">${service.hsnNumber || '-'}</td>
+                      <td class="center-cell">NOS</td>
+                      <td class="center-cell">${service.quantity || 0}</td>
+                      <td class="number-cell">${basicAmount.toFixed(2)}</td>
+                      ${showDiscount ? `<td class="center-cell">${discountPercent}%</td>` : ''}
+                      <td class="number-cell">${totalBasic.toFixed(2)}</td>
+                      <td class="center-cell">${gstRate}%</td>
+                      <td class="number-cell">${gstAmount.toFixed(2)}</td>
+                      <td class="number-cell">${totalAmount.toFixed(2)}</td>
+                    </tr>
+                  `;
+    }).join('')}
+                <tr class="totals-row">
+  <td colspan="${(selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) ? '4' : '4'}" style="text-align: left; font-weight: bold;">
+    Total Service Charges
+  </td>
+  <td class="center-cell">
+    ${(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.quantity || 0), 0)}
+  </td>
+  <td class="number-cell">
+    ${(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => {
+      const basicAmount = service.unitPrice || 0;
+      const quantity = service.quantity || 0;
+      return sum + basicAmount;
+    }, 0).toFixed(2)}
+  </td>
+  ${(selectedInvoice.serviceCharges || []).some((service: any) => (service.discountedAmount || 0) > 0) ? '<td></td>' : ''}
+  <td class="number-cell">
+    ${(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => {
+      const basicAmount = service.unitPrice || 0;
+      const discountPercent = service.discount || 0;
+      const quantity = service.quantity || 0;
+      return sum + (basicAmount * (1 - discountPercent / 100)) * (quantity || 0);
+    }, 0).toFixed(2)}
+  </td>
+  <td></td>
+  <td class="number-cell">
+    ${(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => {
+      const basicAmount = service.unitPrice || 0;
+      const quantity = service.quantity || 0;
+      const discountPercent = service.discount || 0;
+      const totalBasic = basicAmount * (1 - discountPercent / 100);
+      return sum + (totalBasic * (service.taxRate || 0) / 100) * (quantity || 0);
+    }, 0).toFixed(2)}
+  </td>
+  <td class="number-cell">
+    ${(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => {
+      const basicAmount = service.unitPrice || 0;
+      const discountPercent = service.discount || 0;
+      const totalBasic = basicAmount * (1 - discountPercent / 100);
+      const gstAmount = totalBasic * (service.taxRate || 0) / 100;
+      return sum + (totalBasic + gstAmount) * (service.quantity || 1);
+    }, 0).toFixed(2)}
+  </td>
+</tr>
+
+              </tbody>
+            </table>
           ` : ''}
           
           ${selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.quantity > 0 ? `
-          <div class="section-title" style="color: #ea580c;">BATTERY BUYBACK CHARGES</div>
-          <table class="items-table">
-            <thead>
-              <tr>
-                <th style="width: 8%;">Sr.No</th>
-                <th style="width: 35%;">Description</th>
-                <th style="width: 8%;">HSN Code</th>
-                <th style="width: 6%;">UOM</th>
-                <th style="width: 5%;">Qty</th>
-                <th style="width: 10%;">Basic Amount</th>
-                ${(selectedInvoice.batteryBuyBack?.discount || 0) > 0 ? '<th style="width: 8%;">Discount %</th>' : ''}
-                <th style="width: 9%;">Total Basic</th>
-                ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 5%;">GST</th>' : ''}
-                ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 9%;">GST Amount</th>' : ''}
-                <th style="width: 10%;">Total Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="center-cell">1</td>
-                <td>${selectedInvoice.batteryBuyBack.description || ''}</td>
-                <td class="center-cell">-</td>
-                <td class="center-cell">NOS</td>
-                <td class="center-cell">${selectedInvoice.batteryBuyBack.quantity || 0}</td>
-                <td class="number-cell">₹${(selectedInvoice.batteryBuyBack.unitPrice || 0).toFixed(2)}</td>
-                ${(selectedInvoice.batteryBuyBack?.discount || 0) > 0 ? `<td class="center-cell">${selectedInvoice.batteryBuyBack.discount}%</td>` : ''}
-                <td class="number-cell">₹${(selectedInvoice.batteryBuyBack.discountedAmount || 0).toFixed(2)}</td>
-                ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="center-cell">${selectedInvoice.batteryBuyBack.taxRate || 0}%</td>` : ''}
-                ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="number-cell">₹${(selectedInvoice.batteryBuyBack.taxAmount || 0).toFixed(2)}</td>` : ''}
-                <td class="number-cell">₹${(selectedInvoice.batteryBuyBack.totalPrice || 0).toFixed(2)}</td>
-              </tr>
-            </tbody>
-          </table>
+            <div style="margin: 10px 0 5px 0; font-weight: bold; color: #ea580c;">BATTERY BUYBACK CHARGES</div>
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th style="width: 8%;">Sr.No</th>
+                  <th style="width: 35%;">Description</th>
+                  <th style="width: 8%;">HSN Code</th>
+                  <th style="width: 6%;">UOM</th>
+                  <th style="width: 5%;">Qty</th>
+                  <th style="width: 10%;">Basic Amount</th>
+                  ${(selectedInvoice.batteryBuyBack?.discount || 0) > 0 ? '<th style="width: 8%;">Discount %</th>' : ''}
+                  ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 5%;">GST</th>' : ''}
+                  ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 9%;">GST Amount</th>' : ''}
+                  <th style="width: 10%;">Total Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="center-cell">1</td>
+                  <td>${selectedInvoice.batteryBuyBack.description || ''}</td>
+                  <td class="center-cell">${selectedInvoice.batteryBuyBack.hsnNumber || '-'}</td>
+                  <td class="center-cell">NOS</td>
+                  <td class="center-cell">${selectedInvoice.batteryBuyBack.quantity || 0}</td>
+                  <td class="number-cell">${(selectedInvoice.batteryBuyBack.unitPrice || 0).toFixed(2)}</td>
+                  ${(selectedInvoice.batteryBuyBack?.discount || 0) > 0 ? `<td class="center-cell">${selectedInvoice.batteryBuyBack.discount}%</td>` : ''}
+                  ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="center-cell">${selectedInvoice.batteryBuyBack.taxRate || 0}%</td>` : ''}
+                  ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="number-cell">${(selectedInvoice.batteryBuyBack.taxAmount || 0).toFixed(2)}</td>` : ''}
+                  <td class="number-cell">${(selectedInvoice.batteryBuyBack.totalPrice || 0).toFixed(2)}</td>
+                </tr>
+                <tr class="totals-row">
+  <td colspan="${(selectedInvoice.batteryBuyBack?.discount || 0) > 0 ? '4' : '3'}" style="text-align: left; font-weight: bold;">
+    Total Battery Buyback
+  </td>
+  <td class="center-cell">${selectedInvoice.batteryBuyBack?.quantity || 0}</td>
+  <td class="number-cell">${(selectedInvoice.batteryBuyBack?.unitPrice || 0).toFixed(2)}</td>
+  <td class="number-cell">- ${(selectedInvoice.batteryBuyBack?.discountedAmount || 0).toFixed(2)}</td>
+  ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? '<td></td><td class="number-cell">' + (selectedInvoice.batteryBuyBack?.taxAmount || 0).toFixed(2) + '</td>' : ''}
+  <td class="number-cell">${(selectedInvoice.batteryBuyBack?.totalPrice || 0).toFixed(2)}</td>
+</tr>
+
+              </tbody>
+            </table>
           ` : ''}
           
-          <table class="items-table">
-            <tbody>
-              <tr class="grand-total-row">
-                <td colspan="${(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) ? '11' : '10'}" style="text-align: right; padding-right: 20px;">Grand Total</td>
-                <td class="number-cell">₹${selectedInvoice.totalAmount?.toFixed(2) || '0.00'}</td>
+          
+          
+          
+         <div style="margin-top: 15px; width: 100%; font-size: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
+  
+  <!-- ✅ Left: Terms & Conditions -->
+  <div style="width: 60%;">
+    ${selectedInvoice.terms ? `
+      <div class="terms-section">
+        <div style="font-weight: bold; margin-bottom: 5px;">TERMS & CONDITIONS:-</div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+          ${selectedInvoice.terms.split('\n').map((term: string, idx: number) => {
+            const parts = term.split(':');
+            const label = parts[0]?.trim() || '';
+            const value = parts.slice(1).join(':').trim() || '';
+            return `
+              <tr>
+                <td style="width: 5%; vertical-align: top;">${idx + 1}</td>
+                <td style="width: 30%; vertical-align: top;">${label}</td>
+                <td style="width: 5%; vertical-align: top;">:</td>
+                <td style="width: 60%; vertical-align: top;">${value}</td>
               </tr>
-            </tbody>
-          </table>
+            `;
+          }).join('')}
+        </table>
+      </div>
+    ` : ''}
+  </div>
+
+  <!-- ✅ Right: Totals Summary -->
+  <div style="width: 35%; font-size: 12px;">
+    <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+      <tbody>
+        <tr>
+          <td style="text-align: right; padding: 4px 8px;">Subtotal:</td>
+          <td style="text-align: right; padding: 4px 8px; font-weight: bold;">
+            ₹${selectedInvoice.subtotal?.toFixed(2) || '0.00'}
+          </td>
+        </tr>
+        <tr>
+          <td style="text-align: right; padding: 4px 8px;">Total Tax:</td>
+          <td style="text-align: right; padding: 4px 8px; font-weight: bold;">
+            ₹${selectedInvoice.taxAmount?.toFixed(2) || '0.00'}
+          </td>
+        </tr>
+        ${selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 ? `
+        <tr>
+          <td style="text-align: right; padding: 4px 8px;">Service Charges:</td>
+          <td style="text-align: right; padding: 4px 8px; font-weight: bold; color: #059669;">
+            +₹${(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2) || '0.00'}
+          </td>
+        </tr>` : ''}
+        ${selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.quantity > 0 ? `
+        <tr>
+          <td style="text-align: right; padding: 4px 8px;">Battery Buyback:</td>
+          <td style="text-align: right; padding: 4px 8px; font-weight: bold; color: #ea580c;">
+            -₹${selectedInvoice.batteryBuyBack?.totalPrice?.toFixed(2) || '0.00'}
+          </td>
+        </tr>` : ''}
+        <tr>
+          <td colspan="2"><hr style="margin-top: 8px; margin-bottom: 2px; border: none; border-top: 1px solid #ddd;"></td>
+        </tr>
+        <tr class="grand-total-row">
+          <td style="text-align: right; padding: 6px 8px; font-size: 14px; font-weight: bold;">Grand Total:</td>
+          <td style="text-align: right; padding: 6px 8px; font-size: 14px; font-weight: bold; color: #1d4ed8;">
+            ₹${selectedInvoice.totalAmount?.toFixed(2) || '0.00'}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
           
-          <div class="summary-section">
-            ${(selectedInvoice.notes || selectedInvoice.terms) && `
-            <div class="notes-box">
-              ${selectedInvoice.notes ? `
-                <h4>Notes:</h4>
-                <div>${selectedInvoice.notes}</div>
-              ` : ''}
-              ${selectedInvoice.terms ? `
-                <h4 ${selectedInvoice.notes ? 'style="margin-top: 15px;"' : ''}>Terms & Conditions:</h4>
-                <div>${selectedInvoice.terms}</div>
-              ` : ''}
-            </div>
-            `}
-            <div class="summary-box">
-              <table class="summary-table">
-                <tr>
-                  <td>Subtotal:</td>
-                  <td>₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0)), 0).toFixed(2)}</td>
-                </tr>
-                <tr>
-                  <td>Total Tax:</td>
-                  <td>₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate ?? 0) / 100), 0).toFixed(2)}</td>
-                </tr>
-                <tr>
-                  <td>Total Discount:</td>
-                  <td>-₹${(selectedInvoice.discountAmount || 0).toFixed(2)}</td>
-                </tr>
-                <tr>
-                  <td>Overall Discount:</td>
-                  <td>-${selectedInvoice.overallDiscount || 0}% (-₹${selectedInvoice.overallDiscountAmount?.toFixed(2) || '0.00'})</td>
-                </tr>
-                ${selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 ? `
-                <tr>
-                  <td>Service Charges:</td>
-                  <td>+₹${(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2)}</td>
-                </tr>
-                ` : ''}
-                ${selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.quantity > 0 ? `
-                <tr>
-                  <td>Battery Buyback:</td>
-                  <td>-₹${(selectedInvoice.batteryBuyBack?.totalPrice || 0).toFixed(2)}</td>
-                </tr>
-                ` : ''}
-                <tr class="total-row">
-                  <td>Grand Total:</td>
-                  <td><strong>₹${selectedInvoice.totalAmount?.toFixed(2) || '0'}</strong></td>
-                </tr>
-                <tr>
-                  <td>Amount in Words:</td>
-                  <td class="amount-words">
-                    ${selectedInvoice.totalAmount ? numberToWords(selectedInvoice.totalAmount) : 'Zero Rupees Only'}
-                  </td>
-                </tr>
-              </table>
-            </div>
-          </div>
           
-          <div class="footer">
-            <div style="margin-top: 20px; font-size: 9px; border-top: 1px solid #000; padding-top: 10px;">
-              <strong>Address:</strong> ${selectedInvoice.company?.address || generalSettings?.companyAddress || 'Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116'}<br>
-              <strong>Mobile:</strong> ${selectedInvoice.company?.phone || generalSettings?.companyPhone || '+91 9176660123'} | <strong>PAN:</strong> ${selectedInvoice.company?.pan || generalSettings?.companyPAN || '33BLFPS9951M1ZC'} | <strong>Email:</strong> ${selectedInvoice.company?.email || generalSettings?.companyEmail || 'service@sunpowerservices.in'}
-              ${selectedInvoice?.company?.bankDetails && (
-                selectedInvoice.company.bankDetails.bankName || 
-                selectedInvoice.company.bankDetails.accountNo || 
-                selectedInvoice.company.bankDetails.ifsc || 
-                selectedInvoice.company.bankDetails.branch
-              ) ? `
-              <br><br>
-              <div style="font-weight: bold; margin-top: 10px;">Banking Details:</div>
-              ${selectedInvoice?.company?.bankDetails?.bankName ? `<div>Bank: ${selectedInvoice.company.bankDetails.bankName}</div>` : ''}
-              ${selectedInvoice?.company?.bankDetails?.accountNo ? `<div>A/C No: ${selectedInvoice.company.bankDetails.accountNo}</div>` : ''}
-              ${selectedInvoice?.company?.bankDetails?.ifsc ? `<div>IFSC: ${selectedInvoice.company.bankDetails.ifsc}</div>` : ''}
-              ${selectedInvoice?.company?.bankDetails?.branch ? `<div>Branch: ${selectedInvoice.company.bankDetails.branch}</div>` : ''}
-              ` : ''}
+          <div class="footer-section">
+            <div class="footer-left">
+              <div style="font-weight: bold;">Sun Power Bank Details: -</div>
+              <div class="company-details">
+                ${selectedInvoice?.company?.address || 'Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116'}<br>
+                Mobile: ${selectedInvoice?.company?.phone || '+91 9176660123'}<br>
+                PAN: ${selectedInvoice?.company?.pan || '33BLFPS9951M1ZC'}<br>
+                Mail Id: ${selectedInvoice?.company?.email || 'service@sunpowerservices.in'}
+                ${selectedInvoice?.company?.bankDetails && (
+        selectedInvoice.company.bankDetails.bankName ||
+        selectedInvoice.company.bankDetails.accountNo ||
+        selectedInvoice.company.bankDetails.ifsc ||
+        selectedInvoice.company.bankDetails.branch
+      ) ? `
+                <br><br>
+                <div style="font-weight: bold; margin-top: 10px;">Banking Details:</div>
+                ${selectedInvoice?.company?.bankDetails?.bankName ? `<div>Bank: ${selectedInvoice.company.bankDetails.bankName}</div>` : ''}
+                ${selectedInvoice?.company?.bankDetails?.accountNo ? `<div>A/C No: ${selectedInvoice.company.bankDetails.accountNo}</div>` : ''}
+                ${selectedInvoice?.company?.bankDetails?.ifsc ? `<div>IFSC: ${selectedInvoice.company.bankDetails.ifsc}</div>` : ''}
+                ${selectedInvoice?.company?.bankDetails?.branch ? `<div>Branch: ${selectedInvoice.company.bankDetails.branch}</div>` : ''}
+                ` : ''}
+              </div>
+            </div>
+            <div class="footer-center">
+              ${selectedInvoice.qrCodeImage ? `
+                <div class="qr-code-container">
+                  <img src="${selectedInvoice.qrCodeImage}" alt="QR Code" class="qr-code-image" />
+                  <div style="font-size: 10px; margin-top: 5px;">QR Code Scanner</div>
+                </div>
+              ` : `
+                <div style="border: 1px solid #333; padding: 20px; margin: 10px;">
+                  QR Code<br>
+                  Scanner
+                </div>
+              `}
+            </div>
+            <div class="footer-right">
+              <div style="margin-bottom: 10px; font-weight: bold;">For Sun Power Services</div>
+              <div class="signature-line">Authorised Signature</div>
             </div>
           </div>
         </div>
@@ -4818,7 +5070,7 @@ const InvoiceManagement: React.FC = () => {
     doc.setFont('helvetica', 'normal');
     doc.text(`Name: ${invoice.customer?.name || 'N/A'}`, 10, y);
     y += 5;
-    doc.text(`Email: ${invoice.customer?.email || 'N/A'}`, 10, y);
+    doc.text(`Email: ${getPrimaryAddressEmail(invoice.customer) || invoice.customer?.email || 'N/A'}`, 10, y);
     y += 5;
     doc.text(`Phone: ${invoice.customer?.phone || 'N/A'}`, 10, y);
     y += 8;
@@ -4904,10 +5156,10 @@ const InvoiceManagement: React.FC = () => {
   // Print Payment Receipt function
   const printPaymentReceipt = (invoice: any) => {
     if (!invoice) return;
-    
+
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
-    
+
     const printContent = `
     <html>
       <head>
@@ -4960,7 +5212,7 @@ const InvoiceManagement: React.FC = () => {
         <div class="customer-section">
           <h3>Customer Details</h3>
           <div><strong>Name:</strong> ${invoice.customer?.name || 'N/A'}</div>
-          <div><strong>Email:</strong> ${invoice.customer?.email || 'N/A'}</div>
+          <div><strong>Email:</strong> ${getPrimaryAddressEmail(invoice.customer) || invoice.customer?.email || 'N/A'}</div>
           <div><strong>Phone:</strong> ${invoice.customer?.phone || 'N/A'}</div>
           ${invoice.billToAddress?.gstNumber ? `<div><strong>GST Number:</strong> ${invoice.billToAddress.gstNumber}</div>` : ''}
           ${invoice.billToAddress?.address ? `<div><strong>Address:</strong> ${invoice.billToAddress.address}, ${invoice.billToAddress.district || ''}, ${invoice.billToAddress.state || ''} - ${invoice.billToAddress.pincode || ''}</div>` : ''}
@@ -5006,10 +5258,10 @@ const InvoiceManagement: React.FC = () => {
       </body>
     </html>
     `;
-    
+
     printWindow.document.write(printContent);
     printWindow.document.close();
-    
+
     // Wait for content to load then print
     printWindow.onload = () => {
       setTimeout(() => {
@@ -5035,10 +5287,10 @@ const InvoiceManagement: React.FC = () => {
   // Print quotation function
   const printQuotation = (quotation: any) => {
     console.log("quotation00000:");
-    
+
     // Create a new window for printing
     const printWindow = window.open('', '_blank');
-    
+
     const printContent = `
       <!DOCTYPE html>
       <html>
@@ -5165,7 +5417,7 @@ const InvoiceManagement: React.FC = () => {
           }
           
           .terms-section {
-            margin: 20px 0;
+            margin: 5px 0;
           }
           
           .terms-title {
@@ -5291,10 +5543,7 @@ const InvoiceManagement: React.FC = () => {
             </div>
             <div class="info-row">
               <div class="info-cell info-left">
-                <strong>Reference:</strong> ${quotation.reference || 'Customer Request'}
-              </div>
-              <div class="info-cell info-right">
-                <strong>Engineer Name:</strong> ${quotation.assignedEngineer ? `${quotation.assignedEngineer.firstName || ''} ${quotation.assignedEngineer.lastName || ''}`.trim() : 'N/A'}
+                <strong>Reference Name:</strong> ${quotation.assignedEngineer ? `${quotation.assignedEngineer.firstName || ''} ${quotation.assignedEngineer.lastName || ''}`.trim() : 'N/A'}
               </div>
             </div>
           </div>
@@ -5319,7 +5568,7 @@ const InvoiceManagement: React.FC = () => {
                 <strong>Engine Seriel Number:</strong> ${quotation?.engineSerialNumber || 'N/A'}
               </div>
               <div class="info-cell info-right">
-                <strong>Last Service Done Date:</strong> ${quotation?.serviceRequestDate || 'N/A'}
+                <strong>Last Service Done Date:</strong> ${quotation?.serviceRequestDate ? new Date(quotation.serviceRequestDate).toLocaleDateString() : 'N/A'}
               </div>
             </div>
             <div class="info-row">
@@ -5341,6 +5590,7 @@ const InvoiceManagement: React.FC = () => {
             With reference to the subject D.G. set we are here by furnishing our offer for Spares
           </div>
           
+          ${quotation.items && quotation.items.length > 0 ? `
           <table class="items-table">
             <thead>
               <tr>
@@ -5360,20 +5610,20 @@ const InvoiceManagement: React.FC = () => {
             </thead>
             <tbody>
               ${(quotation.items || []).map((item: any, idx: number) => {
-                const basicAmount = item.unitPrice || 0;
-                const discountPercent = item.discount || 0;
-                const totalBasic = basicAmount * (1 - discountPercent / 100);
-                const gstRate = item.taxRate || 0;
-                const gstAmount = totalBasic * (gstRate / 100);
-                const totalAmount = totalBasic + gstAmount;
-                const showDiscount = (quotation.items || []).some((item: any) => (item.discount || 0) > 0);
-                
-                return `
+      const basicAmount = item.unitPrice || 0;
+      const discountPercent = item.discount || 0;
+      const totalBasic = basicAmount * (1 - discountPercent / 100);
+      const gstRate = item.taxRate || 0;
+      const gstAmount = item.taxAmount || totalBasic * (gstRate / 100);
+      const totalAmount = item.totalPrice || item.quantity * (totalBasic + gstAmount);
+      const showDiscount = (quotation.items || []).some((item: any) => (item.discount || 0) > 0);
+
+      return `
                   <tr>
                     <td class="center-cell">${idx + 1}</td>
-                    <td>${item.partNo || '-'}</td>
+                    <td>${item.partNo || item?.product?.partNo || '-'}</td>
                     <td>${item.description || ''}</td>
-                    <td class="center-cell">${item.hsnNumber || '-'}</td>
+                    <td class="center-cell">${item.hsnNumber || item?.product?.hsnNumber || '-'}</td>
                     <td class="center-cell">${item.uom || 'NOS'}</td>
                     <td class="center-cell">${item.quantity || 0}</td>
                     <td class="number-cell">${basicAmount.toFixed(2)}</td>
@@ -5384,147 +5634,298 @@ const InvoiceManagement: React.FC = () => {
                     <td class="number-cell">${totalAmount.toFixed(2)}</td>
                   </tr>
                 `;
-              }).join('')}
+    }).join('')}
               <tr class="totals-row">
                 <td colspan="${(quotation.items || []).some((item: any) => (item.discount || 0) > 0) ? '8' : '7'}" style="text-align: left; font-weight: bold;">Total Amount</td>
                 <td class="number-cell">${(quotation.items || []).reduce((sum: number, item: any) => {
-                  const basicAmount = item.unitPrice || 0;
-                  const discountPercent = item.discount || 0;
-                  return sum + (basicAmount * (1 - discountPercent / 100));
-                }, 0).toFixed(2)}</td>
+      const basicAmount = item.unitPrice || 0;
+      const discountPercent = item.discount || 0;
+      return sum + (basicAmount * (1 - discountPercent / 100));
+    }, 0).toFixed(2)}</td>
                 <td></td>
                 <td class="number-cell">${(quotation.items || []).reduce((sum: number, item: any) => {
-                  const basicAmount = item.unitPrice || 0;
-                  const discountPercent = item.discount || 0;
-                  const totalBasic = basicAmount * (1 - discountPercent / 100);
-                  const gstRate = item.taxRate || 0;
-                  return sum + (totalBasic * (gstRate / 100));
-                }, 0).toFixed(2)}</td>
+      const basicAmount = item.unitPrice || 0;
+      const discountPercent = item.discount || 0;
+      const quantity = item.quantity || 0;
+      const totalBasic = basicAmount * (1 - discountPercent / 100);
+      const gstRate = item.taxRate || 0;
+      return sum + (totalBasic * (gstRate / 100)) * (quantity || 0);
+    }, 0).toFixed(2)}</td>
                 <td class="number-cell">${(quotation.items || []).reduce((sum: number, item: any) => {
-                  const basicAmount = item.unitPrice || 0;
-                  const discountPercent = item.discount || 0;
-                  const totalBasic = basicAmount * (1 - discountPercent / 100);
-                  const gstRate = item.taxRate || 0;
-                  const gstAmount = totalBasic * (gstRate / 100);
-                  return sum + (totalBasic + gstAmount);
-                }, 0).toFixed(2)}</td>
+      const basicAmount = item.unitPrice || 0;
+      const quantity = item.quantity || 0;
+      const discountPercent = item.discount || 0;
+      const totalBasic = basicAmount * (1 - discountPercent / 100);
+      const gstRate = item.taxRate || 0;
+      const gstAmount = item.taxAmount || totalBasic * (gstRate / 100);
+      return sum + (totalBasic + gstAmount) * (quantity || 0);
+    }, 0).toFixed(2)}</td>
               </tr>
             </tbody>
-          </table>
+          </table>` : ''}
           
           ${quotation.serviceCharges && quotation.serviceCharges.length > 0 ? `
-          <div style="margin: 20px 0 10px 0; font-weight: bold; color: #059669;">SERVICE CHARGES</div>
-          <table class="items-table">
-            <thead>
-              <tr>
-                <th style="width: 8%;">Sr.No</th>
-                <th style="width: 35%;">Description</th>
-                <th style="width: 8%;">HSN Code</th>
-                <th style="width: 6%;">UOM</th>
-                <th style="width: 5%;">Qty</th>
-                <th style="width: 10%;">Basic Amount</th>
-                ${(quotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
-                <th style="width: 9%;">Total Basic</th>
-                <th style="width: 5%;">GST</th>
-                <th style="width: 9%;">GST Amount</th>
-                <th style="width: 10%;">Total Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${quotation.serviceCharges.map((service: any, idx: number) => {
-                const basicAmount = service.unitPrice || 0;
-                const discountPercent = service.discount || 0;
-                const totalBasic = basicAmount * (1 - discountPercent / 100);
-                const gstRate = service.taxRate || 0;
-                const gstAmount = totalBasic * (gstRate / 100);
-                const totalAmount = totalBasic + gstAmount;
-                const showDiscount = (quotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0);
-                
-                return `
-                  <tr>
-                    <td class="center-cell">${idx + 1}</td>
-                    <td>${service.description || ''}</td>
-                    <td class="center-cell">${service.hsnNumber || '-'}</td>
-                    <td class="center-cell">NOS</td>
-                    <td class="center-cell">${service.quantity || 0}</td>
-                    <td class="number-cell">${basicAmount.toFixed(2)}</td>
-                    ${showDiscount ? `<td class="center-cell">${discountPercent}%</td>` : ''}
-                    <td class="number-cell">${totalBasic.toFixed(2)}</td>
-                    <td class="center-cell">${gstRate}%</td>
-                    <td class="number-cell">${gstAmount.toFixed(2)}</td>
-                    <td class="number-cell">${totalAmount.toFixed(2)}</td>
-                  </tr>
-                `;
-              }).join('')}
-            </tbody>
-          </table>
+            <div style="margin: 10px 0 5px 0; font-weight: bold; color: #059669;">SERVICE CHARGES</div>
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th style="width: 8%;">Sr.No</th>
+                  <th style="width: 35%;">Description</th>
+                  <th style="width: 8%;">HSN Code</th>
+                  <th style="width: 6%;">UOM</th>
+                  <th style="width: 5%;">Qty</th>
+                  <th style="width: 10%;">Basic Amount</th>
+                  ${(quotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
+                  <th style="width: 9%;">Total Basic</th>
+                  <th style="width: 5%;">GST</th>
+                  <th style="width: 9%;">GST Amount</th>
+                  <th style="width: 10%;">Total Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${quotation.serviceCharges.map((service: any, idx: number) => {
+      const basicAmount = service.unitPrice || 0;
+      const discountPercent = service.discount || 0;
+      const totalBasic = basicAmount * (1 - discountPercent / 100);
+      const gstRate = service.taxRate || 0;
+      const gstAmount = service?.taxAmount || totalBasic * (gstRate / 100);
+      const totalAmount = service.quantity * (totalBasic + gstAmount);
+      const showDiscount = (quotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0);
+
+      return `
+                    <tr>
+                      <td class="center-cell">${idx + 1}</td>
+                      <td>${service.description || ''}</td>
+                      <td class="center-cell">${service.hsnNumber || '-'}</td>
+                      <td class="center-cell">NOS</td>
+                      <td class="center-cell">${service.quantity || 0}</td>
+                      <td class="number-cell">${basicAmount.toFixed(2)}</td>
+                      ${showDiscount ? `<td class="center-cell">${discountPercent}%</td>` : ''}
+                      <td class="number-cell">${totalBasic.toFixed(2)}</td>
+                      <td class="center-cell">${gstRate}%</td>
+                      <td class="number-cell">${gstAmount.toFixed(2)}</td>
+                      <td class="number-cell">${totalAmount.toFixed(2)}</td>
+                    </tr>
+                  `;
+    }).join('')}
+                <tr class="totals-row">
+  <td colspan="${(quotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) ? '4' : '4'}" style="text-align: left; font-weight: bold;">
+    Total Service Charges
+  </td>
+  <td class="center-cell">
+    ${(quotation.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.quantity || 0), 0)}
+  </td>
+  <td class="number-cell">
+    ${(quotation.serviceCharges || []).reduce((sum: number, service: any) => {
+      const basicAmount = service.unitPrice || 0;
+      const quantity = service.quantity || 0;
+      return sum + basicAmount;
+    }, 0).toFixed(2)}
+  </td>
+  ${(quotation.serviceCharges || []).some((service: any) => (service.discountedAmount || 0) > 0) ? '<td></td>' : ''}
+  <td class="number-cell">
+    ${(quotation.serviceCharges || []).reduce((sum: number, service: any) => {
+      const basicAmount = service.unitPrice || 0;
+      const discountPercent = service.discount || 0;
+      const quantity = service.quantity || 0;
+      return sum + (basicAmount * (1 - discountPercent / 100)) * (quantity || 0);
+    }, 0).toFixed(2)}
+  </td>
+  <td></td>
+  <td class="number-cell">
+    ${(quotation.serviceCharges || []).reduce((sum: number, service: any) => {
+      const basicAmount = service.unitPrice || 0;
+      const quantity = service.quantity || 0;
+      const discountPercent = service.discount || 0;
+      const totalBasic = basicAmount * (1 - discountPercent / 100);
+      return sum + (totalBasic * (service.taxRate || 0) / 100) * (quantity || 0);
+    }, 0).toFixed(2)}
+  </td>
+  <td class="number-cell">
+    ${(quotation.serviceCharges || []).reduce((sum: number, service: any) => {
+      const basicAmount = service.unitPrice || 0;
+      const discountPercent = service.discount || 0;
+      const totalBasic = basicAmount * (1 - discountPercent / 100);
+      const gstAmount = totalBasic * (service.taxRate || 0) / 100;
+      return sum + (totalBasic + gstAmount) * (service.quantity || 1);
+    }, 0).toFixed(2)}
+  </td>
+</tr>
+
+              </tbody>
+            </table>
           ` : ''}
+          
           
           ${quotation.batteryBuyBack && quotation.batteryBuyBack.quantity > 0 ? `
-          <div style="margin: 20px 0 10px 0; font-weight: bold; color: #ea580c;">BATTERY BUYBACK CHARGES</div>
-          <table class="items-table">
-            <thead>
-              <tr>
-                <th style="width: 8%;">Sr.No</th>
-                <th style="width: 35%;">Description</th>
-                <th style="width: 8%;">HSN Code</th>
-                <th style="width: 6%;">UOM</th>
-                <th style="width: 5%;">Qty</th>
-                <th style="width: 10%;">Basic Amount</th>
-                ${(quotation.batteryBuyBack?.discount || 0) > 0 ? '<th style="width: 8%;">Discount %</th>' : ''}
-                <th style="width: 9%;">Total Basic</th>
-                ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 5%;">GST</th>' : ''}
-                ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 9%;">GST Amount</th>' : ''}
-                <th style="width: 10%;">Total Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="center-cell">1</td>
-                <td>${quotation.batteryBuyBack.description || ''}</td>
-                <td class="center-cell">${quotation.batteryBuyBack.hsnNumber || '-'}</td>
-                <td class="center-cell">NOS</td>
-                <td class="center-cell">${quotation.batteryBuyBack.quantity || 0}</td>
-                <td class="number-cell">${(quotation.batteryBuyBack.unitPrice || 0).toFixed(2)}</td>
-                ${(quotation.batteryBuyBack?.discount || 0) > 0 ? `<td class="center-cell">${quotation.batteryBuyBack.discount}%</td>` : ''}
-                <td class="number-cell">${(quotation.batteryBuyBack.discountedAmount || 0).toFixed(2)}</td>
-                ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="center-cell">${quotation.batteryBuyBack.taxRate || 0}%</td>` : ''}
-                ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="number-cell">${(quotation.batteryBuyBack.taxAmount || 0).toFixed(2)}</td>` : ''}
-                <td class="number-cell">${(quotation.batteryBuyBack.totalPrice || 0).toFixed(2)}</td>
-              </tr>
-            </tbody>
-          </table>
-          ` : ''}
-          
-          <table class="items-table">
-            <tbody>
-              <tr class="grand-total-row">
-                <td colspan="${(quotation.items || []).some((item: any) => (item.discount || 0) > 0) ? '11' : '10'}" style="text-align: right; padding-right: 20px;">Grand Total</td>
-                <td class="number-cell">${quotation.grandTotal?.toFixed(2) || '0.00'}</td>
-              </tr>
-            </tbody>
-          </table>
-          
-          ${quotation.terms ? `
-          <div class="terms-section">
-            <div class="terms-title">TERMS & CONDITIONS:-</div>
-            <table class="terms-table">
-              ${quotation.terms.split('\n').map((term: string, idx: number) => {
-                const parts = term.split(':');
-                const label = parts[0]?.trim() || '';
-                const value = parts.slice(1).join(':').trim() || '';
-                return `
-                  <tr>
-                    <td class="terms-number">${idx + 1}</td>
-                    <td class="terms-label">${label}</td>
-                    <td class="terms-colon">:</td>
-                    <td class="terms-value">${value}</td>
-                  </tr>
-                `;
-              }).join('')}
+            <div style="margin: 10px 0 5px 0; font-weight: bold; color: #ea580c;">BATTERY BUYBACK CHARGES</div>
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th style="width: 8%;">Sr.No</th>
+                  <th style="width: 35%;">Description</th>
+                  <th style="width: 8%;">HSN Code</th>
+                  <th style="width: 6%;">UOM</th>
+                  <th style="width: 5%;">Qty</th>
+                  <th style="width: 10%;">Basic Amount</th>
+                  ${(quotation.batteryBuyBack?.discount || 0) > 0 ? '<th style="width: 8%;">Discount %</th>' : ''}
+                  ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 5%;">GST</th>' : ''}
+                  ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 9%;">GST Amount</th>' : ''}
+                  <th style="width: 10%;">Total Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="center-cell">1</td>
+                  <td>${quotation.batteryBuyBack.description || ''}</td>
+                  <td class="center-cell">${quotation.batteryBuyBack.hsnNumber || '-'}</td>
+                  <td class="center-cell">NOS</td>
+                  <td class="center-cell">${quotation.batteryBuyBack.quantity || 0}</td>
+                  <td class="number-cell">${(quotation.batteryBuyBack.unitPrice || 0).toFixed(2)}</td>
+                  ${(quotation.batteryBuyBack?.discount || 0) > 0 ? `<td class="center-cell">${quotation.batteryBuyBack.discount}%</td>` : ''}
+                  ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="center-cell">${quotation.batteryBuyBack.taxRate || 0}%</td>` : ''}
+                  ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="number-cell">${(quotation.batteryBuyBack.taxAmount || 0).toFixed(2)}</td>` : ''}
+                  <td class="number-cell">${(quotation.batteryBuyBack.totalPrice || 0).toFixed(2)}</td>
+                </tr>
+                <tr class="totals-row">
+  <td colspan="${(quotation.batteryBuyBack?.discount || 0) > 0 ? '4' : '3'}" style="text-align: left; font-weight: bold;">
+    Total Battery Buyback
+  </td>
+  <td class="center-cell">${quotation.batteryBuyBack?.quantity || 0}</td>
+  <td class="number-cell">${(quotation.batteryBuyBack?.unitPrice || 0).toFixed(2)}</td>
+  <td class="number-cell">- ${(quotation.batteryBuyBack?.discountedAmount || 0).toFixed(2)}</td>
+  ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? '<td></td><td class="number-cell">' + (quotation.batteryBuyBack?.taxAmount || 0).toFixed(2) + '</td>' : ''}
+  <td class="number-cell">${(quotation.batteryBuyBack?.totalPrice || 0).toFixed(2)}</td>
+</tr>
+
+              </tbody>
             </table>
-          </div>
           ` : ''}
+          
+          
+          
+         <div style="margin-top: 15px; width: 100%; font-size: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
+  
+  <!-- ✅ Left: Terms & Conditions -->
+  <div style="width: 60%;">
+    ${quotation.terms ? `
+      <div class="terms-section">
+        <div style="font-weight: bold; margin-bottom: 5px;">TERMS & CONDITIONS:-</div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+          ${quotation.terms.split('\n').map((term: string, idx: number) => {
+            const parts = term.split(':');
+            const label = parts[0]?.trim() || '';
+            const value = parts.slice(1).join(':').trim() || '';
+            return `
+              <tr>
+                <td style="width: 5%; vertical-align: top;">${idx + 1}</td>
+                <td style="width: 30%; vertical-align: top;">${label}</td>
+                <td style="width: 5%; vertical-align: top;">:</td>
+                <td style="width: 60%; vertical-align: top;">${value}</td>
+              </tr>
+            `;
+          }).join('')}
+        </table>
+      </div>
+    ` : ''}
+  </div>
+
+  <!-- ✅ Right: Totals Summary -->
+  <div style="width: 35%; font-size: 12px;">
+    <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+      <tbody>
+        <tr>
+          <td style="text-align: right; padding: 4px 8px;">Subtotal:</td>
+          <td style="text-align: right; padding: 4px 8px; font-weight: bold;">
+            ₹${quotation.subtotal?.toFixed(2) || '0.00'}
+          </td>
+        </tr>
+        <tr>
+          <td style="text-align: right; padding: 4px 8px;">Total Tax:</td>
+          <td style="text-align: right; padding: 4px 8px; font-weight: bold;">
+            ₹${(() => {
+              // Calculate total tax from items
+              const itemsTax = (quotation.items || []).reduce((sum: number, item: any) => {
+                const basicAmount = item.unitPrice || 0;
+                const discountPercent = item.discount || 0;
+                const quantity = item.quantity || 0;
+                const totalBasic = basicAmount * (1 - discountPercent / 100);
+                const gstRate = item.taxRate || 0;
+                return sum + (totalBasic * (gstRate / 100)) * quantity;
+              }, 0);
+              
+              // Calculate total tax from service charges
+              const serviceTax = (quotation.serviceCharges || []).reduce((sum: number, service: any) => {
+                const basicAmount = service.unitPrice || 0;
+                const discountPercent = service.discount || 0;
+                const quantity = service.quantity || 0;
+                const totalBasic = basicAmount * (1 - discountPercent / 100);
+                const gstRate = service.taxRate || 0;
+                return sum + (totalBasic * (gstRate / 100)) * quantity;
+              }, 0);
+              
+              return (itemsTax + serviceTax).toFixed(2);
+            })()}
+          </td>
+        </tr>
+        ${quotation.serviceCharges && quotation.serviceCharges.length > 0 ? `
+        <tr>
+          <td style="text-align: right; padding: 4px 8px;">Service Charges:</td>
+          <td style="text-align: right; padding: 4px 8px; font-weight: bold; color: #059669;">
+            +₹${(quotation.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2) || '0.00'}
+          </td>
+        </tr>` : ''}
+        ${quotation.batteryBuyBack && quotation.batteryBuyBack.quantity > 0 ? `
+        <tr>
+          <td style="text-align: right; padding: 4px 8px;">Battery Buyback:</td>
+          <td style="text-align: right; padding: 4px 8px; font-weight: bold; color: #ea580c;">
+            -₹${quotation.batteryBuyBack?.totalPrice?.toFixed(2) || '0.00'}
+          </td>
+        </tr>` : ''}
+        <tr>
+          <td colspan="2"><hr style="margin-top: 8px; margin-bottom: 2px; border: none; border-top: 1px solid #ddd;"></td>
+        </tr>
+        <tr class="grand-total-row">
+          <td style="text-align: right; padding: 6px 8px; font-size: 14px; font-weight: bold;">Grand Total:</td>
+          <td style="text-align: right; padding: 6px 8px; font-size: 14px; font-weight: bold; color: #1d4ed8;">
+            ₹${(() => {
+              const subtotal = quotation.subtotal || 0;
+              const totalTax = (() => {
+                const itemsTax = (quotation.items || []).reduce((sum: number, item: any) => {
+                  const basicAmount = item.unitPrice || 0;
+                  const discountPercent = item.discount || 0;
+                  const quantity = item.quantity || 0;
+                  const totalBasic = basicAmount * (1 - discountPercent / 100);
+                  const gstRate = item.taxRate || 0;
+                  return sum + (totalBasic * (gstRate / 100)) * quantity;
+                }, 0);
+                
+                const serviceTax = (quotation.serviceCharges || []).reduce((sum: number, service: any) => {
+                  const basicAmount = service.unitPrice || 0;
+                  const discountPercent = service.discount || 0;
+                  const quantity = service.quantity || 0;
+                  const totalBasic = basicAmount * (1 - discountPercent / 100);
+                  const gstRate = service.taxRate || 0;
+                  return sum + (totalBasic * (gstRate / 100)) * quantity;
+                }, 0);
+                
+                return itemsTax + serviceTax;
+              })();
+              const serviceCharges = (quotation.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0);
+              const batteryBuyback = quotation.batteryBuyBack?.totalPrice || 0;
+              
+              return (subtotal + totalTax + serviceCharges - batteryBuyback).toFixed(2);
+            })()}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+
+          
+          
           
           
           <div class="footer-section">
@@ -5536,11 +5937,11 @@ const InvoiceManagement: React.FC = () => {
                 PAN: ${quotation?.company?.pan || '33BLFPS9951M1ZC'}<br>
                 Mail Id: ${quotation?.company?.email || 'service@sunpowerservices.in'}
                 ${quotation?.company?.bankDetails && (
-                  quotation.company.bankDetails.bankName || 
-                  quotation.company.bankDetails.accountNo || 
-                  quotation.company.bankDetails.ifsc || 
-                  quotation.company.bankDetails.branch
-                ) ? `
+        quotation.company.bankDetails.bankName ||
+        quotation.company.bankDetails.accountNo ||
+        quotation.company.bankDetails.ifsc ||
+        quotation.company.bankDetails.branch
+      ) ? `
                 <br><br>
                 <div style="font-weight: bold; margin-top: 10px;">Banking Details:</div>
                 ${quotation?.company?.bankDetails?.bankName ? `<div>Bank: ${quotation.company.bankDetails.bankName}</div>` : ''}
@@ -5579,12 +5980,12 @@ const InvoiceManagement: React.FC = () => {
 
       // Wait for content to load, then print
       printWindow.onload = () => {
-      setTimeout(() => {
-        printWindow.print();
-      }, 500);
+        setTimeout(() => {
+          printWindow.print();
+        }, 500);
+      };
     };
   };
-};
 
 
 
@@ -5663,20 +6064,20 @@ const InvoiceManagement: React.FC = () => {
         )} */}
         {invoiceType === 'quotation' && (
           <>
-          <Button
-            onClick={handleCreateQuotation}
-            className="bg-gradient-to-r mr-3 from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Create Quotation</span>
-          </Button>
-                     <Button
-             onClick={handleExportQuotations}
-             className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
-           >
-             <FileText className="w-4 h-4" />
-             <span>Export Excel</span>
-           </Button>
+            <Button
+              onClick={handleCreateQuotation}
+              className="bg-gradient-to-r mr-3 from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create Quotation</span>
+            </Button>
+            <Button
+              onClick={handleExportQuotations}
+              className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              <FileText className="w-4 h-4" />
+              <span>Export Excel</span>
+            </Button>
           </>
         )}
         {invoiceType === 'sale' && (
@@ -5699,14 +6100,14 @@ const InvoiceManagement: React.FC = () => {
         )}
         {invoiceType === 'purchase' && (
           <>
-          <Button
-            onClick={handleCreatePurchaseInvoice}
+            <Button
+              onClick={handleCreatePurchaseInvoice}
               className="bg-gradient-to-r mr-3 from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Create Purchase Invoice</span>
-          </Button>
-          
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create Purchase Invoice</span>
+            </Button>
+
             <Button
               onClick={handleExportPurchaseInvoices}
               className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
@@ -5801,6 +6202,7 @@ const InvoiceManagement: React.FC = () => {
               ))}
             </div>
 
+           
             {/* PO From Customer Button */}
             <Button
               onClick={handleCreatePOFromCustomer}
@@ -5828,8 +6230,8 @@ const InvoiceManagement: React.FC = () => {
                     placeholder="From Date"
                     value={
                       invoiceType === 'quotation' ? fromDate :
-                      invoiceType === 'sale' ? fromDateSale :
-                      fromDatePurchase
+                        invoiceType === 'sale' ? fromDateSale :
+                          fromDatePurchase
                     }
                     onChange={(e) => {
                       const newFromDate = e.target.value;
@@ -5864,13 +6266,13 @@ const InvoiceManagement: React.FC = () => {
                     placeholder="To Date"
                     min={
                       invoiceType === 'quotation' ? fromDate :
-                      invoiceType === 'sale' ? fromDateSale :
-                      fromDatePurchase
+                        invoiceType === 'sale' ? fromDateSale :
+                          fromDatePurchase
                     }
                     value={
                       invoiceType === 'quotation' ? toDate :
-                      invoiceType === 'sale' ? toDateSale :
-                      toDatePurchase
+                        invoiceType === 'sale' ? toDateSale :
+                          toDatePurchase
                     }
                     onChange={(e) => {
                       const newToDate = e.target.value;
@@ -5898,27 +6300,28 @@ const InvoiceManagement: React.FC = () => {
                     (invoiceType === 'sale' && (fromDateSale || toDateSale)) ||
                     (invoiceType === 'purchase' && (fromDatePurchase || toDatePurchase))
                   ) && (
-                    <button
-                      onClick={() => {
-                        if (invoiceType === 'quotation') {
-                          setFromDate('');
-                          setToDate('');
-                        } else if (invoiceType === 'sale') {
-                          setFromDateSale('');
-                          setToDateSale('');
-                        } else {
-                          setFromDatePurchase('');
-                          setToDatePurchase('');
-                        }
-                        setDateRangeError(''); // Clear date range error
-                      }}
-                      className="flex items-center gap-1 px-2 py-2 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-md transition-colors"
-                    >
-                      <X className="w-3 h-3" />
-                      Clear
-                    </button>
-                  )}
+                      <button
+                        onClick={() => {
+                          if (invoiceType === 'quotation') {
+                            setFromDate('');
+                            setToDate('');
+                          } else if (invoiceType === 'sale') {
+                            setFromDateSale('');
+                            setToDateSale('');
+                          } else {
+                            setFromDatePurchase('');
+                            setToDatePurchase('');
+                          }
+                          setDateRangeError(''); // Clear date range error
+                        }}
+                        className="flex items-center gap-1 px-2 py-2 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-md transition-colors"
+                      >
+                        <X className="w-3 h-3" />
+                        Clear
+                      </button>
+                    )}
                 </div>
+                
               </div>
             )}
 
@@ -5931,37 +6334,37 @@ const InvoiceManagement: React.FC = () => {
                 <span className="text-gray-700 truncate mr-2">{getStatusFilterLabel(statusFilter)}</span>
                 <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showStatusFilterDropdown ? 'rotate-180' : ''}`} />
               </button>
-                              {showStatusFilterDropdown && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1">
-                    {(invoiceType === 'quotation' ? [
-                      { value: 'all', label: 'All Status' },
-                      { value: 'draft', label: 'Draft' },
-                      { value: 'sent', label: 'Sent' },
-                      { value: 'accepted', label: 'Accepted' },
-                      { value: 'rejected', label: 'Rejected' },
-                      { value: 'expired', label: 'Expired' }
-                    ] : [
-                      { value: 'all', label: 'All Status' },
-                      { value: 'draft', label: 'Draft' },
-                      { value: 'sent', label: 'Sent' },
-                      { value: 'paid', label: 'Paid' },
-                      { value: 'overdue', label: 'Overdue' },
-                      { value: 'cancelled', label: 'Cancelled' }
-                    ]).map((option) => (
-                      <button
-                        key={option.value}
-                        onClick={() => {
-                          setStatusFilter(option.value);
-                          setShowStatusFilterDropdown(false);
-                        }}
-                        className={`w-full px-4 py-2.5 text-left hover:bg-gray-50 transition-colors text-sm whitespace-nowrap ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                          }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
+              {showStatusFilterDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1">
+                  {(invoiceType === 'quotation' ? [
+                    { value: 'all', label: 'All Status' },
+                    { value: 'draft', label: 'Draft' },
+                    { value: 'sent', label: 'Sent' },
+                    { value: 'accepted', label: 'Accepted' },
+                    { value: 'rejected', label: 'Rejected' },
+                    { value: 'expired', label: 'Expired' }
+                  ] : [
+                    { value: 'all', label: 'All Status' },
+                    { value: 'draft', label: 'Draft' },
+                    { value: 'sent', label: 'Sent' },
+                    { value: 'paid', label: 'Paid' },
+                    { value: 'overdue', label: 'Overdue' },
+                    { value: 'cancelled', label: 'Cancelled' }
+                  ]).map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => {
+                        setStatusFilter(option.value);
+                        setShowStatusFilterDropdown(false);
+                      }}
+                      className={`w-full px-4 py-2.5 text-left hover:bg-gray-50 transition-colors text-sm whitespace-nowrap ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                        }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Payment Filter */}
@@ -6004,6 +6407,35 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               )}
             </div>
+             {/* Quotation Type Toggle - Only show when quotation is selected */}
+             {invoiceType === 'quotation' && (
+              <div className="flex bg-blue-50 rounded-lg p-1 shadow-sm border border-blue-200">
+                <button
+                  onClick={() => setQuotationType('quotation')}
+                  className={`px-4 py-2.5 rounded-md text-sm font-medium flex items-center space-x-2 transition-all duration-200 ${quotationType === 'quotation'
+                    ? 'bg-white text-blue-700 shadow-sm'
+                    : 'text-gray-600 hover:text-blue-700 hover:bg-blue-100'
+                    }`}
+                >
+                  <FileText className="w-4 h-4" />
+                  <span>Quotation</span>
+                </button>
+                <button
+                  // onClick={() => setQuotationType('amc')}
+                  onClick={() => navigate('/amc-quotations')}
+                  className={`px-4 py-2.5 rounded-md text-sm font-medium flex items-center space-x-2 transition-all duration-200 ${quotationType === 'amc'
+                    ? 'bg-white text-blue-700 shadow-sm'
+                    : 'text-gray-600 hover:text-blue-700 hover:bg-blue-100'
+                    }`}
+                >
+                  {/* Settings icon for AMC Quotation */}
+                  {/* @ts-ignore */}
+                  <Settings className="w-4 h-4" />
+                  <span>AMC Quotation</span>
+                </button>
+              </div>
+            )}
+
           </div>
         </div>
 
@@ -6023,8 +6455,13 @@ const InvoiceManagement: React.FC = () => {
 
 
 
-      {/* Invoices Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      {/* Conditional Rendering: AMC Quotations or Regular Content */}
+      {invoiceType === 'quotation' && quotationType === 'amc' ? (
+        <AMCQuotationManagement />
+      ) : (
+        <>
+          {/* Invoices Table */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
@@ -6034,22 +6471,22 @@ const InvoiceManagement: React.FC = () => {
                     invoiceType === 'challan' ? 'Challan No' :
                       'Invoice No'}
                 </th>
-                {invoiceType === 'challan' && 
+                {invoiceType === 'challan' &&
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference No</th>
                 }
-                {invoiceType === 'challan' && 
+                {invoiceType === 'challan' &&
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Buyer's Order No</th>
                 }
-                {invoiceType === 'challan' && 
+                {invoiceType === 'challan' &&
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
                 }
-                {invoiceType === 'challan' && 
+                {invoiceType === 'challan' &&
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Destination</th>
                 }
                 {/* {invoiceType === 'sale' && 
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quotation Ref</th>
                 } */}
-                {invoiceType === 'purchase' && 
+                {invoiceType === 'purchase' &&
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PO No</th>
                 }
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -6060,16 +6497,16 @@ const InvoiceManagement: React.FC = () => {
                     {invoiceType === 'quotation' ? 'Total Amount' : 'Amount'}
                   </th>
                 )}
-                {(invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'quotation') && 
+                {(invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'quotation') &&
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>
                 }
-                {(invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'quotation') && 
+                {(invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'quotation') &&
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>
                 }
-                {(invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase') && 
+                {(invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase') &&
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 }
-                {(invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase') && 
+                {(invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase') &&
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
                 }
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -6113,7 +6550,7 @@ const InvoiceManagement: React.FC = () => {
                           {quotation.customer?.name || 'N/A'}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {quotation.customer?.email || ''}
+                          {getPrimaryAddressEmail(quotation.customer) || quotation.customer?.email || ''}
                         </div>
                       </div>
                     </td>
@@ -6129,20 +6566,19 @@ const InvoiceManagement: React.FC = () => {
                     <td className="px-4 py-3">
                       <div className="flex flex-col items-start space-y-1">
                         <div className="flex items-center space-x-2">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            quotation.status === 'draft' 
-                              ? 'bg-yellow-100 text-yellow-800' 
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${quotation.status === 'draft'
+                              ? 'bg-yellow-100 text-yellow-800'
                               : quotation.status === 'sent'
-                              ? 'bg-blue-100 text-blue-800'
-                              : quotation.status === 'accepted'
-                              ? 'bg-green-100 text-green-800'
-                              : quotation.status === 'rejected'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}>
+                                ? 'bg-blue-100 text-blue-800'
+                                : quotation.status === 'accepted'
+                                  ? 'bg-green-100 text-green-800'
+                                  : quotation.status === 'rejected'
+                                    ? 'bg-red-100 text-red-800'
+                                    : 'bg-gray-100 text-gray-800'
+                            }`}>
                             {quotation.status?.charAt(0).toUpperCase() + quotation.status?.slice(1) || 'Draft'}
                           </span>
-                          
+
                           {/* Custom Dropdown */}
                           <div className="relative status-dropdown-container" onClick={(e) => e.stopPropagation()}>
                             <Tooltip content="Update quotation status" position="top">
@@ -6165,7 +6601,7 @@ const InvoiceManagement: React.FC = () => {
                                 </svg>
                               </button>
                             </Tooltip>
-                            
+
                             {/* Dropdown Menu */}
                             {openStatusDropdown === quotation._id && (
                               <div className="absolute right-0 mt-1 w-32 bg-white border border-gray-200 rounded-md shadow-lg z-[9999] opacity-100 transform transition-all duration-200 ease-in-out">
@@ -6186,9 +6622,8 @@ const InvoiceManagement: React.FC = () => {
                                         e.preventDefault();
                                         e.stopPropagation();
                                       }}
-                                      className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center space-x-2 cursor-pointer transition-colors ${
-                                        updatingQuotationStatus === quotation._id ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50'
-                                      }`}
+                                      className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center space-x-2 cursor-pointer transition-colors ${updatingQuotationStatus === quotation._id ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50'
+                                        }`}
                                       disabled={updatingQuotationStatus === quotation._id}
                                       type="button"
                                     >
@@ -6200,7 +6635,7 @@ const InvoiceManagement: React.FC = () => {
                               </div>
                             )}
                           </div>
-                          
+
                           {updatingQuotationStatus === quotation._id && (
                             <div className="w-3 h-3 border border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                           )}
@@ -6270,14 +6705,13 @@ const InvoiceManagement: React.FC = () => {
                           <button
                             onClick={() => handleUpdatePayment(quotation, 'quotation')}
                             disabled={quotation.status === 'draft'}
-                            className={`p-1.5 rounded transition-colors duration-200 ${
-                              quotation.status !== 'draft'
+                            className={`p-1.5 rounded transition-colors duration-200 ${quotation.status !== 'draft'
                                 ? 'text-green-600 hover:text-green-900 hover:bg-green-50'
                                 : 'text-gray-400 cursor-not-allowed'
-                            }`}
+                              }`}
                             title={
-                              quotation.status === 'draft' 
-                                ? 'Send quotation via email first to enable payments' 
+                              quotation.status === 'draft'
+                                ? 'Send quotation via email first to enable payments'
                                 : 'Update payment for this quotation'
                             }
                           >
@@ -6287,16 +6721,15 @@ const InvoiceManagement: React.FC = () => {
                         <Tooltip content="Send Email" position="top">
                           <button
                             onClick={() => handleSendQuotationEmail(quotation)}
-                            disabled={!quotation.customer?.email}
-                            className={`p-1.5 rounded transition-colors duration-200 ${
-                              quotation.customer?.email
+                            disabled={!getPrimaryAddressEmail(quotation.customer)}
+                            className={`p-1.5 rounded transition-colors duration-200 ${getPrimaryAddressEmail(quotation.customer)
                                 ? 'text-blue-600 hover:text-blue-900 hover:bg-blue-50'
                                 : 'text-gray-400 cursor-not-allowed'
-                            }`}
+                              }`}
                             title={
-                              !quotation.customer?.email 
-                                ? 'Customer email not available' 
-                                : 'Send quotation to customer email (will update status to sent)'
+                              !getPrimaryAddressEmail(quotation.customer)
+                                ? 'Customer primary address email not available'
+                                : 'Send quotation to customer primary address email (will update status to sent)'
                             }
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -6419,7 +6852,7 @@ const InvoiceManagement: React.FC = () => {
                         )}
                       </td>
                     } */}
-                    {invoiceType === 'purchase' && 
+                    {invoiceType === 'purchase' &&
                       <td className="px-4 py-3 text-sm text-gray-600">
                         {invoice.poNumber ? (
                           <div className="flex flex-col">
@@ -6438,7 +6871,9 @@ const InvoiceManagement: React.FC = () => {
                           {invoiceType === 'purchase' ? invoice?.supplier?.name : invoice.customer?.name}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {invoiceType === 'purchase' ? invoice.supplierEmail || invoice?.supplier?.email : invoice.customer?.email}
+                          {invoiceType === 'purchase'
+                            ? invoice.supplierEmail || invoice?.supplier?.email
+                            : getPrimaryAddressEmail(invoice.customer) || invoice.customer?.email}
                         </div>
                       </div>
                     </td>
@@ -6463,8 +6898,8 @@ const InvoiceManagement: React.FC = () => {
                         <div className="flex items-center space-x-2">
                           {/* {getStatusIcon(invoice.status)} */}
                           {invoice.status === 'cancelled' ? <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
-                          {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
-                        </span> :  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${((invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2))
+                            {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                          </span> : <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${((invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2))
                             ? "bg-green-100 text-green-800" : (invoice.externalInvoiceTotal || 0) === 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
                             {(invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2) ? "Matched" : (invoice.externalInvoiceTotal || 0) === 0 ? "Matched" : "Mismatch"}
                           </span>}
@@ -6591,7 +7026,7 @@ const InvoiceManagement: React.FC = () => {
                     <p className="text-sm text-gray-600">
                       Due Date: {selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : ''}
                     </p>
-                    { selectedInvoice.invoiceType === 'purchase' && selectedInvoice.poNumber && <p className="text-sm text-gray-600 mt-1">
+                    {selectedInvoice.invoiceType === 'purchase' && selectedInvoice.poNumber && <p className="text-sm text-gray-600 mt-1">
                       PO Number: {selectedInvoice.poNumber}
                     </p>}
                   </div>
@@ -6768,30 +7203,30 @@ const InvoiceManagement: React.FC = () => {
                           {selectedInvoice?.location?.address && <p>{selectedInvoice?.location?.address}</p>}
                         </>
                       )}
-                      
+
                       {/* Bank Details */}
                       {selectedInvoice?.company?.bankDetails && (
-                        selectedInvoice.company.bankDetails.bankName || 
-                        selectedInvoice.company.bankDetails.accountNo || 
-                        selectedInvoice.company.bankDetails.ifsc || 
+                        selectedInvoice.company.bankDetails.bankName ||
+                        selectedInvoice.company.bankDetails.accountNo ||
+                        selectedInvoice.company.bankDetails.ifsc ||
                         selectedInvoice.company.bankDetails.branch
                       ) && (
-                        <>
-                          <p className="mt-3 font-medium text-gray-700">Bank Details:</p>
-                          {selectedInvoice?.company?.bankDetails?.bankName && (
-                            <p className="text-sm text-gray-600">Bank: {selectedInvoice.company.bankDetails.bankName}</p>
-                          )}
-                          {selectedInvoice?.company?.bankDetails?.accountNo && (
-                            <p className="text-sm text-gray-600">A/C: {selectedInvoice.company.bankDetails.accountNo}</p>
-                          )}
-                          {selectedInvoice?.company?.bankDetails?.ifsc && (
-                            <p className="text-sm text-gray-600">IFSC: {selectedInvoice.company.bankDetails.ifsc}</p>
-                          )}
-                          {selectedInvoice?.company?.bankDetails?.branch && (
-                            <p className="text-sm text-gray-600">Branch: {selectedInvoice.company.bankDetails.branch}</p>
-                          )}
-                        </>
-                      )}
+                          <>
+                            <p className="mt-3 font-medium text-gray-700">Bank Details:</p>
+                            {selectedInvoice?.company?.bankDetails?.bankName && (
+                              <p className="text-sm text-gray-600">Bank: {selectedInvoice.company.bankDetails.bankName}</p>
+                            )}
+                            {selectedInvoice?.company?.bankDetails?.accountNo && (
+                              <p className="text-sm text-gray-600">A/C: {selectedInvoice.company.bankDetails.accountNo}</p>
+                            )}
+                            {selectedInvoice?.company?.bankDetails?.ifsc && (
+                              <p className="text-sm text-gray-600">IFSC: {selectedInvoice.company.bankDetails.ifsc}</p>
+                            )}
+                            {selectedInvoice?.company?.bankDetails?.branch && (
+                              <p className="text-sm text-gray-600">Branch: {selectedInvoice.company.bankDetails.branch}</p>
+                            )}
+                          </>
+                        )}
                     </div>
                   )}
                 </div>
@@ -6821,7 +7256,9 @@ const InvoiceManagement: React.FC = () => {
                     <div className="text-sm text-gray-600">
                       <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
                       <p className="font-medium">{selectedInvoice?.customer?.name || 'N/A'}</p>
-                      {selectedInvoice?.customer?.email && <p>Email: {selectedInvoice?.customer?.email}</p>}
+                      {(getPrimaryAddressEmail(selectedInvoice?.customer) || selectedInvoice?.customer?.email) && (
+                        <p>Email: {getPrimaryAddressEmail(selectedInvoice?.customer) || selectedInvoice?.customer?.email}</p>
+                      )}
                       {selectedInvoice?.customer?.phone && <p>Phone: {selectedInvoice?.customer?.phone}</p>}
                       {selectedInvoice?.billToAddress && (
                         <>
@@ -7247,7 +7684,7 @@ const InvoiceManagement: React.FC = () => {
                       <span className="text-gray-600">Overall Discount:</span>
                       <span className="font-medium text-green-600">-{selectedInvoice.overallDiscount || 0}% (-₹{selectedInvoice.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
                     </div> */}
-                    
+
                     {/* Service Charges Total */}
                     {selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 && (
                       <div className="flex justify-between text-sm">
@@ -7255,7 +7692,7 @@ const InvoiceManagement: React.FC = () => {
                         <span className="font-medium text-green-600">+₹{(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2)}</span>
                       </div>
                     )}
-                    
+
                     {/* Battery Buyback Charges Total */}
                     {selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.quantity > 0 && (
                       <div className="flex justify-between text-sm">
@@ -7263,7 +7700,7 @@ const InvoiceManagement: React.FC = () => {
                         <span className="font-medium text-orange-600">+₹{(selectedInvoice.batteryBuyBack?.totalPrice || 0).toFixed(2)}</span>
                       </div>
                     )}
-                    
+
                     <div className="flex justify-between font-bold text-lg border-t pt-3">
                       <span>Grand Total:</span>
                       <span className={hasAmountMismatch(selectedInvoice) ? 'text-red-600' : 'text-blue-600'}>
@@ -7554,7 +7991,7 @@ const InvoiceManagement: React.FC = () => {
                             <div className="flex items-center text-green-800">
                               <CheckCircle className="w-5 h-5 mr-2" />
                               <span className="font-semibold">
-                                {paymentUpdate.paymentStatus === 'gst_pending' 
+                                {paymentUpdate.paymentStatus === 'gst_pending'
                                   ? 'Amount without GST will be marked as PAID'
                                   : 'Invoice will be marked as PAID'
                                 }
@@ -7610,13 +8047,13 @@ const InvoiceManagement: React.FC = () => {
                           min="0"
                           max={getSelectedInvoiceRemainingPayableAmount()}
                           step="1"
-                            value={paymentUpdate.paidAmount.toFixed(2)}
+                          value={paymentUpdate.paidAmount.toFixed(2)}
                           onChange={(e) => {
                             const amount = parseFloat(e.target.value) || 0;
                             const remainingPayableAmount = getSelectedInvoiceRemainingPayableAmount();
 
                             let newPaymentStatus = paymentUpdate.paymentStatus;
-                            
+
                             // Don't auto-change status if it's already set to gst_pending
                             if (paymentUpdate.paymentStatus !== 'gst_pending') {
                               if (amount >= remainingPayableAmount) {
@@ -7829,7 +8266,7 @@ const InvoiceManagement: React.FC = () => {
                       {paymentUpdate.paymentMethod && (
                         <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
                           <h4 className="text-sm font-medium text-gray-700 mb-3">Payment Method Details</h4>
-                          
+
                           {paymentUpdate.paymentMethod === 'cash' && (
                             <div className="space-y-3">
                               <div>
@@ -7880,8 +8317,8 @@ const InvoiceManagement: React.FC = () => {
                                         ...paymentUpdate,
                                         paymentMethodDetails: {
                                           ...paymentUpdate.paymentMethodDetails,
-                                          cheque: { 
-                                            ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                          cheque: {
+                                            ...paymentUpdate.paymentMethodDetails?.cheque,
                                             chequeNumber: e.target.value,
                                             bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
                                             issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
@@ -7909,8 +8346,8 @@ const InvoiceManagement: React.FC = () => {
                                         ...paymentUpdate,
                                         paymentMethodDetails: {
                                           ...paymentUpdate.paymentMethodDetails,
-                                          cheque: { 
-                                            ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                          cheque: {
+                                            ...paymentUpdate.paymentMethodDetails?.cheque,
                                             bankName: e.target.value,
                                             chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
                                             issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
@@ -7940,8 +8377,8 @@ const InvoiceManagement: React.FC = () => {
                                         ...paymentUpdate,
                                         paymentMethodDetails: {
                                           ...paymentUpdate.paymentMethodDetails,
-                                          cheque: { 
-                                            ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                          cheque: {
+                                            ...paymentUpdate.paymentMethodDetails?.cheque,
                                             issueDate: new Date(e.target.value),
                                             chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
                                             bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || ''
@@ -7967,8 +8404,8 @@ const InvoiceManagement: React.FC = () => {
                                       ...paymentUpdate,
                                       paymentMethodDetails: {
                                         ...paymentUpdate.paymentMethodDetails,
-                                        cheque: { 
-                                          ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                        cheque: {
+                                          ...paymentUpdate.paymentMethodDetails?.cheque,
                                           branchName: e.target.value,
                                           chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
                                           bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
@@ -7991,8 +8428,8 @@ const InvoiceManagement: React.FC = () => {
                                       ...paymentUpdate,
                                       paymentMethodDetails: {
                                         ...paymentUpdate.paymentMethodDetails,
-                                        cheque: { 
-                                          ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                        cheque: {
+                                          ...paymentUpdate.paymentMethodDetails?.cheque,
                                           accountHolderName: e.target.value,
                                           chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
                                           bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
@@ -8013,8 +8450,8 @@ const InvoiceManagement: React.FC = () => {
                                       ...paymentUpdate,
                                       paymentMethodDetails: {
                                         ...paymentUpdate.paymentMethodDetails,
-                                        cheque: { 
-                                          ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                        cheque: {
+                                          ...paymentUpdate.paymentMethodDetails?.cheque,
                                           accountNumber: e.target.value,
                                           chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
                                           bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
@@ -8037,8 +8474,8 @@ const InvoiceManagement: React.FC = () => {
                                       ...paymentUpdate,
                                       paymentMethodDetails: {
                                         ...paymentUpdate.paymentMethodDetails,
-                                        cheque: { 
-                                          ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                        cheque: {
+                                          ...paymentUpdate.paymentMethodDetails?.cheque,
                                           ifscCode: e.target.value,
                                           chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
                                           bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
@@ -8059,8 +8496,8 @@ const InvoiceManagement: React.FC = () => {
                                       ...paymentUpdate,
                                       paymentMethodDetails: {
                                         ...paymentUpdate.paymentMethodDetails,
-                                        cheque: { 
-                                          ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                        cheque: {
+                                          ...paymentUpdate.paymentMethodDetails?.cheque,
                                           clearanceDate: new Date(e.target.value),
                                           chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
                                           bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
@@ -8088,8 +8525,8 @@ const InvoiceManagement: React.FC = () => {
                                         ...paymentUpdate,
                                         paymentMethodDetails: {
                                           ...paymentUpdate.paymentMethodDetails,
-                                          bankTransfer: { 
-                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer, 
+                                          bankTransfer: {
+                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer,
                                             bankName: e.target.value,
                                             accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
                                             ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
@@ -8119,8 +8556,8 @@ const InvoiceManagement: React.FC = () => {
                                         ...paymentUpdate,
                                         paymentMethodDetails: {
                                           ...paymentUpdate.paymentMethodDetails,
-                                          bankTransfer: { 
-                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer, 
+                                          bankTransfer: {
+                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer,
                                             accountNumber: e.target.value,
                                             bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
                                             ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
@@ -8152,8 +8589,8 @@ const InvoiceManagement: React.FC = () => {
                                         ...paymentUpdate,
                                         paymentMethodDetails: {
                                           ...paymentUpdate.paymentMethodDetails,
-                                          bankTransfer: { 
-                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer, 
+                                          bankTransfer: {
+                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer,
                                             ifscCode: e.target.value,
                                             bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
                                             accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
@@ -8183,8 +8620,8 @@ const InvoiceManagement: React.FC = () => {
                                         ...paymentUpdate,
                                         paymentMethodDetails: {
                                           ...paymentUpdate.paymentMethodDetails,
-                                          bankTransfer: { 
-                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer, 
+                                          bankTransfer: {
+                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer,
                                             transactionId: e.target.value,
                                             bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
                                             accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
@@ -8247,7 +8684,7 @@ const InvoiceManagement: React.FC = () => {
                                       ...paymentUpdate,
                                       paymentMethodDetails: {
                                         ...paymentUpdate.paymentMethodDetails,
-                                        bankTransfer: { 
+                                        bankTransfer: {
                                           bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
                                           branchName: e.target.value,
                                           accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
@@ -8274,7 +8711,7 @@ const InvoiceManagement: React.FC = () => {
                                       ...paymentUpdate,
                                       paymentMethodDetails: {
                                         ...paymentUpdate.paymentMethodDetails,
-                                        bankTransfer: { 
+                                        bankTransfer: {
                                           bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
                                           branchName: paymentUpdate.paymentMethodDetails?.bankTransfer?.branchName || '',
                                           accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
@@ -8299,7 +8736,7 @@ const InvoiceManagement: React.FC = () => {
                                       ...paymentUpdate,
                                       paymentMethodDetails: {
                                         ...paymentUpdate.paymentMethodDetails,
-                                        bankTransfer: { 
+                                        bankTransfer: {
                                           bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
                                           branchName: paymentUpdate.paymentMethodDetails?.bankTransfer?.branchName || '',
                                           accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
@@ -8332,7 +8769,7 @@ const InvoiceManagement: React.FC = () => {
                                         ...paymentUpdate,
                                         paymentMethodDetails: {
                                           ...paymentUpdate.paymentMethodDetails,
-                                          upi: { 
+                                          upi: {
                                             upiId: e.target.value,
                                             transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || '',
                                             transactionReference: paymentUpdate.paymentMethodDetails?.upi?.transactionReference || '',
@@ -8362,7 +8799,7 @@ const InvoiceManagement: React.FC = () => {
                                         ...paymentUpdate,
                                         paymentMethodDetails: {
                                           ...paymentUpdate.paymentMethodDetails,
-                                          upi: { 
+                                          upi: {
                                             upiId: paymentUpdate.paymentMethodDetails?.upi?.upiId || '',
                                             transactionId: e.target.value,
                                             transactionReference: paymentUpdate.paymentMethodDetails?.upi?.transactionReference || '',
@@ -8393,7 +8830,7 @@ const InvoiceManagement: React.FC = () => {
                                       ...paymentUpdate,
                                       paymentMethodDetails: {
                                         ...paymentUpdate.paymentMethodDetails,
-                                        upi: { 
+                                        upi: {
                                           upiId: paymentUpdate.paymentMethodDetails?.upi?.upiId || '',
                                           transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || '',
                                           transactionReference: e.target.value,
@@ -8415,7 +8852,7 @@ const InvoiceManagement: React.FC = () => {
                                       ...paymentUpdate,
                                       paymentMethodDetails: {
                                         ...paymentUpdate.paymentMethodDetails,
-                                        upi: { 
+                                        upi: {
                                           upiId: paymentUpdate.paymentMethodDetails?.upi?.upiId || '',
                                           transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || '',
                                           transactionReference: paymentUpdate.paymentMethodDetails?.upi?.transactionReference || '',
@@ -8438,7 +8875,7 @@ const InvoiceManagement: React.FC = () => {
                                     ...paymentUpdate,
                                     paymentMethodDetails: {
                                       ...paymentUpdate.paymentMethodDetails,
-                                      upi: { 
+                                      upi: {
                                         upiId: paymentUpdate.paymentMethodDetails?.upi?.upiId || '',
                                         transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || '',
                                         transactionReference: paymentUpdate.paymentMethodDetails?.upi?.transactionReference || '',
@@ -8466,7 +8903,7 @@ const InvoiceManagement: React.FC = () => {
                                         ...paymentUpdate,
                                         paymentMethodDetails: {
                                           ...paymentUpdate.paymentMethodDetails,
-                                          card: { 
+                                          card: {
                                             cardType: e.target.value as 'credit' | 'debit' | 'prepaid',
                                             cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
                                             lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
@@ -8500,7 +8937,7 @@ const InvoiceManagement: React.FC = () => {
                                         ...paymentUpdate,
                                         paymentMethodDetails: {
                                           ...paymentUpdate.paymentMethodDetails,
-                                          card: { 
+                                          card: {
                                             cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
                                             cardNetwork: e.target.value as 'visa' | 'mastercard' | 'amex' | 'rupay' | 'other',
                                             lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
@@ -8539,7 +8976,7 @@ const InvoiceManagement: React.FC = () => {
                                         ...paymentUpdate,
                                         paymentMethodDetails: {
                                           ...paymentUpdate.paymentMethodDetails,
-                                          card: { 
+                                          card: {
                                             cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
                                             cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
                                             lastFourDigits: e.target.value,
@@ -8571,7 +9008,7 @@ const InvoiceManagement: React.FC = () => {
                                         ...paymentUpdate,
                                         paymentMethodDetails: {
                                           ...paymentUpdate.paymentMethodDetails,
-                                          card: { 
+                                          card: {
                                             cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
                                             cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
                                             lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
@@ -8603,7 +9040,7 @@ const InvoiceManagement: React.FC = () => {
                                       ...paymentUpdate,
                                       paymentMethodDetails: {
                                         ...paymentUpdate.paymentMethodDetails,
-                                        card: { 
+                                        card: {
                                           cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
                                           cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
                                           lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
@@ -8626,7 +9063,7 @@ const InvoiceManagement: React.FC = () => {
                                       ...paymentUpdate,
                                       paymentMethodDetails: {
                                         ...paymentUpdate.paymentMethodDetails,
-                                        card: { 
+                                        card: {
                                           cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
                                           cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
                                           lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
@@ -8679,11 +9116,11 @@ const InvoiceManagement: React.FC = () => {
                                     ...paymentUpdate,
                                     paymentMethodDetails: {
                                       ...paymentUpdate.paymentMethodDetails,
-                                        other: { 
-                                          methodName: paymentUpdate.paymentMethodDetails?.other?.methodName || '',
-                                          referenceNumber: e.target.value,
-                                          additionalDetails: paymentUpdate.paymentMethodDetails?.other?.additionalDetails || {}
-                                        }
+                                      other: {
+                                        methodName: paymentUpdate.paymentMethodDetails?.other?.methodName || '',
+                                        referenceNumber: e.target.value,
+                                        additionalDetails: paymentUpdate.paymentMethodDetails?.other?.additionalDetails || {}
+                                      }
                                     }
                                   })}
                                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
@@ -8856,16 +9293,15 @@ const InvoiceManagement: React.FC = () => {
                   </div>
                   <div className="text-right">
                     <div className="flex space-x-2 mb-2">
-                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${
-                        selectedQuotation.status === 'draft' 
-                          ? 'bg-yellow-100 text-yellow-800' 
+                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${selectedQuotation.status === 'draft'
+                          ? 'bg-yellow-100 text-yellow-800'
                           : selectedQuotation.status === 'sent'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {selectedQuotation.status === 'draft' ? 'Draft' : 
-                         selectedQuotation.status === 'sent' ? 'Sent' : 
-                         selectedQuotation.status}
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                        {selectedQuotation.status === 'draft' ? 'Draft' :
+                          selectedQuotation.status === 'sent' ? 'Sent' :
+                            selectedQuotation.status}
                       </span>
                     </div>
                     <div className="flex space-x-2">
@@ -8877,13 +9313,12 @@ const InvoiceManagement: React.FC = () => {
                       </button>
                       <button
                         onClick={() => handleSendQuotationEmail(selectedQuotation)}
-                        disabled={!selectedQuotation.customer?.email}
-                        className={`flex items-center px-3 py-1 text-sm rounded-md ${
-                          selectedQuotation.customer?.email 
-                            ? 'bg-green-600 text-white hover:bg-green-700' 
+                        disabled={!getPrimaryAddressEmail(selectedQuotation.customer)}
+                        className={`flex items-center px-3 py-1 text-sm rounded-md ${getPrimaryAddressEmail(selectedQuotation.customer)
+                            ? 'bg-green-600 text-white hover:bg-green-700'
                             : 'bg-gray-400 text-white cursor-not-allowed'
-                        }`}
-                        title={selectedQuotation.customer?.email ? 'Send quotation to customer email (will update status to sent)' : 'Customer email not available'}
+                          }`}
+                        title={getPrimaryAddressEmail(selectedQuotation.customer) ? 'Send quotation to customer primary address email (will update status to sent)' : 'Customer primary address email not available'}
                       >
                         <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -8978,30 +9413,30 @@ const InvoiceManagement: React.FC = () => {
                         )}
                       </>
                     )}
-                    
+
                     {/* Bank Details */}
                     {selectedQuotation?.company?.bankDetails && (
-                      selectedQuotation.company.bankDetails.bankName || 
-                      selectedQuotation.company.bankDetails.accountNo || 
-                      selectedQuotation.company.bankDetails.ifsc || 
+                      selectedQuotation.company.bankDetails.bankName ||
+                      selectedQuotation.company.bankDetails.accountNo ||
+                      selectedQuotation.company.bankDetails.ifsc ||
                       selectedQuotation.company.bankDetails.branch
                     ) && (
-                      <>
-                        <p className="mt-3 font-medium text-gray-700">Bank Details:</p>
-                        {selectedQuotation?.company?.bankDetails?.bankName && (
-                          <p className="text-sm text-gray-600">Bank: {selectedQuotation.company.bankDetails.bankName}</p>
-                        )}
-                        {selectedQuotation?.company?.bankDetails?.accountNo && (
-                          <p className="text-sm text-gray-600">A/C: {selectedQuotation.company.bankDetails.accountNo}</p>
-                        )}
-                        {selectedQuotation?.company?.bankDetails?.ifsc && (
-                          <p className="text-sm text-gray-600">IFSC: {selectedQuotation.company.bankDetails.ifsc}</p>
-                        )}
-                        {selectedQuotation?.company?.bankDetails?.branch && (
-                          <p className="text-sm text-gray-600">Branch: {selectedQuotation.company.bankDetails.branch}</p>
-                        )}
-                      </>
-                    )}
+                        <>
+                          <p className="mt-3 font-medium text-gray-700">Bank Details:</p>
+                          {selectedQuotation?.company?.bankDetails?.bankName && (
+                            <p className="text-sm text-gray-600">Bank: {selectedQuotation.company.bankDetails.bankName}</p>
+                          )}
+                          {selectedQuotation?.company?.bankDetails?.accountNo && (
+                            <p className="text-sm text-gray-600">A/C: {selectedQuotation.company.bankDetails.accountNo}</p>
+                          )}
+                          {selectedQuotation?.company?.bankDetails?.ifsc && (
+                            <p className="text-sm text-gray-600">IFSC: {selectedQuotation.company.bankDetails.ifsc}</p>
+                          )}
+                          {selectedQuotation?.company?.bankDetails?.branch && (
+                            <p className="text-sm text-gray-600">Branch: {selectedQuotation.company.bankDetails.branch}</p>
+                          )}
+                        </>
+                      )}
                   </div>
                 </div>
 
@@ -9009,7 +9444,9 @@ const InvoiceManagement: React.FC = () => {
                   <div className="text-sm text-gray-600">
                     <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
                     <p className="font-medium">{selectedQuotation?.customer?.name || 'N/A'}</p>
-                    {selectedQuotation?.customer?.email && <p>Email: {selectedQuotation?.customer?.email}</p>}
+                    {(getPrimaryAddressEmail(selectedQuotation?.customer) || selectedQuotation?.customer?.email) && (
+                      <p>Email: {getPrimaryAddressEmail(selectedQuotation?.customer) || selectedQuotation?.customer?.email}</p>
+                    )}
                     {selectedQuotation?.customer?.phone && <p>Phone: {selectedQuotation?.customer?.phone}</p>}
                     {selectedQuotation?.billToAddress && (
                       <>
@@ -9237,21 +9674,21 @@ const InvoiceManagement: React.FC = () => {
                   <div className="w-80 space-y-3 text-right">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-medium">₹{(selectedQuotation.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0)), 0).toFixed(2)}</span>
+                      <span className="font-medium">₹{(selectedQuotation.subtotal).toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Total Tax:</span>
-                      <span className="font-medium">₹{(selectedQuotation.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate ?? 0) / 100), 0).toFixed(2)}</span>
+                      <span className="font-medium">₹{(selectedQuotation.totalTax).toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-sm">
+                    {selectedQuotation.totalDiscount > 0 && <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Total Discount:</span>
                       <span className="font-medium text-green-600">-₹{(selectedQuotation.totalDiscount || 0).toFixed(2)}</span>
-                    </div>
+                    </div>}
                     {/* <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Overall Discount:</span>
                       <span className="font-medium text-green-600">-{selectedQuotation.overallDiscount || 0}% (-₹{selectedQuotation.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
                     </div> */}
-                    
+
                     {/* Service Charges Total */}
                     {selectedQuotation.serviceCharges && selectedQuotation.serviceCharges.length > 0 && (
                       <div className="flex justify-between text-sm">
@@ -9259,7 +9696,7 @@ const InvoiceManagement: React.FC = () => {
                         <span className="font-medium text-green-600">+₹{(selectedQuotation.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2)}</span>
                       </div>
                     )}
-                    
+
                     {/* Battery Buyback Charges Total */}
                     {selectedQuotation.batteryBuyBack && selectedQuotation.batteryBuyBack.quantity > 0 && (
                       <div className="flex justify-between text-sm">
@@ -9267,7 +9704,7 @@ const InvoiceManagement: React.FC = () => {
                         <span className="font-medium text-orange-600">-₹{(selectedQuotation.batteryBuyBack?.totalPrice || 0).toFixed(2)}</span>
                       </div>
                     )}
-                    
+
                     <div className="flex justify-between font-bold text-lg border-t pt-3">
                       <span>Grand Total:</span>
                       <span className="text-blue-600">₹{selectedQuotation.grandTotal?.toFixed(2)}</span>
@@ -9605,6 +10042,9 @@ const InvoiceManagement: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+        </>
       )}
 
     </div>

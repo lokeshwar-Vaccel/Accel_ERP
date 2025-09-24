@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { DeliveryChallan, IDeliveryChallan, IDeliveryChallanItem } from '../models/DeliveryChallan';
-import { Stock } from '../models/Stock';
+import { Stock, StockLocation, Room, Rack } from '../models/Stock';
 import { StockLedger } from '../models/StockLedger';
 import { AuthenticatedRequest, APIResponse, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
@@ -131,6 +131,7 @@ export const createDeliveryChallan = async (
   try {
     const {
       customer,
+      location,
       spares,
       services,
       dated,
@@ -192,12 +193,74 @@ export const createDeliveryChallan = async (
         }
         // If product ID is provided, validate stock availability
         if (item.product) {
-          const stock = await Stock.findOne({ product: item.product });
-          if (!stock) {
-            return next(new AppError(`Product ${item.description} is not available in stock`, 400));
-          }
-          if (stock.availableQuantity < item.quantity) {
-            return next(new AppError(`Insufficient stock for ${item.description}. Available: ${stock.availableQuantity}, Requested: ${item.quantity}`, 400));
+          // Check if we have stock allocation data from frontend
+          if (item.stockAllocation && item.stockAllocation.allocations) {
+            // Use the sequential allocation logic from frontend
+            if (!item.stockAllocation.canFulfill) {
+              const totalAvailable = item.stockAllocation.allocations.reduce((sum: number, alloc: any) => sum + alloc.availableQuantity, 0);
+              return next(new AppError(`Insufficient stock for ${item.description}. Available: ${totalAvailable}, Requested: ${item.quantity}`, 400));
+            }
+            
+            // Validate each allocation against actual stock
+            for (const allocation of item.stockAllocation.allocations) {
+              console.log('🔍 Validating allocation:', {
+                product: item.product,
+                location: allocation.location,
+                room: allocation.room,
+                rack: allocation.rack,
+                allocatedQuantity: allocation.allocatedQuantity
+              });
+              
+              // Find the ObjectIds for location, room, and rack
+              const location = await StockLocation.findOne({ name: allocation.location });
+              const room = await Room.findOne({ name: allocation.room, location: location?._id });
+              const rack = await Rack.findOne({ name: allocation.rack, room: room?._id });
+              
+              console.log('🔍 Found references:', {
+                location: location ? { id: location._id, name: location.name } : null,
+                room: room ? { id: room._id, name: room.name } : null,
+                rack: rack ? { id: rack._id, name: rack.name } : null
+              });
+              
+              if (!location || !room || !rack) {
+                return next(new AppError(`Stock not found for ${item.description} at ${allocation.location} - ${allocation.room} - ${allocation.rack}`, 400));
+              }
+              
+              // Find stock using ObjectIds
+              const stock = await Stock.findOne({ 
+                product: item.product,
+                location: location._id,
+                room: room._id,
+                rack: rack._id
+              });
+              
+              console.log('🔍 Found stock:', stock ? {
+                id: stock._id,
+                quantity: stock.quantity,
+                reservedQuantity: stock.reservedQuantity,
+                availableQuantity: stock.quantity - (stock.reservedQuantity || 0)
+              } : null);
+              
+              if (!stock) {
+                return next(new AppError(`Stock not found for ${item.description} at ${allocation.location} - ${allocation.room} - ${allocation.rack}`, 400));
+              }
+              
+              const availableQuantity = stock.quantity - (stock.reservedQuantity || 0);
+              if (availableQuantity < allocation.allocatedQuantity) {
+                return next(new AppError(`Insufficient stock for ${item.description} at ${allocation.location} - ${allocation.room} - ${allocation.rack}. Available: ${availableQuantity}, Requested: ${allocation.allocatedQuantity}`, 400));
+              }
+            }
+          } else {
+            // Fallback to simple stock check if no allocation data
+            const stocks = await Stock.find({ product: item.product });
+            if (!stocks || stocks.length === 0) {
+              return next(new AppError(`Product ${item.description} is not available in stock`, 400));
+            }
+            
+            const totalAvailable = stocks.reduce((sum, stock) => sum + (stock.quantity - (stock.reservedQuantity || 0)), 0);
+            if (totalAvailable < item.quantity) {
+              return next(new AppError(`Insufficient stock for ${item.description}. Available: ${totalAvailable}, Requested: ${item.quantity}`, 400));
+            }
           }
         }
       }
@@ -220,6 +283,7 @@ export const createDeliveryChallan = async (
     const deliveryChallan = new DeliveryChallan({
       challanNumber,
       customer,
+      location,
       spares: spares || [],
       services: services || [],
       dated: dated ? new Date(dated) : new Date(),
@@ -244,31 +308,80 @@ export const createDeliveryChallan = async (
     if (spares && spares.length > 0) {
       for (const item of spares) {
         if (item.product && item.quantity > 0) {
-          const stock = await Stock.findOne({ product: item.product });
-          if (stock) {
-            const originalQuantity = stock.quantity;
-            
-            // Reduce stock
-            stock.quantity -= item.quantity;
-            stock.availableQuantity = stock.quantity - stock.reservedQuantity;
-            stock.lastUpdated = new Date();
-            await stock.save();
+          if (item.stockAllocation && item.stockAllocation.allocations) {
+            // Use sequential allocation to update stock
+            for (const allocation of item.stockAllocation.allocations) {
+              // Find the ObjectIds for location, room, and rack
+              const location = await StockLocation.findOne({ name: allocation.location });
+              const room = await Room.findOne({ name: allocation.room, location: location?._id });
+              const rack = await Rack.findOne({ name: allocation.rack, room: room?._id });
+              
+              if (location && room && rack) {
+                // Find the specific stock record
+                const stock = await Stock.findOne({ 
+                  product: item.product,
+                  location: location._id,
+                  room: room._id,
+                  rack: rack._id
+                });
+                
+                if (stock) {
+                  const originalQuantity = stock.quantity;
+                  
+                  // Reduce stock by allocated quantity
+                  stock.quantity -= allocation.allocatedQuantity;
+                  stock.availableQuantity = stock.quantity - (stock.reservedQuantity || 0);
+                  stock.lastUpdated = new Date();
+                  await stock.save();
 
-            // Create stock ledger entry
-            await StockLedger.create({
-              product: item.product,
-              location: stock.location,
-              transactionType: 'outward',
-              quantity: -item.quantity,
-              reason: `Delivery Challan - ${challanNumber}`,
-              notes: `Delivery challan created for customer`,
-              performedBy: req.user!.id,
-              transactionDate: new Date(),
-              resultingQuantity: stock.quantity,
-              previousQuantity: originalQuantity,
-              referenceId: challanNumber,
-              referenceType: 'delivery_challan'
-            });
+                  // Create stock ledger entry
+                  await StockLedger.create({
+                    product: item.product,
+                    location: stock.location,
+                    room: stock.room,
+                    rack: stock.rack,
+                    transactionType: 'outward',
+                    quantity: -allocation.allocatedQuantity,
+                    reason: `Delivery Challan - ${challanNumber}`,
+                    notes: `Delivery challan created for customer - ${allocation.location} - ${allocation.room} - ${allocation.rack}`,
+                    performedBy: req.user!.id,
+                    transactionDate: new Date(),
+                    resultingQuantity: stock.quantity,
+                    previousQuantity: originalQuantity,
+                    referenceId: challanNumber,
+                    referenceType: 'delivery_challan'
+                  });
+                }
+              }
+            }
+          } else {
+            // Fallback to simple stock update if no allocation data
+            const stock = await Stock.findOne({ product: item.product });
+            if (stock) {
+              const originalQuantity = stock.quantity;
+              
+              // Reduce stock
+              stock.quantity -= item.quantity;
+              stock.availableQuantity = stock.quantity - stock.reservedQuantity;
+              stock.lastUpdated = new Date();
+              await stock.save();
+
+              // Create stock ledger entry
+              await StockLedger.create({
+                product: item.product,
+                location: stock.location,
+                transactionType: 'outward',
+                quantity: -item.quantity,
+                reason: `Delivery Challan - ${challanNumber}`,
+                notes: `Delivery challan created for customer`,
+                performedBy: req.user!.id,
+                transactionDate: new Date(),
+                resultingQuantity: stock.quantity,
+                previousQuantity: originalQuantity,
+                referenceId: challanNumber,
+                referenceType: 'delivery_challan'
+              });
+            }
           }
         }
       }
@@ -303,6 +416,7 @@ export const updateDeliveryChallan = async (
   try {
     const {
       customer,
+      location,
       spares,
       services,
       dated,
@@ -341,6 +455,7 @@ export const updateDeliveryChallan = async (
 
     // Update fields
     if (customer) deliveryChallan.customer = customer;
+    if (location) deliveryChallan.location = location;
     if (spares) deliveryChallan.spares = spares;
     if (services) deliveryChallan.services = services;
     if (dated) deliveryChallan.dated = new Date(dated);
@@ -576,31 +691,80 @@ export const updateDeliveryChallanStatus = async (
       // Reduce inventory when status changes to sent/delivered
       for (const item of deliveryChallan.spares) {
         if (item.product && item.quantity > 0) {
-          const stock = await Stock.findOne({ product: item.product });
-          if (stock) {
-            // Check if we already reduced inventory (e.g., from draft to sent)
-            if (['draft', 'cancelled'].includes(previousStatus)) {
-              const originalQuantity = stock.quantity;
-              stock.quantity -= item.quantity;
-              stock.availableQuantity = stock.quantity - stock.reservedQuantity;
-              stock.lastUpdated = new Date();
-              await stock.save();
+          // Check if we already reduced inventory (e.g., from draft to sent)
+          if (['draft', 'cancelled'].includes(previousStatus)) {
+            if (item.stockAllocation && item.stockAllocation.allocations) {
+              // Use sequential allocation to update stock
+              for (const allocation of item.stockAllocation.allocations) {
+                // Find the ObjectIds for location, room, and rack
+                const location = await StockLocation.findOne({ name: allocation.location });
+                const room = await Room.findOne({ name: allocation.room, location: location?._id });
+                const rack = await Rack.findOne({ name: allocation.rack, room: room?._id });
+                
+                if (location && room && rack) {
+                  // Find the specific stock record
+                  const stock = await Stock.findOne({ 
+                    product: item.product,
+                    location: location._id,
+                    room: room._id,
+                    rack: rack._id
+                  });
+                  
+                  if (stock) {
+                    const originalQuantity = stock.quantity;
+                    
+                    // Reduce stock by allocated quantity
+                    stock.quantity -= allocation.allocatedQuantity;
+                    stock.availableQuantity = stock.quantity - (stock.reservedQuantity || 0);
+                    stock.lastUpdated = new Date();
+                    await stock.save();
 
-              // Create stock ledger entry
-              await StockLedger.create({
-                product: item.product,
-                location: stock.location,
-                transactionType: 'outward',
-                quantity: -item.quantity,
-                reason: `Delivery Challan Status Change - ${deliveryChallan.challanNumber}`,
-                notes: `Status changed to ${status}`,
-                performedBy: req.user!.id,
-                transactionDate: new Date(),
-                resultingQuantity: stock.quantity,
-                previousQuantity: originalQuantity,
-                referenceId: deliveryChallan.challanNumber,
-                referenceType: 'delivery_challan'
-              });
+                    // Create stock ledger entry
+                    await StockLedger.create({
+                      product: item.product,
+                      location: stock.location,
+                      room: stock.room,
+                      rack: stock.rack,
+                      transactionType: 'outward',
+                      quantity: -allocation.allocatedQuantity,
+                      reason: `Delivery Challan Status Change - ${deliveryChallan.challanNumber}`,
+                      notes: `Status changed to ${status} - ${allocation.location} - ${allocation.room} - ${allocation.rack}`,
+                      performedBy: req.user!.id,
+                      transactionDate: new Date(),
+                      resultingQuantity: stock.quantity,
+                      previousQuantity: originalQuantity,
+                      referenceId: deliveryChallan.challanNumber,
+                      referenceType: 'delivery_challan'
+                    });
+                  }
+                }
+              }
+            } else {
+              // Fallback to simple stock update if no allocation data
+              const stock = await Stock.findOne({ product: item.product });
+              if (stock) {
+                const originalQuantity = stock.quantity;
+                stock.quantity -= item.quantity;
+                stock.availableQuantity = stock.quantity - stock.reservedQuantity;
+                stock.lastUpdated = new Date();
+                await stock.save();
+
+                // Create stock ledger entry
+                await StockLedger.create({
+                  product: item.product,
+                  location: stock.location,
+                  transactionType: 'outward',
+                  quantity: -item.quantity,
+                  reason: `Delivery Challan Status Change - ${deliveryChallan.challanNumber}`,
+                  notes: `Status changed to ${status}`,
+                  performedBy: req.user!.id,
+                  transactionDate: new Date(),
+                  resultingQuantity: stock.quantity,
+                  previousQuantity: originalQuantity,
+                  referenceId: deliveryChallan.challanNumber,
+                  referenceType: 'delivery_challan'
+                });
+              }
             }
           }
         }
@@ -756,6 +920,7 @@ export const exportDeliveryChallans = async (
     const exportData = deliveryChallans.map((challan, index) => ({
       'S.No': index + 1,
       'Challan Number': challan.challanNumber || '',
+      'Invoice Number': '', // Placeholder for invoice number - to be populated when relationship is established
       'Date': challan.dated ? new Date(challan.dated).toLocaleDateString('en-GB') : '',
       'Customer Name': (challan.customer as any)?.name || '',
       'Customer Email': (challan.customer as any)?.email || '',

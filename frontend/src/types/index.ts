@@ -42,6 +42,11 @@ export interface Address {
   pincode?: string;
   isPrimary?: boolean;
   gstNumber?: string; // Add GST number per address, optional
+  email?: string;
+  phone?: string;
+  contactPersonName?: string;
+  designation?: string;
+  registrationStatus?: string;
 }
 
 export interface Customer {
@@ -127,6 +132,21 @@ export interface Product {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  partNo?: string;
+  hsnNumber?: string;
+  uom?: string;
+  availableQuantity?: number;
+  aggregatedStock?: {
+    totalAvailable: number;
+    totalQuantity: number;
+    totalReserved: number;
+    stockDetails: Array<{
+      location: string;
+      room: string;
+      rack: string;
+      available: number;
+    }>;
+  };
 }
 
 export interface DGProduct {

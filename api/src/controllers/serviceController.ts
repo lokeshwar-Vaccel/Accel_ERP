@@ -1097,14 +1097,26 @@ export const updateServiceTicketStatus = async (
         // Send feedback email asynchronously (don't wait for it)
         // Get ticket details for email
         const populatedTicket = await ServiceTicket.findById(ticket._id)
-          .populate('customer', 'name email phone')
+          .populate('customer', 'name email phone addresses')
           .populate('products', 'name category')
           .populate('assignedTo', 'firstName lastName');
 
         if (populatedTicket && populatedTicket.customer) {
           const customer = populatedTicket.customer as any;
           
-          if (customer.email) {
+          // Get primary address email if available
+          const getPrimaryAddressEmail = (customer: any): string | null => {
+            if (!customer?.addresses || !Array.isArray(customer.addresses)) {
+              return customer?.email || null;
+            }
+            
+            const primaryAddress = customer.addresses.find((addr: any) => addr.isPrimary);
+            return primaryAddress?.email || customer?.email || null;
+          };
+          
+          const primaryEmail = getPrimaryAddressEmail(customer);
+          
+          if (primaryEmail) {
             // Create feedback URL
             const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
             const token = crypto.randomBytes(32).toString('hex');
@@ -1117,7 +1129,7 @@ export const updateServiceTicketStatus = async (
             
             const feedback = new CustomerFeedback({
               ticketId: ticket._id,
-              customerEmail: customer.email,
+              customerEmail: primaryEmail,
               customerName: customer.name || 'Customer',
               rating: 0,
               serviceQuality: 'good',
@@ -1133,7 +1145,7 @@ export const updateServiceTicketStatus = async (
             
             // Send email using nodemailer utility
             sendFeedbackEmailUtil(
-              customer.email,
+              primaryEmail,
               customer.name || 'Customer',
               populatedTicket.ServiceRequestNumber || '',
               feedbackUrl,
@@ -1142,7 +1154,7 @@ export const updateServiceTicketStatus = async (
               console.error('Failed to send feedback email:', error);
             });
           } else {
-            console.error('Customer email not found for ticket:', ticket._id);
+            console.error('Customer primary address email not found for ticket:', ticket._id);
           }
         } else {
           console.error('Customer not found for ticket:', ticket._id);

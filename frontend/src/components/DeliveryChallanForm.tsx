@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Package, Truck, User, MapPin, Calendar, FileText, Save, Printer, Send, ArrowLeft, Trash2, Download } from 'lucide-react';
+import { Package, Truck, User, MapPin, Calendar, FileText, Save, Printer, Send, ArrowLeft, Trash2, Download, ChevronDown, X } from 'lucide-react';
 import PageHeader from './ui/PageHeader';
 import { Button } from './ui/Botton';
 import apiClient from '../utils/api';
@@ -32,6 +32,7 @@ interface DeliveryChallan {
   termsOfDelivery: string;
   consignee: string;
   customer: string;
+  location: string; // From Location field
   spares: DeliveryChallanItem[];
   services: DeliveryChallanItem[];
   status: 'draft' | 'sent' | 'delivered' | 'cancelled';
@@ -106,6 +107,7 @@ const DeliveryChallanForm: React.FC = () => {
     termsOfDelivery: '',
     consignee: '',
     customer: '',
+    location: '', // From Location field
     spares: [],
     services: [], // Start with no services since they're optional
     status: 'draft',
@@ -122,6 +124,41 @@ const DeliveryChallanForm: React.FC = () => {
   const [productAvailability, setProductAvailability] = useState<Record<string, number>>({});
   const requestedAvailabilityRef = useRef<Set<string>>(new Set());
 
+  // Product stock cache for location-based filtering (similar to Invoice Form)
+  const [productStockCache, setProductStockCache] = useState<Record<string, {
+    available: number;
+    isValid: boolean;
+    message: string;
+    totalQuantity?: number;
+    reservedQuantity?: number;
+    stockDetails?: Array<{
+      location: string;
+      room: string;
+      rack: string;
+      available: number;
+    }>;
+  }>>({});
+
+  // Stock loading state
+  const [stockLoading, setStockLoading] = useState(false);
+  
+  // Stock cache version to force re-rendering when cache changes
+  const [stockCacheVersion, setStockCacheVersion] = useState(0);
+
+  // Stock allocation tracking for sequential consumption
+  const [stockAllocation, setStockAllocation] = useState<Record<string, {
+    productId: string;
+    quantity: number;
+    allocations: Array<{
+      location: string;
+      room: string;
+      rack: string;
+      allocatedQuantity: number;
+      availableQuantity: number;
+    }>;
+    canFulfill: boolean;
+  }>>({});
+
   const getAvailabilityClass = (productId: string) => {
     const available = productAvailability[productId];
     if (available === undefined) return 'text-gray-400';
@@ -132,10 +169,13 @@ const DeliveryChallanForm: React.FC = () => {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [showAddressDropdown, setShowAddressDropdown] = useState(false);
   const [showProductDropdowns, setShowProductDropdowns] = useState<Record<string, boolean>>({});
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [selectedAddressId, setSelectedAddressId] = useState<string>('');
   const [selectedShipToAddressId, setSelectedShipToAddressId] = useState<string>('');
   const [productSearchTerms, setProductSearchTerms] = useState<Record<string, string>>({});
+  const [locationSearchTerm, setLocationSearchTerm] = useState('');
+  const [highlightedLocationIndex, setHighlightedLocationIndex] = useState(-1);
 
   // Refs for click outside handling
   const customerDropdownRef = useRef<HTMLDivElement>(null);
@@ -158,6 +198,13 @@ const DeliveryChallanForm: React.FC = () => {
       fetchDeliveryChallan();
     }
   }, [isEditMode, id]);
+
+  // Monitor location changes for debugging
+  useEffect(() => {
+    console.log('🔍 Location changed:', formData.location);
+    console.log('🔍 Location type:', typeof formData.location);
+    console.log('🔍 Location truthy:', !!formData.location);
+  }, [formData.location]);
 
   // Populate customer details when customers are loaded (for edit mode)
   useEffect(() => {
@@ -259,6 +306,16 @@ const DeliveryChallanForm: React.FC = () => {
     console.log('Errors state changed:', errors);
   }, [errors]);
 
+  // Load stock data when location is available and products are loaded
+  useEffect(() => {
+    if (formData.location && products.length > 0 && !loading && Object.keys(productStockCache).length === 0) {
+      console.log('DeliveryChallanForm: Auto-loading stock for location:', formData.location);
+      setTimeout(() => {
+        loadAllStockForLocation(formData.location);
+      }, 300);
+    }
+  }, [formData.location, products, loading, productStockCache]);
+
   // Click outside handlers
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -266,8 +323,14 @@ const DeliveryChallanForm: React.FC = () => {
         setShowCustomerDropdown(false);
       }
       
-      // Close product dropdowns when clicking outside
+      // Close location dropdown when clicking outside
       const target = event.target as Element;
+      if (!target.closest('.dropdown-container') && !target.closest('input[data-field="location"]')) {
+        setShowLocationDropdown(false);
+        setHighlightedLocationIndex(-1);
+      }
+      
+      // Close product dropdowns when clicking outside
       if (!target.closest('.product-dropdown') && !target.closest('input[placeholder*="search"]')) {
         setShowProductDropdowns({});
       }
@@ -276,11 +339,15 @@ const DeliveryChallanForm: React.FC = () => {
     const handleScroll = () => {
       // Close dropdowns when scrolling to prevent positioning issues
       setShowProductDropdowns({});
+      setShowLocationDropdown(false);
+      setHighlightedLocationIndex(-1);
     };
 
     const handleResize = () => {
       // Close dropdowns when resizing to prevent positioning issues
       setShowProductDropdowns({});
+      setShowLocationDropdown(false);
+      setHighlightedLocationIndex(-1);
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -376,10 +443,34 @@ const DeliveryChallanForm: React.FC = () => {
 
   const fetchLocations = async () => {
     try {
-      // Mock data for now - replace with actual API call
-      setLocations([
-        { _id: '1', name: 'Main Warehouse', address: 'Chennai', type: 'Warehouse' }
-      ]);
+      const response = await apiClient.stock.getLocations();
+      let locationsData: any[] = [];
+
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          locationsData = response.data;
+        } else if ((response.data as any).locations && Array.isArray((response.data as any).locations)) {
+          locationsData = (response.data as any).locations;
+        }
+      }
+
+      setLocations(locationsData);
+      console.log('✅ Loaded locations:', locationsData.length);
+
+      // Set default location if not in edit mode
+      if (!isEditMode && locationsData.length > 0) {
+        const mainOffice = locationsData.find(loc => loc.name === "Main Office");
+        if (mainOffice) {
+          setFormData(prev => ({ ...prev, location: mainOffice._id }));
+          setLocationSearchTerm(mainOffice.name);
+          
+          // Auto-load stock for the default location after a short delay
+          setTimeout(() => {
+            console.log('DeliveryChallanForm: Auto-loading stock for default location:', mainOffice._id);
+            loadAllStockForLocation(mainOffice._id);
+          }, 500);
+        }
+      }
     } catch (error) {
       console.error('Error fetching locations:', error);
     }
@@ -415,6 +506,7 @@ const DeliveryChallanForm: React.FC = () => {
           termsOfDelivery: challan.termsOfDelivery || '',
           consignee: challan.consignee || '',
           customer: challan.customer?._id || challan.customer || '',
+          location: challan.location?._id || challan.location || '',
           spares: challan.spares || [],
           services: challan.services || [],
           status: challan.status || 'draft',
@@ -478,6 +570,37 @@ const DeliveryChallanForm: React.FC = () => {
                   setSelectedShipToAddressId('');
                 }
               }
+            }
+          }
+        }
+
+        // Set location search term and load stock if location is available
+        if (challan.location) {
+          const locationData = challan.location;
+          console.log('Processing location data:', locationData);
+          
+          if (typeof locationData === 'object' && locationData.name) {
+            // If location is populated object
+            console.log('Location is populated object, setting search term:', locationData.name);
+            setLocationSearchTerm(locationData.name);
+            
+            // Load stock for this location
+            setTimeout(() => {
+              loadAllStockForLocation(locationData._id);
+            }, 500);
+          } else if (typeof locationData === 'string') {
+            // If location is just an ID, find the location and set details
+            console.log('Location is string ID, finding location:', locationData);
+            const foundLocation = locations.find(loc => loc._id === locationData);
+            console.log('Found location by ID:', foundLocation);
+            
+            if (foundLocation) {
+              setLocationSearchTerm(foundLocation.name);
+              
+              // Load stock for this location
+              setTimeout(() => {
+                loadAllStockForLocation(foundLocation._id);
+              }, 500);
             }
           }
         }
@@ -582,10 +705,13 @@ const DeliveryChallanForm: React.FC = () => {
   };
 
   const getFilteredCustomers = () => {
-    return customers.filter(customer =>
-      customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-      customer.email.toLowerCase().includes(customerSearchTerm.toLowerCase())
-    );
+    const term = (customerSearchTerm || '').toLowerCase();
+    return customers.filter((customer) => {
+      if (!customer) return false;
+      const name = (customer.name || '').toLowerCase();
+      const email = (customer.email || '').toLowerCase();
+      return name.includes(term) || email.includes(term);
+    });
   };
 
   const getSelectedCustomer = () => {
@@ -614,6 +740,118 @@ const DeliveryChallanForm: React.FC = () => {
     const address = customer.addresses?.find((addr: any) => addr.id === parseInt(selectedShipToAddressId));
     console.log('getSelectedShipToAddress found:', address);
     return address;
+  };
+
+  // Location helper functions
+  const getLocationLabel = (value: string) => {
+    const location = locations.find(loc => loc._id === value);
+    return location ? location.name : value;
+  };
+
+  const getFilteredLocations = () => {
+    return locations.filter(location =>
+      location.name.toLowerCase().includes(locationSearchTerm.toLowerCase()) ||
+      location.address.toLowerCase().includes(locationSearchTerm.toLowerCase())
+    );
+  };
+
+  // Location keyboard navigation handler (similar to Invoice Form)
+  const handleLocationKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setShowLocationDropdown(true);
+      setHighlightedLocationIndex(prev => 
+        prev < getFilteredLocations().length - 1 ? prev + 1 : 0
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedLocationIndex(prev => 
+        prev > 0 ? prev - 1 : getFilteredLocations().length - 1
+      );
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (showLocationDropdown && highlightedLocationIndex >= 0 && getFilteredLocations()[highlightedLocationIndex]) {
+        const selectedLocation = getFilteredLocations()[highlightedLocationIndex];
+        console.log(`🔄 Location changed from ${formData.location} to ${selectedLocation._id} (${selectedLocation.name})`);
+        setFormData({ ...formData, location: selectedLocation._id });
+        setShowLocationDropdown(false);
+        setHighlightedLocationIndex(-1);
+        setLocationSearchTerm('');
+        // Clear stock cache when location changes
+        setProductStockCache({});
+        setStockValidation({});
+
+        // Refresh products for the new location
+        setTimeout(() => {
+          loadAllStockForLocation(selectedLocation._id);
+        }, 100);
+      }
+    } else if (e.key === 'Escape') {
+      setShowLocationDropdown(false);
+      setHighlightedLocationIndex(-1);
+    }
+  };
+
+  // Calculate sequential stock allocation for a product
+  const calculateSequentialStockAllocation = (productId: string, requestedQuantity: number): {
+    productId: string;
+    quantity: number;
+    allocations: Array<{
+      location: string;
+      room: string;
+      rack: string;
+      allocatedQuantity: number;
+      availableQuantity: number;
+    }>;
+    canFulfill: boolean;
+  } | null => {
+    const stockInfo = productStockCache[productId];
+    if (!stockInfo || !stockInfo.stockDetails || stockInfo.stockDetails.length === 0) {
+      return null;
+    }
+
+    // Sort stock details by location, room, rack for consistent ordering
+    const sortedStockDetails = [...stockInfo.stockDetails].sort((a, b) => {
+      if (a.location !== b.location) return a.location.localeCompare(b.location);
+      if (a.room !== b.room) return a.room.localeCompare(b.room);
+      return a.rack.localeCompare(b.rack);
+    });
+
+    const allocations: Array<{
+      location: string;
+      room: string;
+      rack: string;
+      allocatedQuantity: number;
+      availableQuantity: number;
+    }> = [];
+
+    let remainingQuantity = requestedQuantity;
+
+    for (const stockDetail of sortedStockDetails) {
+      if (remainingQuantity <= 0) break;
+
+      const availableInThisLocation = stockDetail.available;
+      const quantityToAllocate = Math.min(remainingQuantity, availableInThisLocation);
+
+      if (quantityToAllocate > 0) {
+        allocations.push({
+          location: stockDetail.location,
+          room: stockDetail.room,
+          rack: stockDetail.rack,
+          allocatedQuantity: quantityToAllocate,
+          availableQuantity: availableInThisLocation
+        });
+
+        remainingQuantity -= quantityToAllocate;
+      }
+    }
+
+    return {
+      productId,
+      quantity: requestedQuantity,
+      allocations,
+      canFulfill: remainingQuantity === 0
+    };
   };
 
   // Product selection for spares - Auto-fills description, part number, and HSN/SAC
@@ -647,15 +885,171 @@ const DeliveryChallanForm: React.FC = () => {
     }
   };
 
-  // Get filtered products for dropdown display
+  // Load ALL stock data for a location - FASTEST approach (similar to Invoice Form)
+  const loadAllStockForLocation = async (locationId?: string) => {
+    const currentLocation = locationId || formData.location;
+    if (!currentLocation) return;
+
+    setStockLoading(true);
+    try {
+      // Get ALL stock data for this location in ONE API call - no limits
+      const response = await apiClient.stock.getStock({
+        location: currentLocation,
+        limit: 10000 // Get all stock items for this location
+      });
+
+      // Parse the stock data correctly from API response
+      let stockData: any[] = [];
+      if (response.data?.stockLevels && Array.isArray(response.data.stockLevels)) {
+        stockData = response.data.stockLevels;
+      }
+
+      console.log('✅ Loaded stock data for location:', stockData.length, 'items');
+
+      // Create complete stock cache for ALL products at this location
+      // Aggregate stock across all rooms and racks within the location
+      const newStockCache: any = {};
+      const stockAggregation = new Map(); // Map to aggregate stock by product ID
+      
+      stockData.forEach(stock => {
+        const productId = stock.product?._id || stock.product;
+        if (productId) {
+          // Calculate available quantity correctly
+          const totalQuantity = Number(stock.quantity) || 0;
+          const reservedQuantity = Number(stock.reservedQuantity) || 0;
+          const available = Math.max(0, totalQuantity - reservedQuantity);
+
+          if (!stockAggregation.has(productId)) {
+            stockAggregation.set(productId, {
+              totalAvailable: 0,
+              totalQuantity: 0,
+              totalReserved: 0,
+              stockDetails: []
+            });
+          }
+          
+          const aggregatedStock = stockAggregation.get(productId);
+          
+          aggregatedStock.totalAvailable += available;
+          aggregatedStock.totalQuantity += totalQuantity;
+          aggregatedStock.totalReserved += reservedQuantity;
+          
+          if (available > 0) {
+            aggregatedStock.stockDetails.push({
+              location: stock.location?.name || 'Unknown Location',
+              room: stock.room?.name || '',
+              rack: stock.rack?.name || '',
+              available: available
+            });
+          }
+        }
+      });
+      
+      stockAggregation.forEach((aggregatedStock, productId) => {
+        newStockCache[productId] = {
+          available: aggregatedStock.totalAvailable,
+          isValid: aggregatedStock.totalAvailable > 0,
+          message: aggregatedStock.totalAvailable === 0 ? 'Out of stock' : `${aggregatedStock.totalAvailable} available`,
+          totalQuantity: aggregatedStock.totalQuantity,
+          reservedQuantity: aggregatedStock.totalReserved,
+          stockDetails: aggregatedStock.stockDetails
+        };
+      });
+
+      // Set stock info for products that don't have stock at this location
+      products.forEach(product => {
+        if (!newStockCache[product._id]) {
+          newStockCache[product._id] = {
+            available: 0,
+            isValid: false,
+            message: 'Out of stock',
+            totalQuantity: 0,
+            reservedQuantity: 0
+          };
+        }
+      });
+
+      // Update cache with complete stock data
+      setProductStockCache(newStockCache);
+      setStockCacheVersion(prev => prev + 1); // Force re-render of product dropdowns
+      console.log('✅ Stock cache updated for', Object.keys(newStockCache).length, 'products');
+
+    } catch (error) {
+      console.error('❌ Error loading stock for location:', error);
+      const errorStockCache: any = {};
+      products.forEach(product => {
+        errorStockCache[product._id] = {
+          available: 0,
+          isValid: false,
+          message: 'Unable to check stock',
+          totalQuantity: 0,
+          reservedQuantity: 0
+        };
+      });
+      setProductStockCache(errorStockCache);
+    } finally {
+      setStockLoading(false);
+    }
+  };
+
+  // Get filtered products for dropdown display with location-based filtering
   const getFilteredProducts = (searchTerm: string = '') => {
-    if (!searchTerm) return products;
-    return products.filter(product =>
-      product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.partNo?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const term = searchTerm.toLowerCase().trim();
+
+    const uniqueProducts = new Map();
+    products.forEach(product => {
+      if (!uniqueProducts.has(product._id)) {
+        uniqueProducts.set(product._id, product);
+      }
+    });
+
+    let filteredProducts = Array.from(uniqueProducts.values());
+
+    // If location is selected, filter by stock availability
+    if (formData.location && Object.keys(productStockCache).length > 0) {
+      filteredProducts = filteredProducts.filter(product => {
+        const stockInfo = productStockCache[product._id];
+        // Only show products that have stock available at the selected location
+        return stockInfo && stockInfo.available > 0;
+      });
+    }
+
+    // If no search term, return all filtered products
+    if (!term) return filteredProducts;
+
+    // Apply search term filtering
+    filteredProducts = filteredProducts.filter(product => {
+      const name = product.name?.toLowerCase() || '';
+      const partNo = product.partNo?.toLowerCase() || '';
+      const category = product.category?.toLowerCase() || '';
+      const brand = product.brand?.toLowerCase() || '';
+
+      return name.includes(term) ||
+        partNo.includes(term) ||
+        category.includes(term) ||
+        brand.includes(term) ||
+        name.startsWith(term) ||
+        partNo.startsWith(term);
+    });
+
+    return filteredProducts.sort((a, b) => {
+      const aName = a.name?.toLowerCase() || '';
+      const aPartNo = a.partNo?.toLowerCase() || '';
+      const bName = b.name?.toLowerCase() || '';
+      const bPartNo = b.partNo?.toLowerCase() || '';
+
+      if (aName === term && bName !== term) return -1;
+      if (bName === term && aName !== term) return 1;
+      if (aPartNo === term && bPartNo !== term) return -1;
+      if (bPartNo === term && aPartNo !== term) return 1;
+
+      if (aName.startsWith(term) && !bName.startsWith(term)) return -1;
+      if (bName.startsWith(term) && !aName.startsWith(term)) return 1;
+      if (aPartNo.startsWith(term) && !bPartNo.startsWith(term)) return -1;
+      if (bPartNo.startsWith(term) && !aPartNo.startsWith(term)) return 1;
+
+      return aName.localeCompare(bName);
+    });
   };
 
   const fetchAvailabilityForProduct = async (productId: string) => {
@@ -792,6 +1186,7 @@ const DeliveryChallanForm: React.FC = () => {
     if (!selectedShipToAddressId && !(formData.consignee && formData.consignee.trim() !== '')) newErrors.shipToAddress = 'Ship-to address or saved consignee is required';
     if (!formData.department) newErrors.department = 'Department is required';
     if (!formData.destination) newErrors.destination = 'Destination is required';
+    if (!formData.location) newErrors.location = 'From Location is required';
 
     // Validate spares - once a row is added, all mandatory fields must be filled
     formData.spares.forEach((item, index) => {
@@ -868,12 +1263,22 @@ const DeliveryChallanForm: React.FC = () => {
     e.preventDefault();
 
     console.log('Form submitted, validating...');
+    console.log('Current formData.location:', formData.location);
+    console.log('Current formData:', formData);
+    
     if (!validateForm()) {
       console.log('Validation failed, errors:', errors);
       toast.error('Please fix the errors in the form');
       return;
     }
     console.log('Validation passed, submitting...');
+
+    // Double-check that location is set before submission
+    if (!formData.location) {
+      console.error('Location is empty but validation passed - this should not happen');
+      toast.error('Please select a From Location before submitting');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -888,6 +1293,23 @@ const DeliveryChallanForm: React.FC = () => {
         return item.description || item.partNo || item.hsnSac || item.quantity > 0;
       });
       
+      // Prepare stock allocation data for spares
+      const sparesWithAllocation = sanitizedSpares.map((spare, index) => {
+        const allocationKey = `${spare.product}-${index}`;
+        const allocation = stockAllocation[allocationKey];
+        
+        const spareData: any = { ...spare };
+        
+        if (allocation) {
+          spareData.stockAllocation = {
+            allocations: allocation.allocations,
+            canFulfill: allocation.canFulfill
+          };
+        }
+        
+        return spareData;
+      });
+
       const challanData = {
         // Only include challanNumber for edit mode, let backend generate for new challans
         ...(isEditMode && { challanNumber: formData.challanNumber }),
@@ -904,13 +1326,17 @@ const DeliveryChallanForm: React.FC = () => {
         termsOfDelivery: formData.termsOfDelivery || '',
         consignee: selectedShipToAddressId ? (getSelectedShipToAddress()?.address || '') : (formData.consignee || ''),
         customer: formData.customer,
-        spares: sanitizedSpares,
+        location: formData.location, // Always include location (should be validated above)
+        spares: sparesWithAllocation,
         services: sanitizedServices,
         status: formData.status,
         notes: formData.notes || ''
       };
 
       console.log('Submitting challan data:', challanData);
+      console.log('Location field:', formData.location);
+      console.log('Stock allocation data:', stockAllocation);
+      console.log('Spares with allocation:', sparesWithAllocation);
       console.log('Selected ship-to address:', getSelectedShipToAddress());
       console.log('Selected address ID:', selectedShipToAddressId);
 
@@ -1287,6 +1713,106 @@ const DeliveryChallanForm: React.FC = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    From Location *
+                  </label>
+                  <div className="relative dropdown-container">
+                    <input
+                      type="text"
+                      value={locationSearchTerm || (formData.location ? getLocationLabel(formData.location) : '')}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setLocationSearchTerm(value);
+                        
+                        // If input is cleared, clear the location selection
+                        if (!value) {
+                          setFormData(prev => ({ ...prev, location: '' }));
+                        }
+                        
+                        if (!showLocationDropdown) setShowLocationDropdown(true);
+                        setHighlightedLocationIndex(-1);
+                      }}
+                      onFocus={() => {
+                        setShowLocationDropdown(true);
+                        setHighlightedLocationIndex(-1);
+                      }}
+                      autoComplete="off"
+                      onKeyDown={handleLocationKeyDown}
+                      placeholder="Search location or press ↓ to open"
+                      data-field="location"
+                      className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg transition-colors focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                      {formData.location && !locationSearchTerm && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData(prev => ({ ...prev, location: '' }));
+                            setLocationSearchTerm('');
+                          }}
+                          className="text-gray-400 hover:text-gray-600 mr-2"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} />
+                    </div>
+                    {showLocationDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                        <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                          <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                          <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                          <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            setFormData({ ...formData, location: '' });
+                            setShowLocationDropdown(false);
+                            setLocationSearchTerm('');
+                          }}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.location ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                        >
+                          Select location
+                        </button>
+
+                        {getFilteredLocations().map((location, index) => (
+                          <button
+                            key={location._id}
+                            data-location-index={index}
+                            onClick={() => {
+                              console.log(`🔄 Location changed from ${formData.location} to ${location._id} (${location.name})`);
+                              setFormData({ ...formData, location: location._id });
+                              setShowLocationDropdown(false);
+                              setLocationSearchTerm('');
+                              setHighlightedLocationIndex(-1);
+                              // Clear stock cache when location changes
+                              setProductStockCache({});
+                              setStockValidation({});
+
+                              // Refresh products for the new location
+                              setTimeout(() => {
+                                loadAllStockForLocation(location._id);
+                              }, 100);
+                            }}
+                            className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.location === location._id ? 'bg-blue-100 text-blue-800' :
+                              highlightedLocationIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                'text-gray-700 hover:bg-gray-50'
+                              }`}
+                          >
+                            <div>
+                              <div className="font-medium">{location.name}</div>
+                              <div className="text-xs text-gray-500 capitalize">{location.type.replace('_', ' ')}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {errors.location && <p className="text-red-500 text-sm mt-1">{errors.location}</p>}
+                </div>
               </div>
             </div>
           </div>
@@ -1506,7 +2032,100 @@ const DeliveryChallanForm: React.FC = () => {
                                       </div>
                                       <div className="text-xs text-gray-600 space-y-0.5">
                                         <div><span className="font-medium">Product Name:</span> {product?.name || 'N/A'}</div>
-                                        <div className={getAvailabilityClass(product._id)}><span className="font-medium">Available:</span> {productAvailability[product._id] !== undefined ? productAvailability[product._id] : '—'}</div>
+                                        {(() => {
+                                          if (formData.location && productStockCache[product._id]) {
+                                            const stockInfo = productStockCache[product._id];
+                                            const available = stockInfo.available;
+                                            
+                                            if (stockInfo.stockDetails && stockInfo.stockDetails.length > 0) {
+                                              return (
+                                                <div>
+                                                  <div className="flex items-center mb-1">
+                                                    <span className="font-medium">Location Stock:</span>
+                                                    <span className={`ml-2 px-2 py-0.5 rounded-md text-xs font-bold ${available === 0
+                                                        ? 'bg-red-100 text-red-800 border border-red-300'
+                                                        : available <= 5
+                                                            ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                                                            : 'bg-green-100 text-green-800 border border-green-300'
+                                                        }`}>
+                                                      {available === 0 ? 'OUT OF STOCK' : `${available} available`}
+                                                    </span>
+                                      </div>
+                                                  <div className="text-xs text-gray-500 space-y-0.5">
+                                                    {stockInfo.stockDetails.map((detail: any, detailIndex: number) => (
+                                                      <div key={detailIndex} className="flex items-center">
+                                                        <span className="font-medium">•</span>
+                                                        <span className="ml-1">
+                                                          {detail.location}
+                                                          {detail.room && ` – ${detail.room}`}
+                                                          {detail.rack && ` – ${detail.rack}`}
+                                                          <span className="font-medium text-gray-700"> – {detail.available} available</span>
+                                                        </span>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                </div>
+                                              );
+                                            }
+                                            
+                                            return (
+                                              <div className="flex items-center">
+                                                <span className="font-medium">Stock:</span>
+                                                <span className={`ml-2 px-2 py-0.5 rounded-md text-xs font-bold ${available === 0
+                                                    ? 'bg-red-100 text-red-800 border border-red-300'
+                                                    : available <= 5
+                                                        ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                                                        : 'bg-green-100 text-green-800 border border-green-300'
+                                                    }`}>
+                                                  {available === 0 ? 'OUT OF STOCK' : `${available} available`}
+                                                </span>
+                                              </div>
+                                            );
+                                          }
+                                          
+                                          const stockInfo = product.aggregatedStock;
+                                          if (stockInfo && stockInfo.stockDetails.length > 0) {
+                                            const totalAvailable = stockInfo.totalAvailable;
+                                            return (
+                                              <div>
+                                                <div className="flex items-center mb-1">
+                                                  <span className="font-medium">
+                                                    {formData.location ? 'Location Stock:' : 'Total Stock:'}
+                                                  </span>
+                                                  <span className={`ml-2 px-2 py-0.5 rounded-md text-xs font-bold ${totalAvailable === 0
+                                                      ? 'bg-red-100 text-red-800 border border-red-300'
+                                                      : totalAvailable <= 5
+                                                          ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                                                          : 'bg-green-100 text-green-800 border border-green-300'
+                                                      }`}>
+                                                    {totalAvailable === 0 ? 'OUT OF STOCK' : `${totalAvailable} available`}
+                                                  </span>
+                                                </div>
+                                                <div className="text-xs text-gray-500 space-y-0.5">
+                                                  {stockInfo.stockDetails.map((detail: any, detailIndex: number) => (
+                                                    <div key={detailIndex} className="flex items-center">
+                                                      <span className="font-medium">•</span>
+                                                      <span className="ml-1">
+                                                        {detail.location}
+                                                        {detail.room && ` – ${detail.room}`}
+                                                        {detail.rack && ` – ${detail.rack}`}
+                                                        <span className="font-medium text-gray-700"> – {detail.available} available</span>
+                                                      </span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            );
+                                          }
+                                          return (
+                                            <div className="flex items-center">
+                                              <span className="font-medium">Stock:</span>
+                                              <span className="ml-2 px-2 py-0.5 rounded-md text-xs font-bold bg-red-100 text-red-600 border border-red-300">
+                                                OUT OF STOCK
+                                              </span>
+                                            </div>
+                                          );
+                                        })()}
                                       </div>
                                     </div>
                                   </div>
@@ -1521,6 +2140,64 @@ const DeliveryChallanForm: React.FC = () => {
                       )}
                       {errors[`spare-${index}-product`] && (
                         <p className="text-red-500 text-xs mt-1">{errors[`spare-${index}-product`]}</p>
+                      )}
+                      {/* Stock Allocation Details */}
+                      {item.product && item.quantity > 0 && stockAllocation[`${item.product}-${index}`] && (
+                        <div className="mt-2 rounded-md border border-blue-200 bg-blue-50">
+                          <div className="flex items-center justify-between px-3 py-2 border-b border-blue-200">
+                            <div className="text-xs font-semibold text-blue-800">
+                              Stock Allocation for <span className="font-bold">{item.quantity}</span> units
+                            </div>
+                            <div className="text-[10px] text-blue-700">
+                              {stockAllocation[`${item.product}-${index}`].canFulfill ? (
+                                <span className="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 font-medium text-blue-700">Fully allocated</span>
+                              ) : (
+                                <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 font-medium text-red-700">Insufficient stock</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Header */}
+                          <div className="grid grid-cols-5 gap-2 px-3 py-2 text-[10px] font-medium text-blue-900">
+                            <div>Location</div>
+                            <div>Room</div>
+                            <div>Rack</div>
+                            <div className="text-right">Allocated</div>
+                            <div className="text-right">Available</div>
+                          </div>
+
+                          {/* Rows */}
+                          <div className="px-3 pb-2">
+                            <div className="space-y-1">
+                              {stockAllocation[`${item.product}-${index}`].allocations.map((alloc, allocIndex) => (
+                                <div
+                                  key={allocIndex}
+                                  className="grid grid-cols-5 gap-2 items-center rounded bg-white px-2 py-1 text-[11px] text-blue-800 shadow-sm"
+                                >
+                                  <div className="truncate" title={alloc.location}>{alloc.location}</div>
+                                  <div className="truncate" title={alloc.room}>{alloc.room}</div>
+                                  <div className="truncate" title={alloc.rack}>{alloc.rack}</div>
+                                  <div className="text-right">
+                                    <span className="inline-flex items-center rounded bg-blue-100 px-2 py-0.5 font-semibold text-blue-700">
+                                      {alloc.allocatedQuantity}
+                                    </span>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 font-medium text-slate-700">
+                                      {alloc.availableQuantity}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {!stockAllocation[`${item.product}-${index}`].canFulfill && (
+                            <div className="px-3 pb-2 text-[11px] font-medium text-red-600">
+                              ⚠️ Insufficient stock to fulfill complete order
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
 
@@ -1557,10 +2234,42 @@ const DeliveryChallanForm: React.FC = () => {
                           const value = e.target.value;
                           if (value === '') {
                             updateSpareItem(index, 'quantity', 0);
+                            // Clear stock allocation when quantity is cleared
+                            if (item.product) {
+                              setStockAllocation(prev => {
+                                const newAllocation = { ...prev };
+                                delete newAllocation[`${item.product}-${index}`];
+                                return newAllocation;
+                              });
+                            }
                           } else {
                             const numValue = parseInt(value);
                             if (!isNaN(numValue) && numValue >= 0) {
                               updateSpareItem(index, 'quantity', numValue);
+                              
+                              // Calculate sequential stock allocation when quantity changes
+                              if (item.product && numValue > 0) {
+                                const allocation = calculateSequentialStockAllocation(item.product, numValue);
+                                if (allocation) {
+                                  setStockAllocation(prev => ({
+                                    ...prev,
+                                    [`${item.product}-${index}`]: allocation
+                                  }));
+                                  
+                                  // Show toast if allocation cannot be fulfilled
+                                  if (!allocation.canFulfill) {
+                                    const totalAvailable = allocation.allocations.reduce((sum, alloc) => sum + alloc.availableQuantity, 0);
+                                    toast.error(`Insufficient stock! Requested: ${numValue}, Available: ${totalAvailable}`);
+                                  } else {
+                                    // Show allocation details
+                                    const allocationDetails = allocation.allocations.map(alloc => 
+                                      `${alloc.allocatedQuantity} from ${alloc.location} - ${alloc.room} - ${alloc.rack}`
+                                    ).join(', ');
+                                    toast.success(`Stock allocated: ${allocationDetails}`);
+                                  }
+                                }
+                              }
+                              
                               // Validate stock when quantity changes
                               if (item.product) {
                                 validateStockForItem(index, item.product, numValue);
@@ -1583,6 +2292,8 @@ const DeliveryChallanForm: React.FC = () => {
                       {errors[`spare-${index}-quantity`] && (
                         <p className="text-red-500 text-xs mt-1">{errors[`spare-${index}-quantity`]}</p>
                       )}
+                      
+                      
                     </div>
 
                     {/* Action */}

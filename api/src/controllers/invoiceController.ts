@@ -72,7 +72,7 @@ export const getInvoices = async (
 
     const invoices = await Invoice.find(query)
       .populate('user', 'firstName lastName email')
-      .populate('customer', 'name email phone address')
+      .populate('customer', 'name email phone addresses')
       .populate('supplier', 'name email phone addresses')
       .populate('location', 'name address')
       .populate('createdBy', 'firstName lastName')
@@ -1149,6 +1149,7 @@ export const exportInvoices = async (req: Request, res: Response, next: NextFunc
       .populate('customer', 'name email phone addresses')
       .populate('supplier', 'name email phone addresses')
       .populate('user', 'firstName lastName email')
+      .populate('assignedEngineer', 'firstName lastName email phone')
       .populate('items.product', 'name partNo hsnNumber')
       .populate('sourceQuotation', 'quotationNumber')
       .sort({ issueDate: -1 });
@@ -1197,16 +1198,27 @@ export const exportInvoices = async (req: Request, res: Response, next: NextFunc
         'Created By': invoice.user ? `${invoice.user.firstName} ${invoice.user.lastName}` : '',
         'Created At': invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString('en-GB') : '',
       };
+
+      // Add assigned engineer information
+      const assignedEngineerData = invoice.assignedEngineer ? {
+        'Referred By': typeof invoice.assignedEngineer === 'object' && invoice.assignedEngineer.firstName && invoice.assignedEngineer.lastName 
+          ? `${invoice.assignedEngineer.firstName} ${invoice.assignedEngineer.lastName}`.trim()
+          : invoice.assignedEngineer || ''
+      } : {};
       
       // Only include quotation number for sale invoices
       if (hasSaleInvoices) {
         return {
           ...baseData,
+          ...assignedEngineerData,
           'Quotation Number': invoice.quotationNumber || (invoice.sourceQuotation && typeof invoice.sourceQuotation === 'object' && 'quotationNumber' in invoice.sourceQuotation ? (invoice.sourceQuotation as any).quotationNumber : '') || '',
         };
       }
       
-      return baseData;
+      return {
+        ...baseData,
+        ...assignedEngineerData
+      };
     });
 
     // Debug: Log the first export data item to verify quotation number column

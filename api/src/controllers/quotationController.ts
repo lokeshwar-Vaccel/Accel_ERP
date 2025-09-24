@@ -400,7 +400,7 @@ export const exportQuotations = async (req: Request, res: Response, next: NextFu
       'Paid Amount': `₹${(quotation.paidAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
       'Remaining Amount': `₹${(quotation.remainingAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
       'Location': quotation.location?.name || '',
-      'Assigned Engineer': quotation.assignedEngineer ? `${quotation.assignedEngineer.firstName} ${quotation.assignedEngineer.lastName}` : '',
+      'Referred By': quotation.assignedEngineer ? `${quotation.assignedEngineer.firstName} ${quotation.assignedEngineer.lastName}` : '',
       'Created At': quotation.createdAt ? new Date(quotation.createdAt).toLocaleDateString('en-GB') : '',
     }));
 
@@ -863,11 +863,11 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
       }
     }
 
-    // Calculate totals if items are provided (only for full updates)
-    if (!isStatusOnlyUpdate && sanitizedData.items && sanitizedData.items.length > 0) {
+    // Calculate totals for full updates regardless of whether items exist
+    if (!isStatusOnlyUpdate) {
       const calculationResult = QuotationService.calculateQuotationTotals(
-        sanitizedData.items, 
-        sanitizedData.serviceCharges || [], 
+        sanitizedData.items || [],
+        sanitizedData.serviceCharges || [],
         sanitizedData.batteryBuyBack || undefined,
         sanitizedData.overallDiscount || 0
       );
@@ -1069,9 +1069,28 @@ export const sendQuotationEmailToCustomer = async (
       return next(new AppError('Quotation not found', 404));
     }
 
-    // Check if quotation has customer email
-    if (!quotation.customer?.email) {
-      return next(new AppError('Customer email not found for this quotation', 400));
+    // Helper function to get primary address email
+    const getPrimaryAddressEmail = (customer: any): string | null => {
+      if (!customer?.addresses || !Array.isArray(customer.addresses)) {
+        return null;
+      }
+      
+      // Find primary address
+      const primaryAddress = customer.addresses.find((addr: any) => addr.isPrimary);
+      if (primaryAddress?.email) {
+        return primaryAddress.email;
+      }
+      
+      // If no primary address with email, return null
+      return null;
+    };
+
+    // Get primary address email
+    const primaryEmail = getPrimaryAddressEmail(quotation.customer);
+    
+    // Check if customer has primary address email
+    if (!primaryEmail) {
+      return next(new AppError('Customer primary address email not found for this quotation', 400));
     }
 
     // Allow sending draft quotations - this will update their status to 'sent'
@@ -1083,7 +1102,7 @@ export const sendQuotationEmailToCustomer = async (
     
     console.log('Generating email content for quotation:', {
       quotationNumber: quotation.quotationNumber,
-      customerEmail: quotation.customer.email,
+      customerEmail: primaryEmail,
       customerName: quotation.customer.name,
       companyName: quotation.company?.name,
       subject: subject
@@ -1397,25 +1416,25 @@ export const sendQuotationEmailToCustomer = async (
 
     // Send the email
     await sendQuotationEmailViaNodemailer(
-      quotation.customer.email,
+      primaryEmail,
       subject,
       htmlContent
     );
 
     // Log the email sending attempt
-    console.log(`Attempting to send quotation email to ${quotation.customer.email} for quotation ${quotation.quotationNumber}`);
+    console.log(`Attempting to send quotation email to ${primaryEmail} for quotation ${quotation.quotationNumber}`);
 
     // Always update quotation status to 'sent' after sending email
     await Quotation.findByIdAndUpdate(id, { status: 'sent' });
 
     // Log the email sending
-    console.log(`Quotation email sent successfully to ${quotation.customer.email} for quotation ${quotation.quotationNumber}`);
+    console.log(`Quotation email sent successfully to ${primaryEmail} for quotation ${quotation.quotationNumber}`);
 
     const response: APIResponse = {
       success: true,
       message: 'Quotation email sent successfully',
       data: {
-        sentTo: quotation.customer.email,
+        sentTo: primaryEmail,
         quotationNumber: quotation.quotationNumber,
         status: 'sent'
       }
@@ -1434,7 +1453,7 @@ export const sendQuotationEmailToCustomer = async (
         errorMessage = 'Email service configuration is incomplete. Please contact administrator.';
         statusCode = 503; // Service Unavailable
       } else if (error.message.includes('SMTP connection failed')) {
-        errorMessage = 'Email service is temporarily unavailable. Please try again later.';
+        errorMessage = 'Email service is temporarily unavailable. Please check SMTP configuration.';
         statusCode = 503; // Service Unavailable
       } else if (error.message.includes('Missing required email parameters')) {
         errorMessage = 'Invalid email data provided.';
@@ -1442,6 +1461,9 @@ export const sendQuotationEmailToCustomer = async (
       } else if (error.message.includes('Email sending failed')) {
         errorMessage = 'Failed to send email. Please try again.';
         statusCode = 500; // Internal Server Error
+      } else if (error.message.includes('Authentication failed')) {
+        errorMessage = 'Email authentication failed. Please check SMTP credentials.';
+        statusCode = 503; // Service Unavailable
       } else {
         errorMessage = `Email error: ${error.message}`;
         statusCode = 500; // Internal Server Error

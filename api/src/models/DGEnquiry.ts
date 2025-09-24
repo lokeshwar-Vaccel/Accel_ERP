@@ -187,10 +187,8 @@ DGEnquirySchema.pre('save', function(this: any, next) {
         this.corporateName = this.customerName;
       }
       
-      // Store contact person name in customerName
-      if (primaryAddress.contactPersonName) {
-        this.customerName = primaryAddress.contactPersonName;
-      }
+      // Note: customerName should store the customer name (corporate name), not contact person name
+      // contactPersonName is stored in addresses[].contactPersonName
       
       // Store designation from primary address
       this.designation = primaryAddress.designation || '';

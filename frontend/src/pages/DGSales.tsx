@@ -49,7 +49,8 @@ import {
   Edit,
   Trash2,
   ViewIcon,
-  Wallet
+  Wallet,
+  UserPlus
 } from 'lucide-react';
 import apiClient from '../utils/api';
 import { toast } from 'react-hot-toast';
@@ -1419,8 +1420,8 @@ export default function DGSales() {
                 <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-green-600 font-medium">New Customers</p>
-                      <p className="text-2xl font-bold text-green-900">{previewData?.customersToCreate.length || 0}</p>
+                      <p className="text-sm text-green-600 font-medium">Enquiries to Create</p>
+                      <p className="text-2xl font-bold text-green-900">{previewData?.enquiriesToCreate?.length || 0}</p>
                     </div>
                     <User className="w-8 h-8 text-green-600" />
                   </div>
@@ -1432,6 +1433,15 @@ export default function DGSales() {
                       <p className="text-2xl font-bold text-yellow-900">{previewData.summary?.existingCustomers || 0}</p>
                     </div>
                     <Users className="w-8 h-8 text-yellow-600" />
+                  </div>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-purple-600 font-medium">New Customers</p>
+                      <p className="text-2xl font-bold text-purple-900">{previewData.summary?.newCustomers || 0}</p>
+                    </div>
+                    <UserPlus className="w-8 h-8 text-purple-600" />
                   </div>
                 </div>
                 <div className="bg-red-50 p-4 rounded-lg border border-red-200">
@@ -1491,7 +1501,7 @@ export default function DGSales() {
                           <th className="px-3 py-2 text-left font-medium">Phone</th>
                           <th className="px-3 py-2 text-left font-medium">Email</th>
                           <th className="px-3 py-2 text-left font-medium">KVA</th>
-                          <th className="px-3 py-2 text-left font-medium">Status</th>
+                          <th className="px-3 py-2 text-left font-medium">Customer Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
@@ -1503,11 +1513,12 @@ export default function DGSales() {
                             <td className="px-3 py-2">{item.email}</td>
                             <td className="px-3 py-2">{item.kva}</td>
                             <td className="px-3 py-2">
-                              <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${item.status === 'new_customer' ? 'bg-green-100 text-green-800' :
-                                item.status === 'existing_customer' ? 'bg-yellow-100 text-yellow-800' :
-                                  'bg-red-100 text-red-800'
-                                }`}>
-                                {item.status || 'Unknown'}
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                item.customerInfo?.isExisting 
+                                  ? 'bg-yellow-100 text-yellow-800' 
+                                  : 'bg-green-100 text-green-800'
+                              }`}>
+                                {item.customerInfo?.isExisting ? 'Existing Customer' : 'New Customer'}
                               </span>
                             </td>
                           </tr>

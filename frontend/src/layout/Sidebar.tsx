@@ -152,7 +152,8 @@ function getActiveKeyFromPath(pathname: string): string {
   if (pathname.startsWith('/po-from-customer') || 
       pathname.startsWith('/billing') ||
       pathname.startsWith('/invoice') ||
-      pathname.startsWith('/quotation')) {
+      pathname.startsWith('/quotation') ||
+      pathname.startsWith('/amc-quotations')) {
     return 'billing';
   }
   
