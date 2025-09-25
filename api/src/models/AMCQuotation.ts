@@ -40,6 +40,20 @@ export interface IAMCQuotation extends Document {
     email?: string;
     phone?: string;
     pan?: string;
+    addresses?: Array<{
+      id: number;
+      address: string;
+      state?: string;
+      district?: string;
+      pincode?: string;
+      isPrimary: boolean;
+      gstNumber?: string;
+      contactPersonName?: string;
+      designation?: string;
+      email?: string;
+      phone?: string;
+      registrationStatus: 'registered' | 'non_registered';
+    }>;
   };
   company: {
     name?: string;

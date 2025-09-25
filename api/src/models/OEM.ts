@@ -2,10 +2,17 @@ import mongoose, { Schema, Document, Types } from "mongoose";
 
 interface IAddress {
   _id: Types.ObjectId;  
+  contactPersonName?: string;
+  designation?: string;
+  mobileNo?: string;
+  email?: string;
   address: string;      
   district: string;
   state: string;
   pincode: string;
+  gstNumber?: string;
+  isDefault?: boolean;
+  registrationStatus: 'registered' | 'non_registered';
 }
 
 interface IBankDetail {
@@ -21,12 +28,7 @@ export interface IOEM extends Document {
   oemCode: string;
   companyName: string;
   alias?: string;
-  gstDetails?: string;
   panNumber?: string;
-  contactPersonName?: string;
-  designation?: string;
-  mobileNo?: string;
-  email?: string;
   addresses: IAddress[];
   bankDetails: IBankDetail[];
   status: "active" | "inactive";
@@ -40,6 +42,12 @@ const AddressSchema: Schema = new Schema(
     district: { type: String, required: true, trim: true },
     state: { type: String, required: true, trim: true },
     pincode: { type: String, required: true, trim: true },
+    registrationStatus: {
+      type: String,
+      enum: ['registered', 'non_registered'],
+      required: true,
+      default: 'non_registered'
+    }
   },
   { timestamps: true }
 );

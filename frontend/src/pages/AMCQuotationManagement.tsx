@@ -46,6 +46,7 @@ import {
 import { Button } from '../components/ui/Botton';
 import PageHeader from '../components/ui/PageHeader';
 import UpdatePaymentModal from '../components/UpdatePaymentModal';
+import { Tooltip } from '../components/ui/Tooltip';
 import { apiClient } from '../utils/api';
 import { RootState } from '../store';
 import toast from 'react-hot-toast';
@@ -57,13 +58,14 @@ import AMCQuotationViewModal from '../components/quotations/AMCQuotationViewModa
 import * as XLSX from 'xlsx';
 
 // Utility functions
-const formatCurrency = (amount: number) => {
+const formatCurrency = (amount: number | undefined | null) => {
+  const safeAmount = amount || 0;
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(amount);
+  }).format(safeAmount);
 };
 
 const formatDate = (dateString: string) => {
@@ -110,6 +112,20 @@ interface AMCQuotation {
     email: string;
     phone: string;
     pan?: string;
+    addresses?: Array<{
+      id: number;
+      address: string;
+      state?: string;
+      district?: string;
+      pincode?: string;
+      isPrimary: boolean;
+      gstNumber?: string;
+      contactPersonName?: string;
+      designation?: string;
+      email?: string;
+      phone?: string;
+      registrationStatus: 'registered' | 'non_registered';
+    }>;
   };
   company?: {
     name?: string;
@@ -301,7 +317,7 @@ const AMCQuotationManagement: React.FC = () => {
     sentQuotations: 0,
     acceptedQuotations: 0,
     rejectedQuotations: 0,
-    totalValue: 0,
+    quotationValue: 0,
     pendingAmount: 0,
     paidAmount: 0
   });
@@ -325,8 +341,8 @@ const AMCQuotationManagement: React.FC = () => {
       
       if (response.success && response.data) {
         setQuotations(response.data);
-        setTotalPages(response.pagination?.totalPages || 1);
-        setTotalItems(response.pagination?.totalItems || 0);
+        setTotalPages(response.pagination?.pages || 1);
+        setTotalItems(response.pagination?.total || 0);
       }
     } catch (error) {
       console.error('Error fetching AMC quotations:', error);
@@ -535,17 +551,40 @@ const AMCQuotationManagement: React.FC = () => {
 
   // Email functionality
   const getPrimaryAddressEmail = (customer: any): string | null => {
+    console.log('Getting email for customer:', {
+      customerId: customer._id,
+      customerName: customer.name,
+      customerEmail: customer.email,
+      addresses: customer.addresses,
+      addressesLength: customer.addresses?.length || 0
+    });
+
+    // First try to get primary address email
     if (customer.addresses && customer.addresses.length > 0) {
       const primaryAddress = customer.addresses.find((addr: any) => addr.isPrimary);
+      console.log('Primary address found:', primaryAddress);
       if (primaryAddress && primaryAddress.email) {
+        console.log('Using primary address email:', primaryAddress.email);
         return primaryAddress.email;
       }
     }
+
     // If no primary address email, try customer's main email
     if (customer.email) {
+      console.log('Using customer main email:', customer.email);
       return customer.email;
     }
-    // If no primary address with email, return null
+
+    // If still no email, try to find any address with email
+    if (customer.addresses && customer.addresses.length > 0) {
+      const addressWithEmail = customer.addresses.find((addr: any) => addr.email);
+      if (addressWithEmail && addressWithEmail.email) {
+        console.log('Using first available address email:', addressWithEmail.email);
+        return addressWithEmail.email;
+      }
+    }
+
+    console.log('No email found for customer');
     return null;
   };
 
@@ -554,12 +593,24 @@ const AMCQuotationManagement: React.FC = () => {
       // Get primary address email
       const primaryEmail = getPrimaryAddressEmail(quotation.customer);
 
-      // Check if customer has primary address email
+      // Check if customer has email
       if (!primaryEmail) {
-        toast.error('Customer primary address email not available for this AMC quotation');
+        // Show detailed error with customer data
+        const customerData = {
+          id: quotation.customer._id,
+          name: quotation.customer.name,
+          email: quotation.customer.email,
+          hasAddresses: quotation.customer.addresses && quotation.customer.addresses.length > 0,
+          addressesCount: quotation.customer.addresses?.length || 0,
+          addresses: quotation.customer.addresses
+        };
+        
+        console.error('Customer email not found:', customerData);
+        toast.error(`Customer email not available. Customer: ${quotation.customer.name}, Main Email: ${quotation.customer.email || 'None'}, Addresses: ${quotation.customer.addresses?.length || 0}`);
         return;
       }
 
+      console.log('Sending AMC quotation email to:', primaryEmail);
       const response = await apiClient.amcQuotations.sendEmail(quotation._id);
 
       if (response.success) {
@@ -569,9 +620,10 @@ const AMCQuotationManagement: React.FC = () => {
       } else {
         throw new Error(response.message || 'Failed to send AMC quotation email');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending AMC quotation email:', error);
-      toast.error('Failed to send AMC quotation email. Please try again.');
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to send AMC quotation email. Please try again.';
+      toast.error(errorMessage);
     }
   };
 
@@ -896,6 +948,13 @@ const AMCQuotationManagement: React.FC = () => {
             <span>New AMC Quotation</span>
           </Button>
           <Button
+              onClick={handleExportToExcel}
+              className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              <FileText className="w-4 h-4" />
+              <span>Export Excel</span>
+            </Button>
+          <Button
             onClick={() => navigate('/billing')}
             variant="outline"
             className="flex items-center space-x-2"
@@ -908,7 +967,7 @@ const AMCQuotationManagement: React.FC = () => {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-        <div className="bg-white p-3 rounded-lg border border-gray-200">
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
           <div className="flex items-center">
             <div className="p-2 bg-blue-100 rounded-lg">
               <FileText className="w-6 h-6 text-blue-600" />
@@ -920,7 +979,19 @@ const AMCQuotationManagement: React.FC = () => {
           </div>
         </div>
 
-        {/* <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
+          <div className="flex items-center">
+            <div className="p-2 bg-orange-100 rounded-lg">
+              <Send className="w-6 h-6 text-orange-600" />
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-gray-600">Sent</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.sentQuotations}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-lg border border-gray-200">
           <div className="flex items-center">
             <div className="p-2 bg-green-100 rounded-lg">
               <CheckCircle className="w-6 h-6 text-green-600" />
@@ -934,27 +1005,15 @@ const AMCQuotationManagement: React.FC = () => {
 
         <div className="bg-white p-6 rounded-lg border border-gray-200">
           <div className="flex items-center">
-            <div className="p-2 bg-yellow-100 rounded-lg">
-              <Clock className="w-6 h-6 text-yellow-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Pending</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.pendingAmount}</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
-          <div className="flex items-center">
             <div className="p-2 bg-purple-100 rounded-lg">
               <IndianRupee className="w-6 h-6 text-purple-600" />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total Value</p>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.totalValue)}</p>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.quotationValue)}</p>
             </div>
           </div>
-        </div> */}
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -976,14 +1035,14 @@ const AMCQuotationManagement: React.FC = () => {
 
           {/* Filter Toggle */}
           <div className="flex items-center space-x-2">
-          <Button
+          {/* <Button
             onClick={handleExportToExcel}
             variant='outline'
             className="flex items-center space-x-2"
           >
             <Download className="w-4 h-4" />
             <span>Export</span>
-          </Button>
+          </Button> */}
             <Button
               onClick={() => setShowFilters(!showFilters)}
               variant="outline"
@@ -1064,18 +1123,37 @@ const AMCQuotationManagement: React.FC = () => {
                   <Input
                     type="date"
                     value={dateRange.start}
-                    onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                    onChange={(e) => {
+                      const newStartDate = e.target.value;
+                      setDateRange(prev => {
+                        const newRange = { ...prev, start: newStartDate };
+                        
+                        // If end date is before new start date, update end date to be 1 year after start date
+                        if (prev.end && newStartDate && newStartDate >= prev.end) {
+                          const startDate = new Date(newStartDate);
+                          const endDate = new Date(startDate);
+                          endDate.setFullYear(endDate.getFullYear() + 1);
+                          newRange.end = endDate.toISOString().split('T')[0];
+                        }
+                        
+                        return newRange;
+                      });
+                    }}
                     placeholder="From"
                     className="text-sm"
                   />
                   <Input
                     type="date"
                     value={dateRange.end}
+                    min={dateRange.start || ''}
                     onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
                     placeholder="To"
                     className="text-sm"
                   />
                 </div>
+                {dateRange.start && dateRange.end && new Date(dateRange.start) >= new Date(dateRange.end) && (
+                  <p className="mt-1 text-xs text-red-600">End date must be after start date</p>
+                )}
               </div>
             </div>
           </div>
@@ -1089,44 +1167,45 @@ const AMCQuotationManagement: React.FC = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Quotation Details
+                  QUOTATION NO
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Customer
+                  CUSTOMER
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  AMC Details
+                  TOTAL AMOUNT
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Financial
+                  PAID
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
+                  REMAINING
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
+                  STATUS
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  PAYMENT
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  VALID UNTIL
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  ACTIONS
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {quotations.map((quotation) => (
                 <tr key={quotation._id} className="hover:bg-gray-50">
-                  {/* Quotation Details */}
+                  {/* QUOTATION NO */}
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">
-                        {quotation.quotationNumber}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {formatDate(quotation.issueDate)}
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        Valid until: {formatDate(quotation.validUntil)}
-                      </div>
+                    <div className="text-sm font-medium text-blue-600 hover:text-blue-800 cursor-pointer">
+                      {quotation.quotationNumber}
                     </div>
                   </td>
 
-                  {/* Customer */}
+                  {/* CUSTOMER */}
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
                       <div className="text-sm font-medium text-gray-900">
@@ -1135,129 +1214,141 @@ const AMCQuotationManagement: React.FC = () => {
                       <div className="text-sm text-gray-500">
                         {quotation.customer.email}
                       </div>
-                      <div className="text-sm text-gray-500">
-                        {quotation.customer.phone}
-                      </div>
                     </div>
                   </td>
 
-                  {/* AMC Details */}
+                  {/* TOTAL AMOUNT */}
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <Badge className={getAMCTypeBadgeColor(quotation.amcType)}>
-                        {quotation.amcType}
-                      </Badge>
-                      <div className="text-sm text-gray-500 mt-1">
-                        {quotation.contractDuration} months
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {quotation.numberOfVisits} visits
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {quotation.responseTime}h response
-                      </div>
+                    <div className="text-sm font-medium text-gray-900">
+                      {formatCurrency(quotation.grandTotal)}
                     </div>
                   </td>
 
-                  {/* Financial */}
+                  {/* PAID */}
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">
-                        {formatCurrency(quotation.grandTotal)}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        Paid: {formatCurrency(quotation.paidAmount)}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        Remaining: {formatCurrency(quotation.remainingAmount)}
-                      </div>
+                    <div className="text-sm font-medium text-green-600">
+                      {formatCurrency(quotation.paidAmount)}
                     </div>
                   </td>
 
-                  {/* Status */}
+                  {/* REMAINING */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-red-600">
+                      {formatCurrency(quotation.remainingAmount)}
+                    </div>
+                  </td>
+
+                  {/* STATUS */}
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="space-y-1">
-                      <Badge className={getStatusBadgeColor(quotation.status)}>
-                        {quotation.status}
-                      </Badge>
-                      <Badge className={getPaymentStatusBadgeColor(quotation.paymentStatus)}>
-                        {quotation.paymentStatus}
-                      </Badge>
+                      <div className="flex items-center space-x-2">
+                        <Badge className={getStatusBadgeColor(quotation.status)}>
+                          {quotation.status.charAt(0).toUpperCase() + quotation.status.slice(1)}
+                        </Badge>
+                        <Button
+                          onClick={() => handleUpdateStatus(quotation)}
+                          variant="outline"
+                          size="sm"
+                          className="text-xs px-2 py-1"
+                        >
+                          Change
+                        </Button>
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {quotation.status === 'accepted' ? 'Status is final' : 
+                         quotation.status === 'draft' ? 'Send email to enable payments' : ''}
+                      </div>
                     </div>
                   </td>
 
-                  {/* Actions */}
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex items-center space-x-2">
-                      <Button
-                        onClick={() => handleViewQuotation(quotation)}
-                        variant="outline"
-                        size="sm"
-                        className="text-blue-600 hover:text-blue-700"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        onClick={() => handleEditQuotation(quotation)}
-                        variant="outline"
-                        size="sm"
-                        className="text-green-600 hover:text-green-700"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        onClick={() => handleUpdatePayment(quotation)}
-                        variant="outline"
-                        size="sm"
-                        className="text-blue-600 hover:text-blue-700"
-                        disabled={quotation.status === 'draft'}
-                      >
-                        <IndianRupee className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        onClick={() => handleSendAMCQuotationEmail(quotation)}
-                        variant="outline"
-                        size="sm"
-                        className="text-green-600 hover:text-green-700"
-                        disabled={!getPrimaryAddressEmail(quotation.customer)}
-                        title={
-                          !getPrimaryAddressEmail(quotation.customer)
-                            ? 'Customer primary address email not available'
-                            : 'Send AMC quotation to customer primary address email (will update status to sent)'
-                        }
-                      >
-                        <Send className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        onClick={() => handleUpdateStatus(quotation)}
-                        variant="outline"
-                        size="sm"
-                        className="text-orange-600 hover:text-orange-700"
-                        title="Update AMC quotation status"
-                      >
-                        <Settings className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        onClick={() => handlePrintQuotation(quotation)}
-                        variant="outline"
-                        size="sm"
-                        className="text-purple-600 hover:text-purple-700"
-                      >
-                        <Printer className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        onClick={() => handleDeleteQuotation(quotation)}
-                        variant="outline"
-                        size="sm"
-                        className="text-red-600 hover:text-red-700"
-                        disabled={deletingQuotation === quotation._id}
-                      >
-                        {deletingQuotation === quotation._id ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
-                        ) : (
-                          <Trash2 className="w-4 h-4" />
-                        )}
-                      </Button>
+                  {/* PAYMENT */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="space-y-1">
+                      <Badge className={getPaymentStatusBadgeColor(quotation.paymentStatus)}>
+                        {quotation.paymentStatus === 'pending' ? 'Pending - No payment received' :
+                         quotation.paymentStatus === 'partial' ? 'Partial Payment - Some amount paid' :
+                         quotation.paymentStatus === 'paid' ? 'Paid - Full payment received' :
+                         quotation.paymentStatus}
+                      </Badge>
+                      <div className="text-xs text-gray-500">
+                        {quotation.status === 'draft' ? 'Not available for draft' : ''}
+                      </div>
+                    </div>
+                  </td>
+
+                  {/* VALID UNTIL */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      {formatDate(quotation.validUntil)}
+                    </div>
+                  </td>
+
+                  {/* ACTIONS */}
+                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium">
+                    <div className="flex items-center justify-center space-x-4">
+                      <Tooltip content="View Quotation">
+                        <button
+                          onClick={() => handleViewQuotation(quotation)}
+                          className="p-1 text-blue-600 hover:text-blue-700 transition-colors"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </Tooltip>
+                      <Tooltip content="Edit Quotation">
+                        <button
+                          onClick={() => handleEditQuotation(quotation)}
+                          className="p-1 text-purple-600 hover:text-purple-700 transition-colors"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                      </Tooltip>
+                      <Tooltip content="Update Payment">
+                        <button
+                          onClick={() => handleUpdatePayment(quotation)}
+                          className={`p-1 transition-colors ${
+                            quotation.status === 'draft'
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-green-600 hover:text-green-700'
+                          }`}
+                          disabled={quotation.status === 'draft'}
+                        >
+                          <IndianRupee className="w-4 h-4" />
+                        </button>
+                      </Tooltip>
+                      <Tooltip content={
+                        !getPrimaryAddressEmail(quotation.customer) 
+                          ? "No email available for this customer" 
+                          : `Send email to ${getPrimaryAddressEmail(quotation.customer)}`
+                      }>
+                        <button
+                          onClick={() => handleSendAMCQuotationEmail(quotation)}
+                          className={`p-1 transition-colors ${
+                            !getPrimaryAddressEmail(quotation.customer)
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-blue-600 hover:text-blue-700'
+                          }`}
+                          disabled={!getPrimaryAddressEmail(quotation.customer)}
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      </Tooltip>
+                      <Tooltip content="Delete Quotation">
+                        <button
+                          onClick={() => handleDeleteQuotation(quotation)}
+                          className={`p-1 transition-colors ${
+                            deletingQuotation === quotation._id
+                              ? 'text-gray-400 cursor-not-allowed'
+                              : 'text-red-600 hover:text-red-700'
+                          }`}
+                          disabled={deletingQuotation === quotation._id}
+                        >
+                          {deletingQuotation === quotation._id ? (
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </button>
+                      </Tooltip>
                     </div>
                   </td>
                 </tr>
