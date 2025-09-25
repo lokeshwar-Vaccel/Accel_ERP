@@ -1407,7 +1407,7 @@ export default function DGSales() {
 
             <div className="p-6 space-y-6">
               {/* Summary Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <div className="flex items-center justify-between">
                     <div>
@@ -1420,19 +1420,19 @@ export default function DGSales() {
                 <div className="bg-green-50 p-4 rounded-lg border border-green-200">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-green-600 font-medium">Enquiries to Create</p>
-                      <p className="text-2xl font-bold text-green-900">{previewData?.enquiriesToCreate?.length || 0}</p>
+                      <p className="text-sm text-green-600 font-medium">New Enquiries</p>
+                      <p className="text-2xl font-bold text-green-900">{previewData.summary?.newEnquiries || 0}</p>
                     </div>
                     <User className="w-8 h-8 text-green-600" />
                   </div>
                 </div>
-                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-yellow-600 font-medium">Existing Customers</p>
-                      <p className="text-2xl font-bold text-yellow-900">{previewData.summary?.existingCustomers || 0}</p>
+                      <p className="text-sm text-orange-600 font-medium">Existing Enquiries</p>
+                      <p className="text-2xl font-bold text-orange-900">{previewData.summary?.existingEnquiries || 0}</p>
                     </div>
-                    <Users className="w-8 h-8 text-yellow-600" />
+                    <RefreshCw className="w-8 h-8 text-orange-600" />
                   </div>
                 </div>
                 <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
@@ -1444,6 +1444,15 @@ export default function DGSales() {
                     <UserPlus className="w-8 h-8 text-purple-600" />
                   </div>
                 </div>
+                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-yellow-600 font-medium">Existing Customers</p>
+                      <p className="text-2xl font-bold text-yellow-900">{previewData.summary?.existingCustomers || 0}</p>
+                    </div>
+                    <Users className="w-8 h-8 text-yellow-600" />
+                  </div>
+                </div>
                 <div className="bg-red-50 p-4 rounded-lg border border-red-200">
                   <div className="flex items-center justify-between">
                     <div>
@@ -1453,13 +1462,59 @@ export default function DGSales() {
                     <AlertTriangle className="w-8 h-8 text-red-600" />
                   </div>
                 </div>
-                <div className="bg-yellow-100 p-4 rounded-lg border border-yellow-300">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-yellow-700 font-medium">Duplicate Groups</p>
-                      <p className="text-2xl font-bold text-yellow-900">{previewData.duplicateGroups ? previewData.duplicateGroups.length : 0}</p>
+              </div>
+
+              {/* Detailed Statistics */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Enquiry Statistics */}
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                    <BarChart3 className="w-5 h-5 mr-2 text-blue-600" />
+                    Enquiry Statistics
+                  </h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">New Enquiries:</span>
+                      <span className="font-semibold text-green-600">{previewData.summary?.newEnquiries || 0}</span>
                     </div>
-                    <BarChart3 className="w-8 h-8 text-yellow-700" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Existing Enquiries:</span>
+                      <span className="font-semibold text-orange-600">{previewData.summary?.existingEnquiries || 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Enquiries with Changes:</span>
+                      <span className="font-semibold text-blue-600">{previewData.summary?.enquiriesWithChanges || 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Enquiries without Changes:</span>
+                      <span className="font-semibold text-gray-500">{previewData.summary?.enquiriesWithoutChanges || 0}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Customer Statistics */}
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                    <Users className="w-5 h-5 mr-2 text-purple-600" />
+                    Customer Statistics
+                  </h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">New Customers:</span>
+                      <span className="font-semibold text-green-600">{previewData.summary?.newCustomers || 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Existing Customers:</span>
+                      <span className="font-semibold text-orange-600">{previewData.summary?.existingCustomers || 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Customers with Changes:</span>
+                      <span className="font-semibold text-blue-600">{previewData.summary?.customersWithChanges || 0}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Customers without Changes:</span>
+                      <span className="font-semibold text-gray-500">{previewData.summary?.customersWithoutChanges || 0}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1502,13 +1557,22 @@ export default function DGSales() {
                           <th className="px-3 py-2 text-left font-medium">Email</th>
                           <th className="px-3 py-2 text-left font-medium">KVA</th>
                           <th className="px-3 py-2 text-left font-medium">Customer Status</th>
+                          <th className="px-3 py-2 text-left font-medium">Enquiry Status</th>
+                          <th className="px-3 py-2 text-left font-medium">Changes</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
                         {previewData.sample.slice(0, 5).map((item: any, index: number) => (
                           <tr key={index} className="hover:bg-gray-50">
                             <td className="px-3 py-2 font-mono text-xs">{item.enquiryNo}</td>
-                            <td className="px-3 py-2">{item.customerName || item.corporateName}</td>
+                            <td className="px-3 py-2">
+                              <div>
+                                <div className="font-medium">{item.corporateName || item.customerName}</div>
+                                {item.customerName && item.corporateName && item.customerName !== item.corporateName && (
+                                  <div className="text-xs text-gray-500">Contact: {item.customerName}</div>
+                                )}
+                              </div>
+                            </td>
                             <td className="px-3 py-2">{item.phoneNumber}</td>
                             <td className="px-3 py-2">{item.email}</td>
                             <td className="px-3 py-2">{item.kva}</td>
@@ -1521,10 +1585,103 @@ export default function DGSales() {
                                 {item.customerInfo?.isExisting ? 'Existing Customer' : 'New Customer'}
                               </span>
                             </td>
+                            <td className="px-3 py-2">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                item.enquiryInfo?.isExisting 
+                                  ? 'bg-orange-100 text-orange-800' 
+                                  : 'bg-green-100 text-green-800'
+                              }`}>
+                                {item.enquiryInfo?.isExisting ? 'Existing Enquiry' : 'New Enquiry'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="space-y-1">
+                                {item.customerInfo?.hasChanges && (
+                                  <span className="inline-flex px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">
+                                    Customer Changes
+                                  </span>
+                                )}
+                                {item.enquiryInfo?.hasChanges && (
+                                  <span className="inline-flex px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded-full">
+                                    Enquiry Changes
+                                  </span>
+                                )}
+                                {!item.customerInfo?.hasChanges && !item.enquiryInfo?.hasChanges && (
+                                  <span className="inline-flex px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded-full">
+                                    No Changes
+                                  </span>
+                                )}
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Field Changes Preview */}
+              {previewData.enquiriesToCreate && previewData.enquiriesToCreate.some((item: any) => 
+                item.customerInfo?.hasChanges || item.enquiryInfo?.hasChanges
+              ) && (
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Field Changes Preview</h3>
+                  <div className="space-y-4 max-h-96 overflow-y-auto">
+                    {previewData.enquiriesToCreate
+                      .filter((item: any) => item.customerInfo?.hasChanges || item.enquiryInfo?.hasChanges)
+                      .slice(0, 10)
+                      .map((item: any, index: number) => (
+                        <div key={index} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-semibold text-gray-800">{item.enquiryNo}</h4>
+                            <span className="text-sm text-gray-600">
+                              {item.corporateName || item.customerName}
+                              {item.customerName && item.corporateName && item.customerName !== item.corporateName && (
+                                <span className="text-xs text-gray-500 ml-2">(Contact: {item.customerName})</span>
+                              )}
+                            </span>
+                          </div>
+                          
+                          {item.customerInfo?.hasChanges && (
+                            <div className="mb-2">
+                              <h5 className="text-sm font-medium text-blue-700 mb-1">Customer Changes:</h5>
+                              <ul className="text-xs text-blue-600 space-y-1 ml-4">
+                                {item.customerInfo.changes.map((change: string, idx: number) => (
+                                  <li key={idx} className="flex items-start">
+                                    <span className="mr-2">•</span>
+                                    <span>{change}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          
+                          {item.enquiryInfo?.hasChanges && (
+                            <div>
+                              <h5 className="text-sm font-medium text-purple-700 mb-1">Enquiry Changes:</h5>
+                              <ul className="text-xs text-purple-600 space-y-1 ml-4">
+                                {item.enquiryInfo.changes.map((change: string, idx: number) => (
+                                  <li key={idx} className="flex items-start">
+                                    <span className="mr-2">•</span>
+                                    <span>{change}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    
+                    {previewData.enquiriesToCreate.filter((item: any) => 
+                      item.customerInfo?.hasChanges || item.enquiryInfo?.hasChanges
+                    ).length > 10 && (
+                      <p className="text-sm text-gray-500 text-center">
+                        ... and {previewData.enquiriesToCreate.filter((item: any) => 
+                          item.customerInfo?.hasChanges || item.enquiryInfo?.hasChanges
+                        ).length - 10} more items with changes
+                      </p>
+                    )}
                   </div>
                 </div>
               )}

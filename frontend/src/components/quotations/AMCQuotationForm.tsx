@@ -17,7 +17,8 @@ import {
     Calendar,
     Clock,
     DollarSign,
-    Trash2
+    Trash2,
+    ArrowLeft
 } from 'lucide-react';
 import { Button } from '../ui/Botton';
 import { apiClient } from '../../utils/api';
@@ -236,10 +237,27 @@ const AMCQuotationForm: React.FC = () => {
         loadData();
     }, []);
 
+    // Helper function to safely convert date strings to Date objects
+    const safeDateConversion = (dateValue: any): Date => {
+        if (!dateValue) return new Date();
+        if (dateValue instanceof Date) return dateValue;
+        const date = new Date(dateValue);
+        return isNaN(date.getTime()) ? new Date() : date;
+    };
+
     // Load quotation data if in edit mode
     useEffect(() => {
         if (isEditMode && quotationFromState) {
-            setQuotationData(quotationFromState);
+            // Safely convert date fields
+            const processedData = {
+                ...quotationFromState,
+                issueDate: safeDateConversion(quotationFromState.issueDate),
+                contractStartDate: safeDateConversion(quotationFromState.contractStartDate),
+                contractEndDate: safeDateConversion(quotationFromState.contractEndDate),
+                amcPeriodFrom: safeDateConversion(quotationFromState.amcPeriodFrom),
+                amcPeriodTo: safeDateConversion(quotationFromState.amcPeriodTo)
+            };
+            setQuotationData(processedData);
         }
     }, [isEditMode, quotationFromState]);
 
@@ -776,8 +794,30 @@ const AMCQuotationForm: React.FC = () => {
         if (!data.amcPeriodTo) {
             errors.push({ field: 'amcPeriodTo', message: 'AMC period end date is required' });
         }
-        if (data.amcPeriodFrom && data.amcPeriodTo && data.amcPeriodFrom >= data.amcPeriodTo) {
-            errors.push({ field: 'amcPeriodTo', message: 'AMC period end date must be after start date' });
+        if (data.amcPeriodFrom && data.amcPeriodTo) {
+            const startDate = new Date(data.amcPeriodFrom);
+            const endDate = new Date(data.amcPeriodTo);
+            
+            // Check if dates are valid
+            if (isNaN(startDate.getTime())) {
+                errors.push({ field: 'amcPeriodFrom', message: 'AMC period start date is invalid' });
+            }
+            if (isNaN(endDate.getTime())) {
+                errors.push({ field: 'amcPeriodTo', message: 'AMC period end date is invalid' });
+            }
+            
+            // Check if end date is after start date
+            if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime()) && startDate >= endDate) {
+                errors.push({ field: 'amcPeriodTo', message: 'AMC period end date must be after start date' });
+            }
+            
+            // Check if the period is reasonable (not more than 5 years)
+            if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime()) && endDate > startDate) {
+                const diffInYears = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365);
+                if (diffInYears > 5) {
+                    errors.push({ field: 'amcPeriodTo', message: 'AMC period cannot exceed 5 years' });
+                }
+            }
         }
 
         // Billing cycle validation
@@ -964,6 +1004,14 @@ const AMCQuotationForm: React.FC = () => {
         }
     };
 
+    const handleCancel = () => {
+        navigate('/amc-quotations');
+    };
+
+    const handleBack = () => {
+        navigate('/amc-quotations');
+    };
+
     const getFilteredCustomers = () => {
         const term = (customerSearchTerm || '').toLowerCase();
         return customers.filter(customer =>
@@ -1091,6 +1139,33 @@ const AMCQuotationForm: React.FC = () => {
 
     return (
         <div className="p-6 bg-white">
+            {/* Header with Back Button */}
+            <div className="mb-6">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                        
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-900">
+                                {isEditMode ? 'Edit AMC Quotation' : 'Create AMC Quotation'}
+                            </h1>
+                            <p className="text-sm text-gray-600 mt-1">
+                                {isEditMode ? 'Update existing AMC quotation details' : 'Fill in the details to create a new AMC quotation'}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                    <Button
+                            onClick={handleBack}
+                            variant="outline"
+                            className="flex items-center space-x-2"
+                        >
+                            <ArrowLeft className="w-4 h-4" />
+                            <span>Back</span>
+                        </Button>
+                    </div>
+                </div>
+            </div>
+
             {/* Validation Errors Summary */}
             {validationErrors.length > 0 && (
                 <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-md">
@@ -1324,7 +1399,7 @@ const AMCQuotationForm: React.FC = () => {
                             <div className="flex-1">
                                 <input
                                     type="date"
-                                    value={quotationData.issueDate ? new Date(quotationData.issueDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
+                                    value={quotationData.issueDate && !isNaN(new Date(quotationData.issueDate).getTime()) ? new Date(quotationData.issueDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
                                     onChange={(e) => handleInputChange('issueDate', new Date(e.target.value))}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
@@ -1538,8 +1613,18 @@ const AMCQuotationForm: React.FC = () => {
                             <span className="font-medium w-24">AMC Start Date:</span>
                             <input
                                 type="date"
-                                value={quotationData.amcPeriodFrom ? new Date(quotationData.amcPeriodFrom).toISOString().split('T')[0] : ''}
-                                onChange={(e) => handleInputChange('amcPeriodFrom', new Date(e.target.value))}
+                                value={quotationData.amcPeriodFrom && !isNaN(new Date(quotationData.amcPeriodFrom).getTime()) ? new Date(quotationData.amcPeriodFrom).toISOString().split('T')[0] : ''}
+                                onChange={(e) => {
+                                    const newStartDate = new Date(e.target.value);
+                                    handleInputChange('amcPeriodFrom', newStartDate);
+                                    
+                                    // If end date is before new start date, update end date to be 1 year after start date
+                                    if (quotationData.amcPeriodTo && newStartDate >= quotationData.amcPeriodTo) {
+                                        const newEndDate = new Date(newStartDate);
+                                        newEndDate.setFullYear(newEndDate.getFullYear() + 1);
+                                        handleInputChange('amcPeriodTo', newEndDate);
+                                    }
+                                }}
                                 className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${getErrorClass('amcPeriodFrom')}`}
                             />
                             {getFieldError('amcPeriodFrom') && (
@@ -1567,8 +1652,12 @@ const AMCQuotationForm: React.FC = () => {
                             <span className="font-medium w-24">AMC End Date:</span>
                             <input
                                 type="date"
-                                value={quotationData.amcPeriodTo ? new Date(quotationData.amcPeriodTo).toISOString().split('T')[0] : ''}
-                                onChange={(e) => handleInputChange('amcPeriodTo', new Date(e.target.value))}
+                                value={quotationData.amcPeriodTo && !isNaN(new Date(quotationData.amcPeriodTo).getTime()) ? new Date(quotationData.amcPeriodTo).toISOString().split('T')[0] : ''}
+                                min={quotationData.amcPeriodFrom && !isNaN(new Date(quotationData.amcPeriodFrom).getTime()) ? new Date(quotationData.amcPeriodFrom).toISOString().split('T')[0] : ''}
+                                onChange={(e) => {
+                                    const newEndDate = new Date(e.target.value);
+                                    handleInputChange('amcPeriodTo', newEndDate);
+                                }}
                                 className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${getErrorClass('amcPeriodTo')}`}
                             />
                             {getFieldError('amcPeriodTo') && (

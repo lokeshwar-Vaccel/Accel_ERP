@@ -63,7 +63,6 @@ export const getAMCQuotations = async (req: Request, res: Response, next: NextFu
     const [quotations, total] = await Promise.all([
       AMCQuotation.find(filter)
         .populate('location', 'name address type gstNumber')
-        .populate('customer', 'name email phone pan addresses')
         .populate('assignedEngineer', 'firstName lastName email phone')
         .skip(skip)
         .limit(limit)
@@ -71,10 +70,23 @@ export const getAMCQuotations = async (req: Request, res: Response, next: NextFu
       AMCQuotation.countDocuments(filter)
     ]);
 
+    // Populate customer data with addresses for each quotation
+    const quotationsWithCustomerData = await Promise.all(
+      quotations.map(async (quotation) => {
+        if (quotation.customer._id) {
+          const customer = await Customer.findById(quotation.customer._id, 'name email phone pan addresses');
+          if (customer) {
+            (quotation.customer as any).addresses = customer.addresses;
+          }
+        }
+        return quotation;
+      })
+    );
+
     const response: APIResponse = {
       success: true,
       message: 'AMC quotations retrieved successfully',
-      data: quotations,
+      data: quotationsWithCustomerData,
       pagination: {
         page,
         limit,
@@ -96,11 +108,18 @@ export const getAMCQuotationById = async (req: Request, res: Response, next: Nex
   try {
     const quotation = await AMCQuotation.findById(req.params.id)
       .populate('location', 'name address type gstNumber')
-      .populate('customer', 'name email phone pan addresses')
       .populate('assignedEngineer', 'firstName lastName email phone');
 
     if (!quotation) {
       return next(new AppError('AMC quotation not found', 404));
+    }
+
+    // Populate customer data with addresses
+    if (quotation.customer._id) {
+      const customer = await Customer.findById(quotation.customer._id, 'name email phone pan addresses');
+      if (customer) {
+        (quotation.customer as any).addresses = customer.addresses;
+      }
     }
 
     const response: APIResponse = {
@@ -828,34 +847,71 @@ export const sendAMCQuotationEmailToCustomer = async (
     const { id } = req.params;
 
     // Find the AMC quotation
-    const quotation = await AMCQuotation.findById(id)
-      .populate('customer', 'name email phone addresses');
+    const quotation = await AMCQuotation.findById(id);
 
     if (!quotation) {
       return next(new AppError('AMC Quotation not found', 404));
     }
 
+    // Populate customer data with addresses
+    let customer = quotation.customer as any;
+    if (quotation.customer._id) {
+      const customerData = await Customer.findById(quotation.customer._id, 'name email phone pan addresses');
+      if (customerData) {
+        customer = {
+          ...quotation.customer,
+          addresses: customerData.addresses
+        };
+      }
+    }
+
     // Get customer primary address email
-    const customer = quotation.customer as any;
     let primaryEmail = null;
 
+    console.log('Customer data for email:', {
+      customerId: customer._id,
+      customerName: customer.name,
+      customerEmail: customer.email,
+      addresses: customer.addresses,
+      addressesLength: customer.addresses?.length || 0
+    });
+
+    // First try to get primary address email
     if (customer.addresses && customer.addresses.length > 0) {
       const primaryAddress = customer.addresses.find((addr: any) => addr.isPrimary);
+      console.log('Primary address found:', primaryAddress);
       if (primaryAddress && primaryAddress.email) {
         primaryEmail = primaryAddress.email;
+        console.log('Using primary address email:', primaryEmail);
       }
     }
 
     // If no primary address email, try customer's main email
     if (!primaryEmail && customer.email) {
       primaryEmail = customer.email;
+      console.log('Using customer main email:', primaryEmail);
+    }
+
+    // If still no email, try to find any address with email
+    if (!primaryEmail && customer.addresses && customer.addresses.length > 0) {
+      const addressWithEmail = customer.addresses.find((addr: any) => addr.email);
+      if (addressWithEmail && addressWithEmail.email) {
+        primaryEmail = addressWithEmail.email;
+        console.log('Using first available address email:', primaryEmail);
+      }
     }
 
     if (!primaryEmail) {
+      console.log('No email found for customer:', customer._id);
       const response: APIResponse = {
         success: false,
-        message: 'Customer email not available for this AMC quotation',
-        data: null
+        message: 'Customer email not available for this AMC quotation. Please ensure customer has a valid email address.',
+        data: {
+          customerId: customer._id,
+          customerName: customer.name,
+          hasAddresses: customer.addresses && customer.addresses.length > 0,
+          addressesCount: customer.addresses?.length || 0
+        }
       };
       res.status(400).json(response);
       return;

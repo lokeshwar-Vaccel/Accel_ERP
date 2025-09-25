@@ -6237,23 +6237,32 @@ const InvoiceManagement: React.FC = () => {
                       const newFromDate = e.target.value;
                       if (invoiceType === 'quotation') {
                         setFromDate(newFromDate);
-                        // Clear toDate if it's earlier than the new fromDate
-                        if (toDate && newFromDate && new Date(newFromDate) > new Date(toDate)) {
-                          setToDate('');
+                        // Auto-adjust toDate if it's earlier than the new fromDate
+                        if (toDate && newFromDate && new Date(newFromDate) >= new Date(toDate)) {
+                          const startDate = new Date(newFromDate);
+                          const endDate = new Date(startDate);
+                          endDate.setFullYear(endDate.getFullYear() + 1);
+                          setToDate(endDate.toISOString().split('T')[0]);
                         }
                         validateDateRange(newFromDate, toDate);
                       } else if (invoiceType === 'sale') {
                         setFromDateSale(newFromDate);
-                        // Clear toDateSale if it's earlier than the new fromDateSale
-                        if (toDateSale && newFromDate && new Date(newFromDate) > new Date(toDateSale)) {
-                          setToDateSale('');
+                        // Auto-adjust toDateSale if it's earlier than the new fromDateSale
+                        if (toDateSale && newFromDate && new Date(newFromDate) >= new Date(toDateSale)) {
+                          const startDate = new Date(newFromDate);
+                          const endDate = new Date(startDate);
+                          endDate.setFullYear(endDate.getFullYear() + 1);
+                          setToDateSale(endDate.toISOString().split('T')[0]);
                         }
                         validateDateRange(newFromDate, toDateSale);
                       } else {
                         setFromDatePurchase(newFromDate);
-                        // Clear toDatePurchase if it's earlier than the new fromDatePurchase
-                        if (toDatePurchase && newFromDate && new Date(newFromDate) > new Date(toDatePurchase)) {
-                          setToDatePurchase('');
+                        // Auto-adjust toDatePurchase if it's earlier than the new fromDatePurchase
+                        if (toDatePurchase && newFromDate && new Date(newFromDate) >= new Date(toDatePurchase)) {
+                          const startDate = new Date(newFromDate);
+                          const endDate = new Date(startDate);
+                          endDate.setFullYear(endDate.getFullYear() + 1);
+                          setToDatePurchase(endDate.toISOString().split('T')[0]);
                         }
                         validateDateRange(newFromDate, toDatePurchase);
                       }
