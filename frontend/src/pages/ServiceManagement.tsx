@@ -441,6 +441,16 @@ const [engineerWorkStats, setEngineerWorkStats] = useState<any[]>([]);
     filteredOptions: []
   });
 
+  // Track if user is actively typing in customer field
+  const [isCustomerTyping, setIsCustomerTyping] = useState(false);
+
+  // Track if user is actively typing in other dropdown fields
+  const [isEngineTyping, setIsEngineTyping] = useState(false);
+  const [isAssigneeTyping, setIsAssigneeTyping] = useState(false);
+  const [isAddressTyping, setIsAddressTyping] = useState(false);
+  const [isTypeOfVisitTyping, setIsTypeOfVisitTyping] = useState(false);
+  const [isTypeOfServiceTyping, setIsTypeOfServiceTyping] = useState(false);
+
   const [engineDropdown, setEngineDropdown] = useState<DropdownState>({
     isOpen: false,
     searchTerm: '',
@@ -1540,6 +1550,13 @@ const [engineerWorkStats, setEngineerWorkStats] = useState<any[]>([]);
 
     setAssigneeDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '', selectedIndex: 0 }));
     
+    // Reset typing state
+    setIsCustomerTyping(false);
+    setIsEngineTyping(false);
+    setIsAssigneeTyping(false);
+    setIsAddressTyping(false);
+    setIsTypeOfVisitTyping(false);
+    setIsTypeOfServiceTyping(false);
 
   };
 
@@ -3073,6 +3090,9 @@ const rows = engineerReportRows.map((r: any) =>
       // Close current dropdown
       setDropdownState(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
       
+      // Reset typing state
+      setIsCustomerTyping(false);
+      
       // Move to next dropdown after selection
       moveToNextDropdown(type);
       return;
@@ -3120,6 +3140,9 @@ const rows = engineerReportRows.map((r: any) =>
 
       setDropdownState(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
 
+      // Reset typing state
+      setIsEngineTyping(false);
+
       moveToNextDropdown(type);
       return;
     }
@@ -3138,6 +3161,9 @@ const rows = engineerReportRows.map((r: any) =>
       
       // Close current dropdown
       setDropdownState(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
+      
+      // Reset typing state
+      setIsAddressTyping(false);
       
       // Move to Service Request Type field after selection
       setTimeout(() => {
@@ -3164,6 +3190,9 @@ const rows = engineerReportRows.map((r: any) =>
       // Close current dropdown
       setDropdownState(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
       
+      // Reset typing state
+      setIsTypeOfVisitTyping(false);
+      
       // Move to next dropdown after selection
       moveToNextDropdown(type);
       return;
@@ -3183,6 +3212,9 @@ const rows = engineerReportRows.map((r: any) =>
       
       // Close current dropdown
       setDropdownState(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
+      
+      // Reset typing state
+      setIsTypeOfServiceTyping(false);
       
       // Move to next field after selection
       moveToNextDropdown(type);
@@ -3212,6 +3244,11 @@ const rows = engineerReportRows.map((r: any) =>
 
     // Close current dropdown
     setDropdownState(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
+
+    // Reset typing state for assignee
+    if (type === 'assignee') {
+      setIsAssigneeTyping(false);
+    }
 
     // Move to next dropdown after selection
     moveToNextDropdown(type);
@@ -3683,8 +3720,9 @@ const rows = engineerReportRows.map((r: any) =>
                   <div className="relative">
                     <input
                       type="text"
-                      value={customerDropdown.searchTerm || (ticketFormData.customer ? customers.find(c => c._id === ticketFormData.customer)?.name || '' : '')}
+                      value={isCustomerTyping ? customerDropdown.searchTerm : (ticketFormData.customer ? customers.find(c => c._id === ticketFormData.customer)?.name || '' : '')}
                       onChange={(e) => {
+                        setIsCustomerTyping(true);
                         setCustomerDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
                         handleDropdownSearch('customer', e.target.value);
                         // Clear error when user starts typing
@@ -3693,7 +3731,10 @@ const rows = engineerReportRows.map((r: any) =>
                         }
                       }}
                       onKeyDown={(e) => handleDropdownKeyDown('customer', e, customerDropdown.filteredOptions, (value) => handleDropdownSelect('customer', value))}
-                      onFocus={() => handleDropdownFocus('customer')}
+                      onFocus={() => {
+                        setIsCustomerTyping(false);
+                        handleDropdownFocus('customer');
+                      }}
                       onBlur={() => {
                         // Delay closing to allow for clicks on dropdown items
                         setTimeout(() => {
@@ -3743,8 +3784,9 @@ const rows = engineerReportRows.map((r: any) =>
                   <div className="relative">
                     <input
                       type="text"
-                      value={engineDropdown.searchTerm || ticketFormData.engineSerialNumber || ''}
+                      value={isEngineTyping ? engineDropdown.searchTerm : (ticketFormData.engineSerialNumber || '')}
                       onChange={(e) => {
+                        setIsEngineTyping(true);
                         setEngineDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
                         handleDropdownSearch('engine', e.target.value);
                         // Clear error when user starts typing
@@ -3753,7 +3795,10 @@ const rows = engineerReportRows.map((r: any) =>
                         }
                       }}
                       onKeyDown={(e) => handleDropdownKeyDown('engine', e, engineDropdown.filteredOptions, (value) => handleDropdownSelect('engine', value))}
-                      onFocus={() => handleDropdownFocus('engine')}
+                      onFocus={() => {
+                        setIsEngineTyping(false);
+                        handleDropdownFocus('engine');
+                      }}
                       onBlur={() => {
                         // Delay closing to allow for clicks on dropdown items
                         setTimeout(() => {
@@ -3810,8 +3855,9 @@ const rows = engineerReportRows.map((r: any) =>
                   <div className="relative">
                     <input
                       type="text"
-                      value={assigneeDropdown.searchTerm || (ticketFormData.assignedTo ? users.find(u => u._id === ticketFormData.assignedTo)?.fullName || '' : '')}
+                      value={isAssigneeTyping ? assigneeDropdown.searchTerm : (ticketFormData.assignedTo ? users.find(u => u._id === ticketFormData.assignedTo)?.fullName || '' : '')}
                       onChange={(e) => {
+                        setIsAssigneeTyping(true);
                         setAssigneeDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
                         handleDropdownSearch('assignee', e.target.value);
                         // Clear error when user starts typing
@@ -3820,7 +3866,10 @@ const rows = engineerReportRows.map((r: any) =>
                         }
                       }}
                       onKeyDown={(e) => handleDropdownKeyDown('assignee', e, assigneeDropdown.filteredOptions, (value) => handleDropdownSelect('assignee', value))}
-                      onFocus={() => handleDropdownFocus('assignee')}
+                      onFocus={() => {
+                        setIsAssigneeTyping(false);
+                        handleDropdownFocus('assignee');
+                      }}
                       onBlur={() => {
                         // Delay closing to allow for clicks on dropdown items
                         setTimeout(() => {
@@ -3918,8 +3967,9 @@ const rows = engineerReportRows.map((r: any) =>
                   <div className="relative">
                     <input
                       type="text"
-                      value={addressDropdown.searchTerm || ticketFormData.selectedAddress || ''}
+                      value={isAddressTyping ? addressDropdown.searchTerm : (ticketFormData.selectedAddress || '')}
                       onChange={(e) => {
+                        setIsAddressTyping(true);
                         setAddressDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
                         handleDropdownSearch('address', e.target.value);
                       }}
@@ -3937,6 +3987,7 @@ const rows = engineerReportRows.map((r: any) =>
                         }
                       }}
                       onFocus={() => {
+                        setIsAddressTyping(false);
                         handleDropdownFocus('address');
                         // Ensure the dropdown opens when focused
                         setAddressDropdown(prev => ({ ...prev, isOpen: true }));
@@ -4089,8 +4140,9 @@ const rows = engineerReportRows.map((r: any) =>
                     <div className="relative">
                       <input
                         type="text"
-                        value={typeOfVisitDropdown.searchTerm || (ticketFormData.typeOfVisit ? typeOfVisitOptions.find(opt => opt.value === ticketFormData.typeOfVisit)?.label || '' : '')}
+                        value={isTypeOfVisitTyping ? typeOfVisitDropdown.searchTerm : (ticketFormData.typeOfVisit ? typeOfVisitOptions.find(opt => opt.value === ticketFormData.typeOfVisit)?.label || '' : '')}
                       onChange={(e) => {
+                          setIsTypeOfVisitTyping(true);
                           setTypeOfVisitDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
                           handleDropdownSearch('typeOfVisit', e.target.value);
                           // Clear error when user starts typing
@@ -4099,7 +4151,10 @@ const rows = engineerReportRows.map((r: any) =>
                         }
                       }}
                         onKeyDown={(e) => handleDropdownKeyDown('typeOfVisit', e, typeOfVisitDropdown.filteredOptions, (value) => handleDropdownSelect('typeOfVisit', value))}
-                        onFocus={() => handleDropdownFocus('typeOfVisit')}
+                        onFocus={() => {
+                          setIsTypeOfVisitTyping(false);
+                          handleDropdownFocus('typeOfVisit');
+                        }}
                         onBlur={() => {
                           // Delay closing to allow for clicks on dropdown items
                           setTimeout(() => {
@@ -4148,8 +4203,9 @@ const rows = engineerReportRows.map((r: any) =>
                     <div className="relative">
                       <input
                         type="text"
-                        value={typeOfServiceDropdown.searchTerm || (ticketFormData.typeOfService ? typeOfServiceOptions.find(opt => opt.value === ticketFormData.typeOfService)?.label || '' : '')}
+                        value={isTypeOfServiceTyping ? typeOfServiceDropdown.searchTerm : (ticketFormData.typeOfService ? typeOfServiceOptions.find(opt => opt.value === ticketFormData.typeOfService)?.label || '' : '')}
                       onChange={(e) => {
+                          setIsTypeOfServiceTyping(true);
                           setTypeOfServiceDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
                           handleDropdownSearch('typeOfService', e.target.value);
                           // Clear error when user starts typing
@@ -4158,7 +4214,10 @@ const rows = engineerReportRows.map((r: any) =>
                         }
                       }}
                         onKeyDown={(e) => handleDropdownKeyDown('typeOfService', e, typeOfServiceDropdown.filteredOptions, (value) => handleDropdownSelect('typeOfService', value))}
-                        onFocus={() => handleDropdownFocus('typeOfService')}
+                        onFocus={() => {
+                          setIsTypeOfServiceTyping(false);
+                          handleDropdownFocus('typeOfService');
+                        }}
                         onBlur={() => {
                           // Delay closing to allow for clicks on dropdown items
                           setTimeout(() => {
@@ -4401,8 +4460,9 @@ const rows = engineerReportRows.map((r: any) =>
                     <div className="relative">
                       <input
                         type="text"
-                        value={customerDropdown.searchTerm || (ticketFormData.customer ? customers.find(c => c._id === ticketFormData.customer)?.name || '' : '')}
+                        value={isCustomerTyping ? customerDropdown.searchTerm : (ticketFormData.customer ? customers.find(c => c._id === ticketFormData.customer)?.name || '' : '')}
                         onChange={(e) => {
+                          setIsCustomerTyping(true);
                           setCustomerDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
                           handleDropdownSearch('customer', e.target.value);
                           if (formErrors.customer) {
@@ -4410,7 +4470,10 @@ const rows = engineerReportRows.map((r: any) =>
                           }
                         }}
                         onKeyDown={(e) => handleDropdownKeyDown('customer', e, customerDropdown.filteredOptions, (value) => handleDropdownSelect('customer', value))}
-                        onFocus={() => handleDropdownFocus('customer')}
+                        onFocus={() => {
+                          setIsCustomerTyping(false);
+                          handleDropdownFocus('customer');
+                        }}
                         onBlur={() => {
                           setTimeout(() => {
                             setCustomerDropdown(prev => ({ ...prev, isOpen: false }));
@@ -4459,8 +4522,9 @@ const rows = engineerReportRows.map((r: any) =>
                     <div className="relative">
                       <input
                         type="text"
-                        value={assigneeDropdown.searchTerm || (ticketFormData.assignedTo ? users.find(u => u._id === ticketFormData.assignedTo)?.fullName || '' : '')}
+                        value={isAssigneeTyping ? assigneeDropdown.searchTerm : (ticketFormData.assignedTo ? users.find(u => u._id === ticketFormData.assignedTo)?.fullName || '' : '')}
                         onChange={(e) => {
+                          setIsAssigneeTyping(true);
                           setAssigneeDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
                           handleDropdownSearch('assignee', e.target.value);
                           if (formErrors.assignedTo) {
@@ -4468,7 +4532,10 @@ const rows = engineerReportRows.map((r: any) =>
                           }
                         }}
                         onKeyDown={(e) => handleDropdownKeyDown('assignee', e, assigneeDropdown.filteredOptions, (value) => handleDropdownSelect('assignee', value))}
-                        onFocus={() => handleDropdownFocus('assignee')}
+                        onFocus={() => {
+                          setIsAssigneeTyping(false);
+                          handleDropdownFocus('assignee');
+                        }}
                         onBlur={() => {
                           setTimeout(() => {
                             setAssigneeDropdown(prev => ({ ...prev, isOpen: false }));
@@ -4590,8 +4657,9 @@ const rows = engineerReportRows.map((r: any) =>
                     <div className="relative">
                       <input
                         type="text"
-                        value={engineDropdown.searchTerm || ticketFormData.engineSerialNumber || ''}
+                        value={isEngineTyping ? engineDropdown.searchTerm : (ticketFormData.engineSerialNumber || '')}
                         onChange={(e) => {
+                          setIsEngineTyping(true);
                           setEngineDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
                           handleDropdownSearch('engine', e.target.value);
                           if (formErrors.engineSerialNumber) {
@@ -4599,7 +4667,10 @@ const rows = engineerReportRows.map((r: any) =>
                           }
                         }}
                         onKeyDown={(e) => handleDropdownKeyDown('engine', e, engineDropdown.filteredOptions, (value) => handleDropdownSelect('engine', value))}
-                        onFocus={() => handleDropdownFocus('engine')}
+                        onFocus={() => {
+                          setIsEngineTyping(false);
+                          handleDropdownFocus('engine');
+                        }}
                         onBlur={() => {
                           setTimeout(() => {
                             setEngineDropdown(prev => ({ ...prev, isOpen: false }));
@@ -4714,13 +4785,15 @@ const rows = engineerReportRows.map((r: any) =>
                     <div className="relative">
                       <input
                         type="text"
-                        value={addressDropdown.searchTerm || ticketFormData.selectedAddress || ''}
+                        value={isAddressTyping ? addressDropdown.searchTerm : (ticketFormData.selectedAddress || '')}
                         onChange={(e) => {
+                          setIsAddressTyping(true);
                           setAddressDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
                           handleDropdownSearch('address', e.target.value);
                         }}
                         onKeyDown={(e) => handleDropdownKeyDown('address', e, addressDropdown.filteredOptions, (value) => handleDropdownSelect('address', value))}
                         onFocus={() => {
+                          setIsAddressTyping(false);
                           handleDropdownFocus('address');
                           setAddressDropdown(prev => ({ ...prev, isOpen: true }));
                         }}

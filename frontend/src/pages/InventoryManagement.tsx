@@ -505,34 +505,53 @@ const InventoryManagement: React.FC = () => {
 
   const locationOptions = [
     { value: '', label: 'Select a location' },
-    ...locations.map(location => ({
-      value: location._id,
-      label: location.name
-    }))
+    // sort locations by name (case-insensitive)
+    ...[...locations]
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }))
+      .map(location => ({
+        value: location._id,
+        label: location.name
+      }))
   ];
 
   const roomOptions = [
     { value: '', label: roomFormData.location ? 'Select a room' : 'Select location first' },
-    ...filteredRooms.map(room => ({
-      value: room._id,
-      label: room.name
-    }))
+    ...[...filteredRooms]
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+      .map(room => ({
+        value: room._id,
+        label: room.name
+      }))
   ];
   const roomOptionsFilter = [
     { value: '', label: 'Select a room' },
-    ...rooms.map(room => ({
-      value: room._id,
-      label: room.name
-    }))
+    // sort rooms by name (numeric aware)
+    ...[...rooms]
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }))
+      .map(room => ({
+        value: room._id,
+        label: room.name
+      }))
   ];
   const rackOptionsFilter = [
     { value: '', label: 'Select a rack' },
-    ...racks.map(room => ({
-      value: room._id,
-      label: room.name
-    }))
+    // sort racks alphanumerically (so A1, A2, A10 behave correctly)
+    ...[...racks]
+      .slice()
+      .sort((a, b) => {
+        // if rack name missing, keep stable
+        if (!a?.name) return 1;
+        if (!b?.name) return -1;
+        return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+      })
+      .map(rack => ({
+        value: rack._id,
+        label: rack.name
+      }))
   ];
-
   // Extract unique departments from all products
   const uniqueDepts = Array.from(
     new Set(products.map(product => product.dept).filter(Boolean))

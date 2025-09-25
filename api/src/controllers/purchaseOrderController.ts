@@ -80,10 +80,11 @@ export const getPurchaseOrders = async (
       query.supplier = { $regex: supplier, $options: 'i' };
     }
 
+    // Filter by expected delivery date (inclusive of selected dates)
     if (dateFrom || dateTo) {
-      query.orderDate = {};
-      if (dateFrom) query.orderDate.$gte = new Date(dateFrom);
-      if (dateTo) query.orderDate.$lte = new Date(dateTo);
+      query.expectedDeliveryDate = {};
+      if (dateFrom) query.expectedDeliveryDate.$gte = new Date(dateFrom);
+      if (dateTo) query.expectedDeliveryDate.$lte = new Date(dateTo);
     }
 
     if (totalPurchaseOrdersStatus) {

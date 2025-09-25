@@ -78,6 +78,7 @@ export const getAllCustomersForDropdown = async (
     // Execute query without pagination - get all customers
     const customers = await Customer.find(query)
       .select('_id name alice panNumber email phone customerId customerType type status contactPersonName notes addresses')
+      .collation({ locale: 'en', strength: 2 }) // Case-insensitive sorting
       .sort({ name: 1 }) // Sort by name alphabetically
       .lean();
 
@@ -219,6 +220,7 @@ export const getCustomers = async (
       .populate('assignedTo', 'firstName lastName email')
       .populate('createdBy', 'firstName lastName email')
       .populate('dgDetails')
+      .collation({ locale: 'en', strength: 2 }) // Case-insensitive sorting
       .sort(sort as string)
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit));
@@ -857,6 +859,7 @@ export const getOEMCustomers = async (
     const [oems, total] = await Promise.all([
       OEM.find(query)
         .populate('createdBy', 'firstName lastName email')
+        .collation({ locale: 'en', strength: 2 }) // Case-insensitive sorting
         .sort(sortObj)
         .skip(skip)
         .limit(limitNum)
@@ -975,6 +978,7 @@ export const getConvertedCustomers = async (
       Customer.find(query)
         .populate('assignedTo', 'name email')
         .populate('createdBy', 'name email')
+        .collation({ locale: 'en', strength: 2 }) // Case-insensitive sorting
         .sort(sortObj)
         .skip(skip)
         .limit(limitNum)

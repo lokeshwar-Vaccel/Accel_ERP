@@ -96,6 +96,7 @@ export const getProducts = async (
     
     const products = await Product.find(query)
       .populate('createdBy', 'firstName lastName email')
+      .collation({ locale: 'en', strength: 2 }) // Case-insensitive sorting
       .sort(sort as string)
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit));
@@ -275,6 +276,7 @@ export const getProductsForDropdown = async (
     // Execute query without pagination, optimized for dropdown
     const products = await Product.find(query)
       .select('name partNo hsnNumber category brand price isActive') // Only essential fields
+      .collation({ locale: 'en', strength: 2 }) // Case-insensitive sorting
       .sort({ name: 1 }) // Sort by name for better UX
       .limit(Number(limit));
 

@@ -179,7 +179,7 @@ interface ReceiveItemsData {
   // New shipping and documentation fields
   shipDate: string;
   docketNumber: string;
-  noOfPackages: number;
+  noOfPackages: string | number;
   gstInvoiceNumber: string;
   invoiceDate: string;
   documentNumber: string;
@@ -224,6 +224,8 @@ const PurchaseOrderManagement: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | 'all'>('all');
   const [supplierFilter, setSupplierFilter] = useState('');
   const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [showCreateSupplierDropdown, setShowCreateSupplierDropdown] = useState(false);
   const [showEditSupplierDropdown, setShowEditSupplierDropdown] = useState(false);
 
@@ -528,9 +530,9 @@ const PurchaseOrderManagement: React.FC = () => {
       sort,
       search: searchTerm,
       ...(statusFilter !== 'all' && { status: statusFilter }),
+      ...(dateFrom && { dateFrom }),
+      ...(dateTo && { dateTo }),
       // ...(leadSourceFilter && { leadSource: leadSourceFilter }),
-      // ...(dateFrom && { dateFrom }),
-      // ...(dateTo && { dateTo }),
       // ...(assignedToParam && { assignedTo: assignedToParam }),
     };
 
@@ -563,7 +565,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
   useEffect(() => {
     fetchPurchaseOrders();
-  }, [currentPage, limit, sort, searchTerm, statusFilter]);
+  }, [currentPage, limit, sort, searchTerm, statusFilter, dateFrom, dateTo]);
 
 
   const fetchProducts = async () => {
@@ -1035,7 +1037,7 @@ const PurchaseOrderManagement: React.FC = () => {
       allErrors.shipDate = 'Ship Date is required';
     }
 
-    if (!receiveData.noOfPackages || receiveData.noOfPackages <= 0) {
+    if (!receiveData.noOfPackages || Number(receiveData.noOfPackages) <= 0) {
       allErrors.noOfPackages = 'Number of Packages must be greater than 0';
     }
 
@@ -1202,7 +1204,9 @@ const PurchaseOrderManagement: React.FC = () => {
 
       // Get all purchase orders from backend (not just filtered ones)
       const response = await apiClient.purchaseOrders.getAll({
-        sort: '-createdAt'
+        sort: '-createdAt',
+        ...(dateFrom && { dateFrom }),
+        ...(dateTo && { dateTo }),
       });
 
       let allPurchaseOrders: PurchaseOrder[] = [];
@@ -2489,7 +2493,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
 
 
-  const hasActiveFilters = statusFilter !== ('all' as PurchaseOrderStatus | 'all') || searchTerm !== '';
+  const hasActiveFilters = statusFilter !== ('all' as PurchaseOrderStatus | 'all') || searchTerm !== '' || dateFrom !== '' || dateTo !== '';
 
   return (
     <div className="p-4 space-y-3">
@@ -2620,6 +2624,27 @@ const PurchaseOrderManagement: React.FC = () => {
             )}
           </div>
 
+          {/* Date Filters */}
+          <div className="relative">
+            <input
+              type="date"
+              placeholder="From Expected Delivery Date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            />
+          </div>
+
+          <div className="relative">
+            <input
+              type="date"
+              placeholder="To Expected Delivery Date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+            />
+          </div>
+
           {/* Supplier Custom Dropdown */}
           {/* <div className="relative dropdown-container">
             <button
@@ -2674,6 +2699,31 @@ const PurchaseOrderManagement: React.FC = () => {
                   <button onClick={() => setSearchTerm('')} className="ml-1 text-gray-500 hover:text-gray-700">×</button>
                 </span>
               )}
+              {dateFrom && (
+                <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs flex items-center">
+                  Expected Delivery From: {new Date(dateFrom).toLocaleDateString()}
+                  <button onClick={() => setDateFrom('')} className="ml-1 text-green-500 hover:text-green-700">×</button>
+                </span>
+              )}
+              {dateTo && (
+                <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs flex items-center">
+                  Expected Delivery To: {new Date(dateTo).toLocaleDateString()}
+                  <button onClick={() => setDateTo('')} className="ml-1 text-green-500 hover:text-green-700">×</button>
+                </span>
+              )}
+            </div>
+            <div className="px-4 pt-2">
+              <button
+                onClick={() => {
+                  setStatusFilter('all');
+                  setSearchTerm('');
+                  setDateFrom('');
+                  setDateTo('');
+                }}
+                className="text-xs text-gray-500 hover:text-gray-700 underline"
+              >
+                Clear all filters
+              </button>
             </div>
           </div>
         )}
@@ -3629,7 +3679,7 @@ const PurchaseOrderManagement: React.FC = () => {
                       onChange={(e) => {
                         const val = e.target.value;
                         // keep empty string while user is deleting; otherwise store numeric value
-                        setReceiveData(prev => ({ ...prev, noOfPackages: val === '' ? '' : parseInt(val, 10) }));
+                        setReceiveData(prev => ({ ...prev, noOfPackages: val === '' ? '' : parseInt(val, 10) || 0 }));
                       }}
                       placeholder="0"
                       min="1"

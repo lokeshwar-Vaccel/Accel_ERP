@@ -330,6 +330,7 @@ export const getServiceTickets = async (
       .populate('ServiceEngineerName', 'firstName lastName email')
       .populate('createdBy', 'firstName lastName email')
       .populate('partsUsed.product', 'name category price')
+      .collation({ locale: 'en', strength: 2 }) // Case-insensitive sorting
       .sort(sort as string)
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit));

@@ -72,6 +72,7 @@ export const getUsers = async (
 
     const users = await User.find(query)
       .populate('createdBy', 'firstName lastName email')
+      .collation({ locale: 'en', strength: 2 }) // Case-insensitive sorting
       .sort(sort as string)
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit));
@@ -540,6 +541,7 @@ export const getFieldEngineers = async (
       status: UserStatus.ACTIVE
     })
     .select('_id firstName lastName email phone')
+    .collation({ locale: 'en', strength: 2 }) // Case-insensitive sorting
     .sort({ firstName: 1, lastName: 1 });
 
     const response: APIResponse = {
@@ -578,6 +580,7 @@ export const getSalesEngineers = async (
       status: UserStatus.ACTIVE
     })
     .select('_id firstName lastName email phone salesEmployeeCode status')
+    .collation({ locale: 'en', strength: 2 }) // Case-insensitive sorting
     .sort({ firstName: 1, lastName: 1 });
 
     const response: APIResponse = {
@@ -652,6 +655,7 @@ export const getAllUsersForDropdown = async (
     // Execute query without pagination - get all users
     const users = await User.find(query)
       .select('_id firstName lastName email phone role status department salesEmployeeCode')
+      .collation({ locale: 'en', strength: 2 }) // Case-insensitive sorting
       .sort({ firstName: 1, lastName: 1 }) // Sort by name alphabetically
       .lean();
 
