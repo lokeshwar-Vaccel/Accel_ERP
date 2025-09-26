@@ -208,6 +208,9 @@ interface Address {
 const ServiceManagement: React.FC = () => {
   const location = useLocation();
 
+  // Sub-tab state for Retail and EV
+  const [activeSubTab, setActiveSubTab] = useState<'retail' | 'ev'>('retail');
+
   // Helper function to generate service request number for manual creation
   const generateServiceRequestNumber = () => {
     const now = new Date();
@@ -3320,8 +3323,39 @@ const rows = engineerReportRows.map((r: any) =>
         </div>
       </PageHeader>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Sub-tabs for Retail and EV */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="border-b border-gray-200">
+          <nav className="flex space-x-8 px-6" aria-label="Tabs">
+            <button
+              onClick={() => setActiveSubTab('retail')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeSubTab === 'retail'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Retail
+            </button>
+            <button
+              onClick={() => setActiveSubTab('ev')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeSubTab === 'ev'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              EV
+            </button>
+          </nav>
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      {activeSubTab === 'retail' && (
+        <>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
           <div key={index} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between">
@@ -3684,6 +3718,29 @@ const rows = engineerReportRows.map((r: any) =>
             totalItems={totalDatas}
             itemsPerPage={limit}
           />
+        </div>
+      )}
+        </>
+      )}
+
+      {/* EV Tab Content */}
+      {activeSubTab === 'ev' && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+          <div className="text-center">
+            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 mb-4">
+              <svg className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">EV Service Management</h3>
+            <p className="text-gray-500 mb-6">EV-specific service management features will be available here.</p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-800">
+                This section is reserved for Electric Vehicle service management functionality. 
+                Features will be added based on specific EV service requirements.
+              </p>
+            </div>
+          </div>
         </div>
       )}
 

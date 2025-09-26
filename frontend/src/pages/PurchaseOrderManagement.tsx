@@ -1218,16 +1218,101 @@ const PurchaseOrderManagement: React.FC = () => {
         }
       }
 
-      // Prepare data for export - only required fields with complete data
-      const exportData = allPurchaseOrders.map((po, index) => ({
-        'Status': getStatusLabel(po.status),
-        'Order Approval Date': po.approvedBy ? formatDate(po.updatedAt) : 'Not Approved',
-        'Order No': po.poNumber,
-        'Order Date': formatDate(po.orderDate),
-        'Order Category': po.department ? getDepartmentLabel(po.department) : 'Not specified',
-        'Order Type': getPurchaseOrderTypeLabel(po.purchaseOrderType),
-        'Order Value': Number(po.totalAmount).toFixed(2) // Ensure 2 decimal places and convert to number first
-      }));
+      // Prepare data for export - all fields visible in the table
+      const exportData = allPurchaseOrders.map((po, index) => {
+        const supplier = typeof po.supplier === 'string' ? null : (po.supplier as Supplier);
+        const supplierEmail = typeof po.supplierEmail === 'string' ? po.supplierEmail : (po.supplierEmail as any)?.email;
+        
+        // Helper function to get payment method details as string
+        const getPaymentMethodDetails = (method: string, details: PaymentMethodDetails) => {
+          if (!details) return '';
+          
+          switch (method) {
+            case 'cash':
+              return details.cash ? `Received By: ${details.cash.receivedBy || 'N/A'}, Receipt: ${details.cash.receiptNumber || 'N/A'}` : '';
+            case 'cheque':
+              return details.cheque ? `Cheque No: ${details.cheque.chequeNumber || 'N/A'}, Bank: ${details.cheque.bankName || 'N/A'}, Branch: ${details.cheque.branchName || 'N/A'}` : '';
+            case 'bank_transfer':
+              return details.bankTransfer ? `Bank: ${details.bankTransfer.bankName || 'N/A'}, Account: ${details.bankTransfer.accountNumber || 'N/A'}, IFSC: ${details.bankTransfer.ifscCode || 'N/A'}` : '';
+            case 'upi':
+              return details.upi ? `UPI ID: ${details.upi.upiId || 'N/A'}, Transaction ID: ${details.upi.transactionId || 'N/A'}` : '';
+            case 'card':
+              return details.card ? `Card Type: ${details.card.cardType || 'N/A'}, Network: ${details.card.cardNetwork || 'N/A'}, Last 4: ${details.card.lastFourDigits || 'N/A'}` : '';
+            default:
+              return details.other ? `Method: ${details.other.methodName || 'N/A'}, Reference: ${details.other.referenceNumber || 'N/A'}` : '';
+          }
+        };
+
+        // Helper function to get supplier contact details
+        const getSupplierContactDetails = () => {
+          if (!supplier) return 'N/A';
+          return `Phone: ${supplier.phone || 'N/A'}, Contact Person: ${supplier.contactPerson || 'N/A'}, Type: ${supplier.type || 'N/A'}`;
+        };
+
+        // Helper function to get supplier bank details
+        const getSupplierBankDetails = () => {
+          if (!supplier?.bankDetails) return 'N/A';
+          const bank = supplier.bankDetails;
+          return `Bank: ${bank.bankName || 'N/A'}, Account: ${bank.accountNo || 'N/A'}, IFSC: ${bank.ifsc || 'N/A'}, Branch: ${bank.branch || 'N/A'}`;
+        };
+
+        // Helper function to get supplier addresses
+        const getSupplierAddresses = () => {
+          if (!supplier?.addresses || supplier.addresses.length === 0) return 'N/A';
+          return supplier.addresses.map(addr => 
+            `${addr.address}, ${addr.state}, ${addr.district}, ${addr.pincode}${addr.gstNumber ? ` (GST: ${addr.gstNumber})` : ''}${addr.isPrimary ? ' [Primary]' : ''}`
+          ).join('; ');
+        };
+
+        // Helper function to get items details
+        const getItemsDetails = () => {
+          return po.items.map(item => {
+            const product = typeof item.product === 'string' ? item.product : item.product.name;
+            return `${product} (Qty: ${item.quantity}, Price: ₹${item.unitPrice}, Total: ₹${item.totalPrice})`;
+          }).join('; ');
+        };
+
+        return {
+          'S.No': index + 1,
+          'PO ID': po._id,
+          'Purchase Order No.': po.poNumber,
+          'Supplier Name': supplier?.name || 'Unknown Supplier',
+          'Supplier Email': supplierEmail || 'No Email',
+          'Supplier Phone': supplier?.phone || 'N/A',
+          'Supplier Contact Person': supplier?.contactPerson || 'N/A',
+          'Supplier Type': supplier?.type || 'N/A',
+          'Supplier Contact Details': getSupplierContactDetails(),
+          'Supplier Bank Details': getSupplierBankDetails(),
+          'Supplier Addresses': getSupplierAddresses(),
+          'Order Date': formatDate(po.orderDate),
+          'Expected Delivery Date': po.expectedDeliveryDate ? formatDate(po.expectedDeliveryDate) : 'Not set',
+          'Actual Delivery Date': po.actualDeliveryDate ? formatDate(po.actualDeliveryDate) : 'Not delivered',
+          'Department': po.department ? getDepartmentLabel(po.department) : 'Not specified',
+          'PO Type': getPurchaseOrderTypeLabel(po.purchaseOrderType),
+          'Priority': po.priority ? po.priority.charAt(0).toUpperCase() + po.priority.slice(1) : 'Not set',
+          'Source Type': po.sourceType ? po.sourceType.charAt(0).toUpperCase() + po.sourceType.slice(1) : 'Manual',
+          'Source ID': po.sourceId || 'N/A',
+          'Status': getStatusLabel(po.status),
+          'Delivery Status': po.deliveryStatus ? po.deliveryStatus.replace('_', ' ') : 'Not set',
+          'Days Until Delivery': po.daysUntilDelivery || 'N/A',
+          'Total Amount': Number(po.totalAmount.toFixed(2)),
+          'Paid Amount': Number((po.paidAmount || 0).toFixed(2)),
+          'Remaining Amount': Number((po.remainingAmount || po.totalAmount).toFixed(2)),
+          'Payment Status': po.paymentStatus ? po.paymentStatus.charAt(0).toUpperCase() + po.paymentStatus.slice(1) : 'Pending',
+          'Payment Method': po.paymentMethod ? po.paymentMethod.charAt(0).toUpperCase() + po.paymentMethod.slice(1) : 'N/A',
+          'Payment Method Details': po.paymentMethodDetails ? getPaymentMethodDetails(po.paymentMethod || '', po.paymentMethodDetails) : 'N/A',
+          'Payment Date': po.paymentDate ? formatDate(po.paymentDate) : 'N/A',
+          'Items Count': po.items.length,
+          'Items Details': getItemsDetails(),
+          'Attachments Count': po.attachments ? po.attachments.length : 0,
+          'Attachments': po.attachments ? po.attachments.join(', ') : 'No attachments',
+          'Approved By': po.approvedBy || 'N/A',
+          'Created By': getCreatedByName(po.createdBy),
+          'Created At': formatDateTime(po.createdAt),
+          'Updated At': formatDateTime(po.updatedAt),
+          'Notes': po.notes || 'No notes'
+        };
+      });
 
       // Create Excel workbook with proper formatting
       const workbook = XLSX.utils.book_new();
@@ -1237,13 +1322,44 @@ const PurchaseOrderManagement: React.FC = () => {
 
       // Set column widths for better display
       const columnWidths = [
-        { wch: 25 }, // Status - wide enough for long status text
-        { wch: 20 }, // Order Approval Date
-        { wch: 25 }, // Order No - wide enough for long PO numbers
-        { wch: 15 }, // Order Date
-        { wch: 25 }, // Order Category - wide enough for department names
-        { wch: 25 }, // Order Type - wide enough for type names
-        { wch: 15 }  // Order Value
+        { wch: 8 },   // S.No
+        { wch: 25 },  // PO ID
+        { wch: 25 },  // Purchase Order No.
+        { wch: 25 },  // Supplier Name
+        { wch: 30 },  // Supplier Email
+        { wch: 15 },  // Supplier Phone
+        { wch: 20 },  // Supplier Contact Person
+        { wch: 15 },  // Supplier Type
+        { wch: 50 },  // Supplier Contact Details
+        { wch: 50 },  // Supplier Bank Details
+        { wch: 60 },  // Supplier Addresses
+        { wch: 15 },  // Order Date
+        { wch: 20 },  // Expected Delivery Date
+        { wch: 20 },  // Actual Delivery Date
+        { wch: 20 },  // Department
+        { wch: 15 },  // PO Type
+        { wch: 12 },  // Priority
+        { wch: 15 },  // Source Type
+        { wch: 20 },  // Source ID
+        { wch: 25 },  // Status
+        { wch: 18 },  // Delivery Status
+        { wch: 18 },  // Days Until Delivery
+        { wch: 15 },  // Total Amount
+        { wch: 15 },  // Paid Amount
+        { wch: 18 },  // Remaining Amount
+        { wch: 15 },  // Payment Status
+        { wch: 15 },  // Payment Method
+        { wch: 50 },  // Payment Method Details
+        { wch: 15 },  // Payment Date
+        { wch: 12 },  // Items Count
+        { wch: 80 },  // Items Details
+        { wch: 15 },  // Attachments Count
+        { wch: 40 },  // Attachments
+        { wch: 20 },  // Approved By
+        { wch: 20 },  // Created By
+        { wch: 20 },  // Created At
+        { wch: 20 },  // Updated At
+        { wch: 30 }   // Notes
       ];
 
       worksheet['!cols'] = columnWidths;
@@ -2625,24 +2741,27 @@ const PurchaseOrderManagement: React.FC = () => {
           </div>
 
           {/* Date Filters */}
-          <div className="relative">
-            <input
-              type="date"
-              placeholder="From Expected Delivery Date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-            />
-          </div>
-
-          <div className="relative">
-            <input
-              type="date"
-              placeholder="To Expected Delivery Date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-            />
+          <div className="relative flex items-center space-x-2">
+            <div className="flex items-center space-x-1">
+              <span className="text-sm text-gray-600 whitespace-nowrap">From:</span>
+              <input
+                type="date"
+                placeholder="From Date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="w-32 px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              />
+            </div>
+            <div className="flex items-center space-x-1">
+              <span className="text-sm text-gray-600 whitespace-nowrap">To:</span>
+              <input
+                type="date"
+                placeholder="To Date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="w-32 px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              />
+            </div>
           </div>
 
           {/* Supplier Custom Dropdown */}
