@@ -36,7 +36,10 @@ import {
   RefreshCw,
   Zap,
   Package,
-  Download
+  Download,
+  Shield,
+  XCircle,
+  Wrench
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
@@ -50,6 +53,8 @@ import toast from 'react-hot-toast';
 type CustomerType = 'retail' | 'telecom' | 'ev' | 'dg' | 'jenaral' | 'je' | 'oem';
 type CustomerMainType = 'customer' | 'supplier' | 'dg_customer' | 'oem';
 type LeadStatus = 'new' | 'qualified' | 'contacted' | 'converted' | 'lost';
+type OEMStatus = 'active' | 'inactive' | 'blacklisted';
+type FilterStatus = LeadStatus | OEMStatus | 'all';
 type ContactType = 'call' | 'meeting' | 'email' | 'whatsapp';
 
 interface ContactHistory {
@@ -337,7 +342,7 @@ const CustomerManagement: React.FC = () => {
   const [totalCustomersCount, setTotalCustomersCount] = useState(0);
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
   const [typeFilter, setTypeFilter] = useState<CustomerType | 'all'>('all');
   // const [leadSourceFilter, setLeadSourceFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -996,22 +1001,29 @@ const CustomerManagement: React.FC = () => {
         console.log('OEM data to set:', oemData);
         setCustomers(oemData);
         
-        // For OEM tab, we don't have the same counts structure, so set defaults
+        // Calculate OEM-specific statistics
+        const totalOem = oemData.length;
+        
+        // For OEM, calculate stats based on their status/make
+        const activeCount = oemData.filter((customer: any) => customer.status === 'active' || !customer.status).length;
+        const inactiveCount = oemData.filter((customer: any) => customer.status === 'inactive').length;
+        const blacklistedCount = oemData.filter((customer: any) => customer.status === 'blacklisted').length;
+        
         setCounts({
-          totalCustomers: response.pagination.total,
-          newLeads: 0,
-          qualified: 0,
-          converted: response.pagination.total, // All OEM customers are considered converted
-          lost: 0,
-          contacted: 0,
+          totalCustomers: totalOem,
+          newLeads: 0, // OEM uses different entity model
+          qualified: activeCount,
+          converted: activeCount, // Active OEM customers are considered converted
+          lost: blacklistedCount,
+          contacted: 0, // Not applicable for OEM
         });
         
         setNewLeadStatusCount(0);
-        setQualifiedStatusCount(0);
-        setConvertedStatusCount(response.pagination.total);
-        setLostStatusCount(0);
+        setQualifiedStatusCount(activeCount);
+        setConvertedStatusCount(activeCount);
+        setLostStatusCount(blacklistedCount);
         setContactedStatusCount(0);
-        setTotalCustomersCount(response.pagination.total);
+        setTotalCustomersCount(totalOem);
         
       } catch (error) {
         console.error('Error fetching OEM customers:', error);
@@ -1052,7 +1064,7 @@ const CustomerManagement: React.FC = () => {
     // Special handling for DG Customer tab - show only converted customers
     if (customerTypeTab === 'dg_customer') {
       params.status = 'converted';
-      params.type = 'customer'; // DG customers are still of type 'customer'
+      params.type = 'customer'; // DG users are still of type 'customer'
     }
 
     console.log('Fetching customers with type:', customerTypeTab);
@@ -1061,15 +1073,47 @@ const CustomerManagement: React.FC = () => {
       setLoading(true);
       const response = await apiClient.customers.getAll(params);
       console.log('API response data:', response);
-      setCounts(response.data.counts);
+      
+      // Handle DG Customer statistics specially
+      if (customerTypeTab === 'dg_customer') {
+        let customersData: Customer[] = [];
+        if (response && response.data) {
+          if (Array.isArray(response.data)) {
+            customersData = response.data as Customer[];
+          } else if (typeof response.data === 'object' && Array.isArray((response.data as any).customers)) {
+            customersData = (response.data as { customers: Customer[] }).customers;
+          }
+        }
+        
+        const totalDG = customersData.length;
+        const convertedDG = customersData.filter(c => c.status === 'converted').length;
+        
+        setCounts({
+          totalCustomers: totalDG,
+          newLeads: 0, // DG customers are shown only when converted
+          qualified: 0, // DG customers are shown only when converted
+          converted: convertedDG,
+          lost: 0, // Filtered out for DG customer view
+          contacted: 0,
+        });
+        
+        setNewLeadStatusCount(0);
+        setQualifiedStatusCount(0);
+        setConvertedStatusCount(convertedDG);
+        setLostStatusCount(0);
+        setContactedStatusCount(0);
+        setTotalCustomersCount(totalDG);
+      } else {
+        setCounts(response.data.counts);
 
-      // Set individual status counts
-      setNewLeadStatusCount((response.data as any).newLeadStatusCount || 0);
-      setQualifiedStatusCount((response.data as any).qualifiedStatusCount || 0);
-      setConvertedStatusCount((response.data as any).convertedStatusCount || 0);
-      setLostStatusCount((response.data as any).lostStatusCount || 0);
-      setContactedStatusCount((response.data as any).contactedStatusCount || 0);
-      setTotalCustomersCount((response.data as any).totalCustomersCount || 0);
+        // Set individual status counts
+        setNewLeadStatusCount((response.data as any).newLeadStatusCount || 0);
+        setQualifiedStatusCount((response.data as any).qualifiedStatusCount || 0);
+        setConvertedStatusCount((response.data as any).convertedStatusCount || 0);
+        setLostStatusCount((response.data as any).lostStatusCount || 0);
+        setContactedStatusCount((response.data as any).contactedStatusCount || 0);
+        setTotalCustomersCount((response.data as any).totalCustomersCount || 0);
+      }
 
       setCurrentPage(response.pagination.page);
       setLimit(response.pagination.limit);
@@ -1646,19 +1690,24 @@ const CustomerManagement: React.FC = () => {
   };
 
   const handleStatusChange = async (customerId: string, newStatus: LeadStatus) => {
-    // Optimistically update local state
-    setCustomers(prev =>
-      prev.map(c =>
-        c._id === customerId ? { ...c, status: newStatus } : c
-      )
-    );
+    // Set loading state for this specific customer
+    setIsUpdating(customerId);
+    
     try {
       await apiClient.customers.update(customerId, { status: newStatus });
-      // Fetch from server after drop is complete
-      // fetchCustomers();
-      fetchAllCustomers();
+      
+      // Always refresh both current view and all customers data to ensure consistency
+      await Promise.all([
+        fetchCustomers(),
+        fetchAllCustomers()
+      ]);
+      
     } catch (error) {
       console.error('Error updating status:', error);
+      // Show error toast
+      toast.error('Failed to update customer status');
+    } finally {
+      setIsUpdating(null);
     }
   };
 
@@ -1854,11 +1903,8 @@ const CustomerManagement: React.FC = () => {
       const currentCustomer = allCustomers.find(c => c._id === customerId);
       if (currentCustomer && currentCustomer.status !== newStatus) {
         handleStatusChange(customerId, newStatus);
-        fetchAllCustomers();
-        fetchCustomers();
       }
     }
-
 
     setDraggedCustomer(null);
     setDragOverColumn(null);
@@ -1925,10 +1971,10 @@ const CustomerManagement: React.FC = () => {
              customerTypeTab === 'dg_customer' ? 'Total DG Customers' :
              'Total OEM Customers',
       value: customerTypeTab === 'dg_customer' 
-        ? allCustomers.filter(customer => customer.type === 'customer' && customer.status === 'converted').length
+        ? convertedStatusCount // For DG customers, show converted customers count
         : customerTypeTab === 'oem'
-        ? allCustomers.filter(customer => customer.type === 'customer' && customer.customerType === 'oem').length
-        : allCustomers.filter(customer => customer.type === customerTypeTab).length,
+        ? counts.totalCustomers // For OEM customers, show total OEM count from counts
+        : counts.totalCustomers, // For customer and supplier tabs, show total count from counts
       action: () => {
         clearAllFilters();
       },
@@ -1936,38 +1982,107 @@ const CustomerManagement: React.FC = () => {
       color: 'blue'
     },
     {
-      title: 'New Leads',
-      value: customerTypeTab === 'dg_customer' || customerTypeTab === 'oem' ? 0 : newLeadStatusCount,
+      title: customerTypeTab === 'dg_customer' ? 'Active DG Customers' :
+             customerTypeTab === 'oem' ? 'Active OEM Suppliers' :
+             customerTypeTab === 'supplier' ? 'Active Suppliers' :
+             'New Leads',
+      value: customerTypeTab === 'dg_customer' ? convertedStatusCount :
+             customerTypeTab === 'oem' ? qualifiedStatusCount :
+             customerTypeTab === 'supplier' ? qualifiedStatusCount :
+             newLeadStatusCount,
       action: () => {
-        if (customerTypeTab !== 'dg_customer' && customerTypeTab !== 'oem') {
+        if (customerTypeTab === 'dg_customer') {
+          // For DG, show converted customers
+          setStatusFilter('converted');
+        } else if (customerTypeTab === 'oem') {
+          // For OEM, show active suppliers
+          setStatusFilter('active');
+        } else if (customerTypeTab === 'supplier') {
+          setStatusFilter('qualified');
+        } else {
           setStatusFilter('new');
         }
       },
-      icon: <UserPlus className="w-6 h-6" />,
-      color: 'blue'
+      icon: customerTypeTab === 'dg_customer' || customerTypeTab === 'oem' ? 
+            <CheckCircle className="w-6 h-6" /> : 
+            <UserPlus className="w-6 h-6" />,
+      color: customerTypeTab === 'dg_customer' || customerTypeTab === 'oem' ? 'green' : 'blue'
     },
     {
-      title: 'Qualified',
-      value: customerTypeTab === 'dg_customer' || customerTypeTab === 'oem' ? 0 : qualifiedStatusCount,
+      title: customerTypeTab === 'dg_customer' ? 'DG With Warranty' :
+             customerTypeTab === 'oem' ? 'Inactive Suppliers' :
+             customerTypeTab === 'supplier' ? 'Supplier Contacts' :
+             'Qualified',
+      value: customerTypeTab === 'dg_customer' ? 
+             allCustomers.filter(customer => 
+               customer.type === 'customer' && 
+               customer.status === 'converted' &&
+               customer.dgDetails?.some(dg => dg.warrantyStatus === 'warranty')
+             ).length :
+             customerTypeTab === 'oem' ? 
+             allCustomers.filter(customer => 
+               customer.type === 'customer' && 
+               customer.customerType === 'oem' &&
+               ((customer as any).status === 'inactive' || (customer as any).status === 'blacklisted')
+             ).length :
+             customerTypeTab === 'supplier' ? contactedStatusCount :
+             qualifiedStatusCount,
       action: () => {
-        if (customerTypeTab !== 'dg_customer' && customerTypeTab !== 'oem') {
+        if (customerTypeTab === 'dg_customer') {
+          // Show DG customers with warranty
+          setTypeFilter('dg');
+          setStatusFilter('converted');
+        } else if (customerTypeTab === 'oem') {
+          setStatusFilter('inactive');
+        } else if (customerTypeTab === 'supplier') {
+          setStatusFilter('contacted');
+        } else {
           setStatusFilter('qualified');
         }
       },
-      icon: <Target className="w-6 h-6" />,
-      color: 'yellow'
+      icon: customerTypeTab === 'dg_customer' ? 
+            <Shield className="w-6 h-6" /> :
+            customerTypeTab === 'oem' ? 
+            <XCircle className="w-6 h-6" /> :
+            <Target className="w-6 h-6" />,
+      color: customerTypeTab === 'dg_customer' ? 'purple' :
+             customerTypeTab === 'oem' ? 'red' : 'yellow'
     },
     {
-      title: 'Converted',
-      value: customerTypeTab === 'dg_customer' ? convertedStatusCount : 
-             customerTypeTab === 'oem' ? convertedStatusCount :
+      title: customerTypeTab === 'dg_customer' ? 'DG Installations' :
+             customerTypeTab === 'oem' ? 'Total Active' :
+             customerTypeTab === 'supplier' ? 'Total Converted' :
+             'Converted',
+      value: customerTypeTab === 'dg_customer' ? 
+             allCustomers.filter(customer => 
+               customer.type === 'customer' && 
+               customer.status === 'converted' &&
+               (customer.dgDetails?.length ?? 0) > 0
+             ).length :
+             customerTypeTab === 'oem' ? 
+             allCustomers.filter(customer => 
+               customer.type === 'customer' && 
+               customer.customerType === 'oem'
+             ).length :
+             customerTypeTab === 'supplier' ? convertedStatusCount :
              convertedStatusCount,
       action: () => {
-        if (customerTypeTab !== 'dg_customer' && customerTypeTab !== 'oem') {
+        if (customerTypeTab === 'dg_customer') {
+          setStatusFilter('converted');
+          setTypeFilter('dg');
+        } else if (customerTypeTab === 'oem') {
+          setStatusFilter('active');
+        } else if (customerTypeTab === 'supplier') {
+          setStatusFilter('converted');
+        } else {
           setStatusFilter('converted');
         }
       },
-      icon: <CheckCircle className="w-6 h-6" />,
+      icon: customerTypeTab === 'dg_customer' ? 
+            <Wrench className="w-6 h-6" /> :
+            customerTypeTab === 'oem' ? 
+            <TrendingUp className="w-6 h-6" /> :
+            <CheckCircle className="w-6 h-6" />,
       color: 'green'
     }
   ];

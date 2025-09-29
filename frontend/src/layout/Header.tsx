@@ -239,10 +239,10 @@ export default function Header({ onMenuToggle, pathSegments, baseLabel = 'Home' 
               
               <div className="mb-6">
                 <p className="text-gray-600 mb-4">
-                  Are you sure you want to logout from {getUserDisplayName()} account?
+                  Are you sure you want to logout?
                 </p>
                 
-                <div className="bg-gray-50 rounded-lg p-4">
+                {/* <div className="bg-gray-50 rounded-lg p-4">
                   <div className="flex items-center space-x-3">
                     <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-600 rounded-full flex items-center justify-center">
                       <span className="text-white font-semibold text-xs">{getUserInitials()}</span>
@@ -253,8 +253,8 @@ export default function Header({ onMenuToggle, pathSegments, baseLabel = 'Home' 
                       <div className="text-xs text-gray-500">{user?.role || 'Admin'}</div>
                     </div>
                   </div>
-                </div>
-              </div>
+                </div> */}
+              </div> 
 
               <div className="flex space-x-3 pt-4">
                 <button
