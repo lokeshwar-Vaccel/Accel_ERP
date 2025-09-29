@@ -22,7 +22,19 @@ export const LoginForm: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [lastAttempt, setLastAttempt] = useState<number>(0);
+
+  // Load saved credentials on component mount
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('rememberedEmail');
+    const savedRememberMe = localStorage.getItem('rememberMe') === 'true';
+    
+    if (savedEmail && savedRememberMe) {
+      setEmail(savedEmail);
+      setRememberMe(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) navigate('/dashboard');
@@ -49,7 +61,17 @@ export const LoginForm: React.FC = () => {
     if (now - lastAttempt < 2000 && lastAttempt > 0) return;
 
     setLastAttempt(now);
-    const res = await dispatch(login({ email, password }));
+    
+    // Handle remember me functionality
+    if (rememberMe) {
+      localStorage.setItem('rememberedEmail', email);
+      localStorage.setItem('rememberMe', 'true');
+    } else {
+      localStorage.removeItem('rememberedEmail');
+      localStorage.removeItem('rememberMe');
+    }
+    
+    const res = await dispatch(login({ email, password, rememberMe }));
     // if(!res.error){
     //   toast.success(res.message)
     // }
@@ -139,13 +161,25 @@ export const LoginForm: React.FC = () => {
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                {showPassword ?  <Eye size={18} /> :<EyeOff size={18} /> }
               </button>
             </div>
           </div>
 
-         {/* Forgot Password */}
-          <div className="text-right">
+          {/* Remember Me & Forgot Password */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <input
+                id="rememberMe"
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+                className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+              />
+              <label htmlFor="rememberMe" className="ml-2 text-sm text-gray-700">
+                Remember me
+              </label>
+            </div>
             <button
               type="button"
               onClick={() => navigate('/forgot-password')}

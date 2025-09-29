@@ -185,7 +185,7 @@ export interface IUser extends Document {
   updatedAt: Date;
   // Methods
   comparePassword(candidatePassword: string): Promise<boolean>;
-  generateJWT(): string;
+  generateJWT(rememberMe?: boolean): string;
 }
 // Interface for StockLedger document
 export interface IStockLedger extends Document {

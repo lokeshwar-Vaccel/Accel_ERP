@@ -251,6 +251,57 @@ const isValidGSTINFormat = (input: string): boolean => {
   return re.test(value);
 };
 
+// Customer name validation helper
+const isValidCustomerName = (input: string): boolean => {
+  // Must contain at least one alphabet and allow only 1-2 special characters
+  const hasAlphabet = /[A-Za-z]/.test(input);
+  const specialCharCount = (input.match(/[&.,\-']/g) || []).length;
+  const validChars = /^[A-Za-z0-9\s&.,\-']+$/;
+  
+  return hasAlphabet && specialCharCount <= 2 && validChars.test(input);
+};
+
+const sanitizeCustomerName = (input: string): string => {
+  // Remove any invalid characters, keeping only allowed ones
+  return input.replace(/[^A-Za-z0-9\s&.,\-']/g, '');
+};
+
+// Email validation helper
+const isValidEmail = (input: string): boolean => {
+  if (!input.trim()) return true; // Allow empty email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(input);
+};
+
+const sanitizeEmail = (input: string): string => {
+  // Remove spaces and convert to lowercase
+  return input.replace(/\s/g, '').toLowerCase();
+};
+
+// Phone validation helper
+const isValidPhone = (input: string): boolean => {
+  if (!input.trim()) return true; // Allow empty phone
+  // Allow digits, +, -, spaces, parentheses for international formats
+  const phoneRegex = /^[\d\s\-\+\(\)]+$/;
+  const digitCount = (input.match(/\d/g) || []).length;
+  return phoneRegex.test(input) && digitCount >= 10 && digitCount <= 15;
+};
+
+const sanitizePhone = (input: string): string => {
+  // Keep only digits, +, -, spaces, parentheses
+  return input.replace(/[^\d\s\-\+\(\)]/g, '');
+};
+
+const sanitizeContactPerson = (input: string): string => {
+  // Remove special characters but keep letters, spaces, and prevent double spaces
+  return input.replace(/[^A-Za-z\s]/g, '').replace(/\s+/g, ' ').trim();
+};
+
+const sanitizeDesignation = (input: string): string => {
+  // Remove special characters but keep letters, spaces, and prevent double spaces
+  return input.replace(/[^A-Za-z\s]/g, '').replace(/\s+/g, ' ').trim();
+};
+
 const CustomerManagement: React.FC = () => {
   const location = useLocation();
 
@@ -306,6 +357,8 @@ const CustomerManagement: React.FC = () => {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showPipelineModal, setShowPipelineModal] = useState(false);
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
 
   // Selected data
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -920,6 +973,9 @@ const CustomerManagement: React.FC = () => {
           sort,
           search: searchTerm,
           ...(statusFilter !== 'all' && { status: statusFilter }),
+          ...(typeFilter !== 'all' && { customerType: typeFilter }),
+          ...(dateFrom && { dateFrom }),
+          ...(dateTo && { dateTo }),
           ...(assignedToParam && { assignedTo: assignedToParam }),
         };
 
@@ -1048,16 +1104,44 @@ const CustomerManagement: React.FC = () => {
     fetchAllCustomers();
   }, [customerTypeTab]);
 
-  const handleDeleteCustomer = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this customer?')) {
-      try {
-        await apiClient.customers.delete(id);
-        fetchCustomers()
-        // setCustomers(customers.filter(customer => customer._id !== id));
-      } catch (error) {
-        console.error('Error deleting customer:', error);
-      }
+  const handleDeleteCustomer = (customer: Customer) => {
+    setCustomerToDelete(customer);
+    setShowDeleteConfirmModal(true);
+  };
+
+  const confirmDeleteCustomer = async () => {
+    if (!customerToDelete) return;
+    
+    const entityName = customerTypeTab === 'supplier' ? 'Supplier' : 
+                       customerTypeTab === 'dg_customer' ? 'DG Customer' : 
+                       customerTypeTab === 'oem' ? 'OEM Customer' : 'Customer';
+    
+    try {
+      await apiClient.customers.delete(customerToDelete._id);
+      fetchCustomers();
+      fetchAllCustomers(); // Update statistics cards
+      
+      // Show success toast with contextual message
+      toast.success(`${entityName} deleted successfully!`);
+      
+      // Close modal and reset state
+      setShowDeleteConfirmModal(false);
+      setCustomerToDelete(null);
+    } catch (error) {
+      console.error('Error deleting customer:', error);
+      
+      // Show error toast with contextual message
+      toast.error(`Failed to delete ${entityName.toLowerCase()}. Please try again.`);
+      
+      // Close modal and reset state even on error
+      setShowDeleteConfirmModal(false);
+      setCustomerToDelete(null);
     }
+  };
+
+  const cancelDeleteCustomer = () => {
+    setShowDeleteConfirmModal(false);
+    setCustomerToDelete(null);
   };
 
   // const filteredCustomers = Array.isArray(customers) ? customers.filter(customer => {
@@ -1104,11 +1188,16 @@ const CustomerManagement: React.FC = () => {
     const districtErrors: string[] = [];
     const pincodeErrors: string[] = [];
     const gstErrors: string[] = [];
+    const emailErrors: string[] = [];
+    const phoneErrors: string[] = [];
   
     // Top-level field checks
     if (!customerFormData.name.trim()) {
       errors.name = `Corporate name is required`;
       missingFields.push(`Corporate Name`);
+    } else if (!isValidCustomerName(customerFormData.name)) {
+      errors.name = `Corporate name must contain at least one letter and can have maximum 2 special characters (&, ., ,, -, ').`;
+      missingFields.push(`Valid Corporate Name`);
     } else {
       const isDuplicateName = allCustomers.some(customer =>
         customer.name.trim().toLowerCase() === customerFormData.name.trim().toLowerCase() &&
@@ -1125,6 +1214,18 @@ const CustomerManagement: React.FC = () => {
       if (!panRegex.test(customerFormData.panNumber)) {
         errors.panNumber = 'PAN must be 10 characters: 5 letters, 4 digits, 1 letter (e.g., ABCDE1234F)';
         missingFields.push('Valid PAN Number');
+      }
+    }
+
+    // Contact person validation
+    if (customerFormData.contactPersonName && customerFormData.contactPersonName.trim() !== '') {
+      const contactPersonRegex = /^[A-Za-z\s]+$/;
+      if (!contactPersonRegex.test(customerFormData.contactPersonName.trim())) {
+        errors.contactPersonName = 'Contact person name can only contain letters and spaces';
+        missingFields.push('Valid Contact Person Name');
+      } else if (/\s{2,}/.test(customerFormData.contactPersonName)) {
+        errors.contactPersonName = 'Contact person name cannot contain multiple consecutive spaces';
+        missingFields.push('Valid Contact Person Name');
       }
     }
   
@@ -1177,6 +1278,44 @@ const CustomerManagement: React.FC = () => {
             }
           }
         }
+
+        // Email validation
+        if (addr.email && addr.email.trim() !== '') {
+          if (!isValidEmail(addr.email)) {
+            emailErrors[index] = 'Invalid email format';
+          }
+        }
+
+        // Phone validation
+        if (addr.phone && addr.phone.trim() !== '') {
+          if (!isValidPhone(addr.phone)) {
+            phoneErrors[index] = 'Invalid phone number. Must be 10-15 digits';
+          }
+        }
+
+        // Contact person name validation
+        if (addr.contactPersonName && addr.contactPersonName.trim() !== '') {
+          const contactPersonRegex = /^[A-Za-z\s]+$/;
+          if (!contactPersonRegex.test(addr.contactPersonName.trim())) {
+            errors[`addr_contact_${index}`] = 'Contact person name can only contain letters and spaces';
+            missingFields.push(`Valid Contact Person Name (Address #${index + 1})`);
+          } else if (/\s{2,}/.test(addr.contactPersonName)) {
+            errors[`addr_contact_${index}`] = 'Contact person name cannot contain multiple consecutive spaces';
+            missingFields.push(`Valid Contact Person Name (Address #${index + 1})`);
+          }
+        }
+
+        // Designation validation
+        if (addr.designation && addr.designation.trim() !== '') {
+          const designationRegex = /^[A-Za-z\s]+$/;
+          if (!designationRegex.test(addr.designation.trim())) {
+            errors[`addr_designation_${index}`] = 'Designation can only contain letters and spaces';
+            missingFields.push(`Valid Designation (Address #${index + 1})`);
+          } else if (/\s{2,}/.test(addr.designation)) {
+            errors[`addr_designation_${index}`] = 'Designation cannot contain multiple consecutive spaces';
+            missingFields.push(`Valid Designation (Address #${index + 1})`);
+          }
+        }
   
         if (addrMissing.length > 0) {
           addressErrors[index] = `Please fill in ${addrMissing.join(', ')}`;
@@ -1207,6 +1346,12 @@ const CustomerManagement: React.FC = () => {
       }
       if (gstErrors.length > 0) {
         errors.gst = gstErrors;
+      }
+      if (emailErrors.length > 0) {
+        errors.email = emailErrors;
+      }
+      if (phoneErrors.length > 0) {
+        errors.phone = phoneErrors;
       }
     }
 
@@ -1267,6 +1412,73 @@ const CustomerManagement: React.FC = () => {
             dgErrors.locationAddress = 'DG Location (Address) is required';
             missingFields.push(`DG Details #${index + 1} - DG Location`);
           }
+
+          // Uniqueness validation for serial numbers
+          if (dgDetail.dgSerialNumbers.trim()) {
+            // Check for duplicate DG Serial Numbers within the same form
+            const duplicateDGSerial = customerFormData.dgDetails?.find((otherDg, otherIndex) => 
+              otherIndex !== index && 
+              otherDg.dgSerialNumbers.trim() === dgDetail.dgSerialNumbers.trim()
+            );
+            if (duplicateDGSerial) {
+              dgErrors.dgSerialNumbers = 'DG Serial Number already exists in this form';
+            } else {
+              // Check for duplicate DG Serial Numbers in existing customers
+              const existingCustomer = allCustomers.find(customer =>
+                customer.dgDetails?.some(existingDg => 
+                  existingDg.dgSerialNumbers === dgDetail.dgSerialNumbers.trim() &&
+                  (!editingCustomer || customer._id !== editingCustomer._id)
+                )
+              );
+              if (existingCustomer) {
+                dgErrors.dgSerialNumbers = 'DG Serial Number already exists with another customer';
+              }
+            }
+          }
+
+          if (dgDetail.alternatorSerialNumber && dgDetail.alternatorSerialNumber.trim()) {
+            // Check for duplicate Alternator Serial Numbers within the same form
+            const duplicateAltSerial = customerFormData.dgDetails?.find((otherDg, otherIndex) => 
+              otherIndex !== index && 
+              otherDg.alternatorSerialNumber?.trim() === dgDetail.alternatorSerialNumber?.trim()
+            );
+            if (duplicateAltSerial) {
+              dgErrors.alternatorSerialNumber = 'Alternator Serial Number already exists in this form';
+            } else {
+              // Check for duplicate Alternator Serial Numbers in existing customers
+              const existingCustomer = allCustomers.find(customer =>
+                customer.dgDetails?.some(existingDg => 
+                  existingDg.alternatorSerialNumber === (dgDetail.alternatorSerialNumber || "").trim() &&
+                  (!editingCustomer || customer._id !== editingCustomer._id)
+                )
+              );
+              if (existingCustomer) {
+                dgErrors.alternatorSerialNumber = 'Alternator Serial Number already exists with another customer';
+              }
+            }
+          }
+
+          if (dgDetail.engineSerialNumber.trim()) {
+            // Check for duplicate Engine Serial Numbers within the same form
+            const duplicateEngineSerial = customerFormData.dgDetails?.find((otherDg, otherIndex) => 
+              otherIndex !== index && 
+              otherDg.engineSerialNumber.trim() === dgDetail.engineSerialNumber.trim()
+            );
+            if (duplicateEngineSerial) {
+              dgErrors.engineSerialNumber = 'Engine Serial Number already exists in this form';
+            } else {
+              // Check for duplicate Engine Serial Numbers in existing customers
+              const existingCustomer = allCustomers.find(customer =>
+                customer.dgDetails?.some(existingDg => 
+                  existingDg.engineSerialNumber === dgDetail.engineSerialNumber.trim() &&
+                  (!editingCustomer || customer._id !== editingCustomer._id)
+                )
+              );
+              if (existingCustomer) {
+                dgErrors.engineSerialNumber = 'Engine Serial Number already exists with another customer';
+              }
+            }
+          }
         }
         
         if (Object.keys(dgErrors).length > 0) {
@@ -1319,6 +1531,13 @@ const CustomerManagement: React.FC = () => {
       console.log("response-99992:", response);
       fetchCustomers();
       fetchAllCustomers();
+      
+      // Show success toast with contextual message
+      const entityName = customerTypeTab === 'supplier' ? 'Supplier' : 
+                         customerTypeTab === 'dg_customer' ? 'DG Customer' : 
+                         customerTypeTab === 'oem' ? 'OEM Customer' : 'Customer';
+      toast.success(`${entityName} added successfully!`);
+      
       setShowAddModal(false);
       resetCustomerForm();
     } catch (error: any) {
@@ -1328,6 +1547,12 @@ const CustomerManagement: React.FC = () => {
       } else {
         setFormErrors({ general: 'Failed to create customer' });
       }
+      
+      // Show error toast with contextual message
+      const entityName = customerTypeTab === 'supplier' ? 'Supplier' : 
+                         customerTypeTab === 'dg_customer' ? 'DG Customer' : 
+                         customerTypeTab === 'oem' ? 'OEM Customer' : 'Customer';
+      toast.error(`Failed to add ${entityName.toLowerCase()}. Please try again.`);
     } finally {
       setSubmitting(false);
     }
@@ -1357,6 +1582,13 @@ const CustomerManagement: React.FC = () => {
       // setCustomers(customers.map(c => c._id === editingCustomer._id ? response.data : c));
       fetchCustomers()
       fetchAllCustomers();
+      
+      // Show success toast with contextual message
+      const entityName = customerTypeTab === 'supplier' ? 'Supplier' : 
+                         customerTypeTab === 'dg_customer' ? 'DG Customer' : 
+                         customerTypeTab === 'oem' ? 'OEM Customer' : 'Customer';
+      toast.success(`${entityName} updated successfully!`);
+      
       setShowEditModal(false);
       setEditingCustomer(null);
       resetCustomerForm();
@@ -1367,6 +1599,12 @@ const CustomerManagement: React.FC = () => {
       } else {
         setFormErrors({ general: 'Failed to update customer' });
       }
+      
+      // Show error toast with contextual message
+      const entityName = customerTypeTab === 'supplier' ? 'Supplier' : 
+                         customerTypeTab === 'dg_customer' ? 'DG Customer' : 
+                         customerTypeTab === 'oem' ? 'OEM Customer' : 'Customer';
+      toast.error(`Failed to update ${entityName.toLowerCase()}. Please try again.`);
     } finally {
       setSubmitting(false);
     }
@@ -1858,11 +2096,14 @@ const CustomerManagement: React.FC = () => {
       if (dateFrom) params.dateFrom = dateFrom;
       if (dateTo) params.dateTo = dateTo;
       
-      // Add type parameter for supplier/customer distinction
+      // Add type parameter for supplier/customer/OEM distinction
       if (customerTypeTab === 'supplier') {
         params.type = 'supplier';
       } else if (customerTypeTab === 'customer') {
         params.type = 'customer';
+      } else if (customerTypeTab === 'oem') {
+        params.type = 'customer'; // OEM customers have type 'customer' but customerType 'oem'
+        params.customerType = 'oem';
       }
 
       // Call the export API
@@ -1874,7 +2115,9 @@ const CustomerManagement: React.FC = () => {
       link.href = url;
       
       // Set filename based on type
-      const filename = customerTypeTab === 'supplier' ? 'suppliers-export.xlsx' : 'customers-export.xlsx';
+      const filename = customerTypeTab === 'supplier' ? 'suppliers-export.xlsx' : 
+                      customerTypeTab === 'oem' ? 'oem-customers-export.xlsx' : 
+                      'customers-export.xlsx';
       link.download = filename;
       
       // Trigger download
@@ -1883,7 +2126,9 @@ const CustomerManagement: React.FC = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
       
-      toast.success(`${customerTypeTab === 'supplier' ? 'Suppliers' : 'Customers'} exported successfully!`);
+      toast.success(`${customerTypeTab === 'supplier' ? 'Suppliers' : 
+                      customerTypeTab === 'oem' ? 'OEM Customers' : 
+                      'Customers'} exported successfully!`);
     } catch (error: any) {
       console.error('Export error:', error);
       toast.error('Failed to export data: ' + (error.message || 'Unknown error'));
@@ -1912,7 +2157,7 @@ const CustomerManagement: React.FC = () => {
             <span className="text-sm">Sales Pipeline</span>
           </button>
 
-          {user?.role !== 'hr' && customerTypeTab !== 'dg_customer' && customerTypeTab !== 'oem' &&
+          {user?.role !== 'hr' && (
             <button
               onClick={() => setShowAddModal(true)}
               className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
@@ -1925,7 +2170,7 @@ const CustomerManagement: React.FC = () => {
                  'Add OEM Customer'}
               </span>
             </button>
-          }
+          )}
           {(customerTypeTab === 'customer' || customerTypeTab === 'supplier') && (
             <button
               onClick={handleImportClick}
@@ -2011,18 +2256,16 @@ const CustomerManagement: React.FC = () => {
               />
             </div>
             {/* Action Buttons */}
-            {customerTypeTab !== 'oem' && customerTypeTab !== 'dg_customer' && (
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowFilters(v => !v)}
-                  className="px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 border border-gray-300 text-sm font-medium flex items-center gap-2 shadow-sm"
-                >
-                  <Filter className="w-4 h-4" />
-                  Filters
-                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
-                </button>
-              </div>
-            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowFilters(v => !v)}
+                className="px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 border border-gray-300 text-sm font-medium flex items-center gap-2 shadow-sm"
+              >
+                <Filter className="w-4 h-4" />
+                Filters
+                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
 
             {/* Customer Type Tabs */}
             <div className="flex space-x-1 bg-white p-1 rounded-lg border border-gray-200">
@@ -2084,7 +2327,7 @@ const CustomerManagement: React.FC = () => {
           </div>
         </div>
         {/* Collapsible Filter Panel */}
-        {customerTypeTab !== 'oem' && showFilters && (
+        {showFilters && (
           <div className="px-6 py-6 bg-gray-50">
             <div className="grid grid-cols-4 gap-4 mb-6">
               {/* Sort By */}
@@ -2474,7 +2717,7 @@ const CustomerManagement: React.FC = () => {
                         )}
                         {user?.role !== 'hr' && customerTypeTab !== 'oem' && customerTypeTab !== 'dg_customer' &&
                           <button
-                            onClick={() => handleDeleteCustomer(customer._id)}
+                            onClick={() => handleDeleteCustomer(customer)}
                             className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
                             title={(customerTypeTab as string) === 'oem' ? 'Delete OEM' : 'Delete Customer'}
                           >
@@ -2946,10 +3189,13 @@ const CustomerManagement: React.FC = () => {
                         <input
                           type="text"
                           value={customerFormData.name}
-                          onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
+                          onChange={(e) => {
+                            const sanitizedValue = sanitizeCustomerName(e.target.value);
+                            setCustomerFormData({ ...customerFormData, name: sanitizedValue });
+                          }}
                           className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
                             }`}
-                          placeholder="Enter name"
+                          placeholder="Enter name (must contain letters, max 2 special chars: &, ., ,, -, ')"
                         />
                         {formErrors.name && (
                           <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
@@ -3135,40 +3381,64 @@ const CustomerManagement: React.FC = () => {
                                   <input
                                     type="text"
                                     value={address.contactPersonName || ''}
-                                    onChange={(e) => updateAddress(address.id, 'contactPersonName', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                    placeholder="Contact person"
+                                    onChange={(e) => {
+                                      const sanitizedValue = sanitizeContactPerson(e.target.value);
+                                      updateAddress(address.id, 'contactPersonName', sanitizedValue);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${formErrors[`addr_contact_${index}`] ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Contact person name"
                                   />
+                                  {formErrors[`addr_contact_${index}`] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors[`addr_contact_${index}`]}</p>
+                                  )}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
                                   <input
                                     type="text"
                                     value={address.designation || ''}
-                                    onChange={(e) => updateAddress(address.id, 'designation', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    onChange={(e) => {
+                                      const sanitizedValue = sanitizeDesignation(e.target.value);
+                                      updateAddress(address.id, 'designation', sanitizedValue);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${formErrors[`addr_designation_${index}`] ? 'border-red-500' : 'border-gray-300'}`}
                                     placeholder="Designation"
                                   />
+                                  {formErrors[`addr_designation_${index}`] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors[`addr_designation_${index}`]}</p>
+                                  )}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                                   <input
                                     type="email"
                                     value={address.email || ''}
-                                    onChange={(e) => updateAddress(address.id, 'email', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                    placeholder="Email"
+                                    onChange={(e) => {
+                                      const sanitizedValue = sanitizeEmail(e.target.value);
+                                      updateAddress(address.id, 'email', sanitizedValue);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${Array.isArray(formErrors.email) && formErrors.email[index] ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="example@domain.com"
                                   />
+                                  {Array.isArray(formErrors.email) && formErrors.email[index] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.email[index]}</p>
+                                  )}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                                   <input
                                     type="text"
                                     value={address.phone || ''}
-                                    onChange={(e) => updateAddress(address.id, 'phone', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                    placeholder="Phone"
+                                    onChange={(e) => {
+                                      const sanitizedValue = sanitizePhone(e.target.value);
+                                      updateAddress(address.id, 'phone', sanitizedValue);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${Array.isArray(formErrors.phone) && formErrors.phone[index] ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="+91 98765 43210"
                                   />
+                                  {Array.isArray(formErrors.phone) && formErrors.phone[index] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.phone[index]}</p>
+                                  )}
                                 </div>
                               </div>
                               {/* New fields for state, district, pincode */}
@@ -3662,7 +3932,10 @@ const CustomerManagement: React.FC = () => {
                         <input
                           type="text"
                           value={customerFormData.name}
-                          onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
+                          onChange={(e) => {
+                            const sanitizedValue = sanitizeCustomerName(e.target.value);
+                            setCustomerFormData({ ...customerFormData, name: sanitizedValue });
+                          }}
                           className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
                             }`}
                           placeholder="Enter name"
@@ -3841,40 +4114,64 @@ const CustomerManagement: React.FC = () => {
                                   <input
                                     type="text"
                                     value={address.contactPersonName || ''}
-                                    onChange={(e) => updateAddress(address.id, 'contactPersonName', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                    placeholder="Contact person"
+                                    onChange={(e) => {
+                                      const sanitizedValue = sanitizeContactPerson(e.target.value);
+                                      updateAddress(address.id, 'contactPersonName', sanitizedValue);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${formErrors[`addr_contact_${index}`] ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Contact person name"
                                   />
+                                  {formErrors[`addr_contact_${index}`] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors[`addr_contact_${index}`]}</p>
+                                  )}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
                                   <input
                                     type="text"
                                     value={address.designation || ''}
-                                    onChange={(e) => updateAddress(address.id, 'designation', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    onChange={(e) => {
+                                      const sanitizedValue = sanitizeDesignation(e.target.value);
+                                      updateAddress(address.id, 'designation', sanitizedValue);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${formErrors[`addr_designation_${index}`] ? 'border-red-500' : 'border-gray-300'}`}
                                     placeholder="Designation"
                                   />
+                                  {formErrors[`addr_designation_${index}`] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors[`addr_designation_${index}`]}</p>
+                                  )}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                                   <input
                                     type="email"
                                     value={address.email || ''}
-                                    onChange={(e) => updateAddress(address.id, 'email', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                    placeholder="Email"
+                                    onChange={(e) => {
+                                      const sanitizedValue = sanitizeEmail(e.target.value);
+                                      updateAddress(address.id, 'email', sanitizedValue);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${Array.isArray(formErrors.email) && formErrors.email[index] ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="example@domain.com"
                                   />
+                                  {Array.isArray(formErrors.email) && formErrors.email[index] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.email[index]}</p>
+                                  )}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                                   <input
                                     type="text"
                                     value={address.phone || ''}
-                                    onChange={(e) => updateAddress(address.id, 'phone', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                    placeholder="Phone"
+                                    onChange={(e) => {
+                                      const sanitizedValue = sanitizePhone(e.target.value);
+                                      updateAddress(address.id, 'phone', sanitizedValue);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${Array.isArray(formErrors.phone) && formErrors.phone[index] ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="+91 98765 43210"
                                   />
+                                  {Array.isArray(formErrors.phone) && formErrors.phone[index] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.phone[index]}</p>
+                                  )}
                                 </div>
                               </div>
                               {/* New fields for state, district, pincode */}
@@ -5079,6 +5376,67 @@ const CustomerManagement: React.FC = () => {
                     <p className="text-xs text-gray-600">Lost</p>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirmModal && customerToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md m-4">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                    <AlertCircle className="w-5 h-5 text-red-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Confirm Deletion</h3>
+                </div>
+                <button
+                  onClick={cancelDeleteCustomer}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <div className="mb-6">
+                <p className="text-gray-600 mb-2">
+                  Are you sure you want to delete this {customerTypeTab === 'supplier' ? 'supplier' : 
+                                                          customerTypeTab === 'dg_customer' ? 'DG customer' : 
+                                                          customerTypeTab === 'oem' ? 'OEM customer' : 'customer'}?
+                </p>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="font-medium text-gray-900">{customerToDelete.name}</div>
+                  {customerToDelete.email && (
+                    <div className="text-sm text-gray-600 mt-1">{customerToDelete.email}</div>
+                  )}
+                  {customerToDelete.phone && (
+                    <div className="text-sm text-gray-600">{customerToDelete.phone}</div>
+                  )}
+                </div>
+                <p className="text-sm text-red-600 mt-3">
+                  ⚠️ This action cannot be undone.
+                </p>
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={cancelDeleteCustomer}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  disabled={submitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteCustomer}
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  {submitting ? 'Deleting...' : 'Delete'}
+                </button>
               </div>
             </div>
           </div>

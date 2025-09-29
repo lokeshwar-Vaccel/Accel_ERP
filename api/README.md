@@ -125,7 +125,8 @@ A comprehensive Enterprise Resource Planning (ERP) system for Sun Power Services
    PORT=5000
    MONGODB_URI=mongodb://localhost:27017/sun-power-services-erp
    JWT_SECRET=your-super-secret-jwt-key
-   JWT_EXPIRE=7d
+   JWT_EXPIRES_IN=7d
+   JWT_REMEMBER_ME_EXPIRES_IN=30d
    ```
 
 4. **Start MongoDB**
@@ -398,7 +399,8 @@ Required environment variables:
 - `PORT` - Server port (default: 5000)
 - `MONGODB_URI` - MongoDB connection string
 - `JWT_SECRET` - JWT signing secret
-- `JWT_EXPIRE` - JWT expiration time
+- `JWT_EXPIRES_IN` - JWT expiration time for normal login (default: 7d)
+- `JWT_REMEMBER_ME_EXPIRES_IN` - JWT expiration time for remember me login (default: 30d)
 
 Optional environment variables:
 

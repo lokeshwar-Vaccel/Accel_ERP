@@ -57,12 +57,17 @@ const NotificationSystem: React.FC = () => {
   // Initialize WebSocket connection
   const { isConnected, connectionError } = useWebSocket({
     userId: user?.id || '',
-    authToken: localStorage.getItem('authToken') || '',
+    authToken: localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '',
     enabled: !!user?.id
   });
 
   // Fetch notifications and stats
   const fetchNotifications = async (pageNum = 1, append = false) => {
+    // Don't fetch notifications if user is not authenticated
+    if (!user?.id || (!localStorage.getItem('authToken') && !sessionStorage.getItem('authToken'))) {
+      return;
+    }
+
     try {
       setLoading(true);
       const params: any = {
@@ -97,7 +102,12 @@ const NotificationSystem: React.FC = () => {
   };
 
   const fetchStats = async () => {
-    try {
+    // Don't fetch stats if user is not authenticated
+    if (!user?.id || (!localStorage.getItem('authToken') && !sessionStorage.getItem('authToken'))) {
+      return;
+    }
+
+  try {
       const response = await apiClient.notifications.getStats();
       setStats(response.data);
     } catch (error) {

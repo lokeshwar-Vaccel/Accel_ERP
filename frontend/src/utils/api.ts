@@ -10,11 +10,18 @@ class ApiClient {
     this.baseURL = API_BASE_URL;
   }
 
+  private getAuthToken(): string | null {
+    // Check both localStorage and sessionStorage for token
+    const persistentToken = localStorage.getItem('authToken');
+    const sessionToken = sessionStorage.getItem('authToken');
+    return persistentToken || sessionToken;
+  }
+
   private async makeRequest<T>(
     endpoint: string,
     options: RequestInit & { responseType?: 'json' | 'blob' } = {}
   ): Promise<T> {
-    const token = localStorage.getItem('authToken');
+    const token = this.getAuthToken();
 
     // Don't set Content-Type for FormData - let browser set it automatically
     const isFormData = options.body instanceof FormData;
@@ -86,7 +93,7 @@ class ApiClient {
 
   // Authentication APIs
   auth = {
-    login: (credentials: { email: string; password: string }) =>
+    login: (credentials: { email: string; password: string; rememberMe?: boolean }) =>
       this.makeRequest<{ success: boolean; data: { user: any; token: string } }>('/auth/login', {
         method: 'POST',
         body: JSON.stringify(credentials),
@@ -274,7 +281,7 @@ class ApiClient {
       const queryString = params ? `?${new URLSearchParams(params)}` : '';
       return fetch(`${this.baseURL}/customers/export${queryString}`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+          Authorization: `Bearer ${this.getAuthToken()}`,
         },
       }).then(response => {
         if (!response.ok) {
@@ -675,7 +682,7 @@ class ApiClient {
           name: file.name,
           size: file.size,
           type: file.type,
-          hasToken: !!localStorage.getItem('authToken')
+          hasToken: !!this.getAuthToken()
         });
         
         return this.makeRequest<{ success: boolean; data: any }>('/po-files/upload', {
@@ -977,7 +984,7 @@ class ApiClient {
       const queryString = params ? `?${new URLSearchParams(params)}` : '';
       return fetch(`${this.baseURL}/amc/export-excel${queryString}`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+          Authorization: `Bearer ${this.getAuthToken()}`,
         },
       });
     },
@@ -1219,7 +1226,7 @@ class ApiClient {
     download: (fileId: string) =>
       fetch(`${this.baseURL}/files/${fileId}/download`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+          Authorization: `Bearer ${this.getAuthToken()}`,
         },
       }),
 
@@ -1415,7 +1422,7 @@ class ApiClient {
     downloadTemplate: () =>
       fetch(`${this.baseURL}/inventory/import-template`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
+          Authorization: `Bearer ${this.getAuthToken() || ''}`
         }
       }).then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -1425,7 +1432,7 @@ class ApiClient {
     exportExcel: (params?: any) =>
       fetch(`${this.baseURL}/inventory/export-excel${params ? `?${new URLSearchParams(params)}` : ''}`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
+          Authorization: `Bearer ${this.getAuthToken() || ''}`
         }
       }).then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -1439,7 +1446,7 @@ class ApiClient {
         method: 'POST',
         body: formData,
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
+          Authorization: `Bearer ${this.getAuthToken() || ''}`
         }
       }).then(res => {
         if (!res.ok) {
@@ -1463,7 +1470,7 @@ class ApiClient {
         method: 'POST',
         body: formData,
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
+          Authorization: `Bearer ${this.getAuthToken() || ''}`
         }
       }).then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
@@ -1515,13 +1522,13 @@ class ApiClient {
     preview: (invoiceId: string) =>
       fetch(`${this.baseURL}/quotations/preview/${invoiceId}`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
+          Authorization: `Bearer ${this.getAuthToken() || ''}`
         }
       }).then(res => res.text()),
     download: (invoiceId: string) =>
       fetch(`${this.baseURL}/api/v1/quotations/download/${invoiceId}`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
+          Authorization: `Bearer ${this.getAuthToken() || ''}`
         }
       }).then(res => res.blob()),
 
@@ -1637,7 +1644,7 @@ class ApiClient {
       this.makeRequest<{ success: boolean; data: any[]; message: string }>(`/delivery-challans/export${params ? `?${new URLSearchParams(params)}` : ''}`),
 
     exportPDF: async (id: string) => {
-      const token = localStorage.getItem('authToken');
+      const token = this.getAuthToken();
       const response = await fetch(`${API_BASE_URL}/delivery-challans/${id}/pdf`, {
         headers: {
           ...(token && { Authorization: `Bearer ${token}` }),

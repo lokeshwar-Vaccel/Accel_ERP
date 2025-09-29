@@ -131,7 +131,7 @@ userSchema.methods.comparePassword = async function (candidatePassword: string):
 };
 
 // Generate JWT token
-userSchema.methods.generateJWT = function (): string {
+userSchema.methods.generateJWT = function (rememberMe?: boolean): string {
   const secret = process.env.JWT_SECRET || 'fallback-secret-key';
   const payload = { 
     id: this._id,
@@ -139,8 +139,13 @@ userSchema.methods.generateJWT = function (): string {
     role: this.role 
   };
   
+  // Set expiration based on rememberMe flag
+  const expiresIn = rememberMe 
+    ? process.env.JWT_REMEMBER_ME_EXPIRES_IN || '30d'  // 30 days for remember me
+    : process.env.JWT_EXPIRES_IN || '7d';              // 7 days for normal login
+  
   // @ts-ignore
-  return jwt.sign(payload, secret, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
+  return jwt.sign(payload, secret, { expiresIn });
 };
 
 // Prevent deletion of Super Admin

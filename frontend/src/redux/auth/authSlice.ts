@@ -44,10 +44,10 @@ interface AuthState {
 
 const initialState: AuthState = {
   isAuthenticated: false,
-  isLoading: !!localStorage.getItem('authToken'), // Start loading if token exists
+  isLoading: !!(localStorage.getItem('authToken') || sessionStorage.getItem('authToken')), // Start loading if token exists
   error: null,
   user: null,
-  token: localStorage.getItem('authToken'),
+  token: localStorage.getItem('authToken') || sessionStorage.getItem('authToken'),
   passwordResetState: {
     emailSent: false,
     lastEmailSent: null,
@@ -67,7 +67,11 @@ export const checkAuthStatus = createAsyncThunk(
   'auth/checkAuthStatus',
   async (_, { rejectWithValue }) => {
     try {
-      const token = localStorage.getItem('authToken');
+      // Check both localStorage and sessionStorage for token
+      const persistentToken = localStorage.getItem('authToken');
+      const sessionToken = sessionStorage.getItem('authToken');
+      const token = persistentToken || sessionToken;
+      
       if (!token) {
         return rejectWithValue('No token found');
       }
@@ -80,7 +84,9 @@ export const checkAuthStatus = createAsyncThunk(
         return rejectWithValue('Server is busy. Please try again in a moment.');
       }
       
+      // Clear both storage locations on auth failure
       localStorage.removeItem('authToken');
+      sessionStorage.removeItem('authToken');
       return rejectWithValue(error.message || 'Failed to verify authentication');
     }
   }
@@ -89,12 +95,21 @@ export const checkAuthStatus = createAsyncThunk(
 // Login async thunk
 export const login = createAsyncThunk(
   'auth/login',
-  async (credentials: { email: string; password: string }, { rejectWithValue }) => {
+  async (credentials: { email: string; password: string; rememberMe?: boolean }, { rejectWithValue }) => {
     try {
       const response:any = await api.auth.login(credentials);
       toast.success(response.message)
-      // Store token in localStorage
-      localStorage.setItem('authToken', response.data.token);
+      
+      // Store token based on rememberMe setting
+      if (credentials.rememberMe) {
+        // Store in localStorage (persistent until manually cleared)
+        localStorage.setItem('authToken', response.data.token);
+        localStorage.removeItem('sessionToken'); // Remove session token if switching to persistent
+      } else {
+        // Store in sessionStorage (cleared when browser closes)
+        sessionStorage.setItem('authToken', response.data.token);
+        localStorage.removeItem('authToken'); // Remove persistent token if switching to session-only
+      }
       
       return response.data;
     } catch (error: any) {
@@ -112,8 +127,11 @@ export const logout = createAsyncThunk(
   'auth/logout',
   async (_, { rejectWithValue }) => {
     try {
-      // Always clear localStorage first to ensure logout happens
+      // Always clear both storage locations first to ensure logout happens
       localStorage.removeItem('authToken');
+      sessionStorage.removeItem('authToken');
+      localStorage.removeItem('rememberedEmail');
+      localStorage.removeItem('rememberMe');
       
       // Try to notify the server about logout, but don't fail if it doesn't work
       try {
@@ -128,6 +146,9 @@ export const logout = createAsyncThunk(
     } catch (error: any) {
       // This should rarely happen since we're handling server errors above
       localStorage.removeItem('authToken');
+      sessionStorage.removeItem('authToken');
+      localStorage.removeItem('rememberedEmail');
+      localStorage.removeItem('rememberMe');
       return rejectWithValue(error.message || 'Logout failed');
     }
   }
@@ -202,6 +223,9 @@ const authSlice = createSlice({
       state.user = null;
       state.token = null;
       localStorage.removeItem('authToken');
+      sessionStorage.removeItem('authToken');
+      localStorage.removeItem('rememberedEmail');
+      localStorage.removeItem('rememberMe');
     },
     clearPasswordResetState: (state) => {
   state.passwordResetState = {
