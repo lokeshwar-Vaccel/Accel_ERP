@@ -64,7 +64,15 @@ export const createStockLocation = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { name, address, type, contactPerson, phone } = req.body;
+    const { name, address, type, contactPerson, phone, isPrimary } = req.body;
+
+    // If setting as primary, remove primary status from all other locations
+    if (isPrimary) {
+      await StockLocation.updateMany(
+        { isPrimary: true },
+        { isPrimary: false }
+      );
+    }
 
     const location = await StockLocation.create({
       name,
@@ -73,6 +81,7 @@ export const createStockLocation = async (
       contactPerson,
       phone,
       isActive: true,
+      isPrimary: isPrimary || false,
     });
 
     const response: APIResponse = {
@@ -96,11 +105,19 @@ export const updateStockLocation = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { name, address, type, contactPerson, phone, isActive } = req.body;
+    const { name, address, type, contactPerson, phone, isActive, isPrimary } = req.body;
+
+    // If setting as primary, remove primary status from all other locations
+    if (isPrimary) {
+      await StockLocation.updateMany(
+        { isPrimary: true, _id: { $ne: req.params.id } },
+        { isPrimary: false }
+      );
+    }
 
     const location = await StockLocation.findByIdAndUpdate(
       req.params.id,
-      { name, address, type, contactPerson, phone, isActive },
+      { name, address, type, contactPerson, phone, isActive, isPrimary },
       { new: true, runValidators: true }
     ).select('-__v');
 
@@ -182,6 +199,46 @@ export const toggleStockLocationStatus = async (
     const response: APIResponse = {
       success: true,
       message: `Stock location ${location.isActive ? 'activated' : 'deactivated'} successfully`,
+      data: { location },
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Set a stock location as primary
+// @route   PATCH /api/v1/stock/locations/:id/set-primary
+// @access  Private
+export const setPrimaryLocation = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const locationId = req.params.id;
+
+    // First, remove primary status from all locations
+    await StockLocation.updateMany(
+      { isPrimary: true },
+      { isPrimary: false }
+    );
+
+    // Then set the specified location as primary
+    const location = await StockLocation.findByIdAndUpdate(
+      locationId,
+      { isPrimary: true },
+      { new: true, runValidators: true }
+    ).select('-__v');
+
+    if (!location) {
+      return next(new AppError('Stock location not found', 404));
+    }
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Primary location updated successfully',
       data: { location },
     };
 

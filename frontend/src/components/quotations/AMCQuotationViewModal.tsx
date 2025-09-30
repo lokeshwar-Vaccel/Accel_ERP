@@ -54,6 +54,17 @@ const formatDateTime = (dateString: string) => {
   });
 };
 
+const getSelectedAddress = (quotation: any) => {
+  if (!quotation.selectedAddressId || !quotation.customer?.addresses) {
+    return null;
+  }
+  console.log("quotation3:", quotation);
+  
+  return quotation.customer.addresses.find((addr: any) => 
+    addr.id.toString() === quotation.selectedAddressId
+  ) || null;
+};
+
 // Helper function to get payment method label
 const getPaymentMethodLabel = (method: string) => {
   switch (method) {
@@ -327,9 +338,9 @@ const AMCQuotationViewModal: React.FC<AMCQuotationViewModalProps> = ({
             <Badge className={getStatusBadgeColor(quotation.status)}>
               {quotation.status}
             </Badge>
-            <Badge className={getPaymentStatusBadgeColor(quotation.paymentStatus)}>
+            {/* <Badge className={getPaymentStatusBadgeColor(quotation.paymentStatus)}>
               {quotation.paymentStatus}
-            </Badge>
+            </Badge> */}
             <Badge className={getAMCTypeBadgeColor(quotation.amcType)}>
               {quotation.amcType}
             </Badge>
@@ -366,7 +377,7 @@ const AMCQuotationViewModal: React.FC<AMCQuotationViewModalProps> = ({
 
         {/* Document Title */}
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">ANNUAL MAINTENANCE (AMC) OFFER</h1>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">ANNUAL MAINTENANCE ({quotation.amcType}) OFFER</h1>
         </div>
 
         {/* Customer and Basic Info */}
@@ -379,17 +390,34 @@ const AMCQuotationViewModal: React.FC<AMCQuotationViewModalProps> = ({
             </h3>
             <div className="space-y-2">
               <div>
-                <span className="font-medium text-gray-700">Name:</span>
+                <span className="font-medium text-gray-700">Name(Corporate):</span>
                 <span className="ml-2 text-gray-900">{quotation.customer.name}</span>
               </div>
-              <div>
+              {(() => {
+                const selectedAddress = getSelectedAddress(quotation);
+                return selectedAddress ? (
+                  <div>
+                    <span className="font-medium text-gray-700">Address:</span>
+                    <div className="ml-2 text-gray-900">
+                      <div>{selectedAddress.address}</div>
+                      <div className="text-sm text-gray-600">
+                        {selectedAddress.district}, {selectedAddress.state} - {selectedAddress.pincode}
+                      </div>
+                      {selectedAddress?.gstNumber && <div className="text-sm text-gray-600">
+                        GST No : {selectedAddress.gstNumber}
+                      </div>}
+                    </div>
+              {selectedAddress?.email && <div className="mt-2">
                 <span className="font-medium text-gray-700">Email:</span>
-                <span className="ml-2 text-gray-900">{quotation.customer.email}</span>
-              </div>
-              <div>
+                <span className="ml-2 text-gray-900">{selectedAddress.email}</span>
+              </div>}
+              {selectedAddress?.phone && <div className="mt-2">
                 <span className="font-medium text-gray-700">Phone:</span>
-                <span className="ml-2 text-gray-900">{quotation.customer.phone}</span>
-              </div>
+                <span className="ml-2 text-gray-900">{selectedAddress.phone}</span>
+              </div>}
+                  </div>
+                ) : null;
+              })()}
               {quotation.customer.pan && (
                 <div>
                   <span className="font-medium text-gray-700">PAN:</span>
@@ -427,7 +455,7 @@ const AMCQuotationViewModal: React.FC<AMCQuotationViewModalProps> = ({
         </div>
 
         {/* AMC Contract Details */}
-        <div className="bg-blue-50 p-4 rounded-lg mb-6">
+        {/* <div className="bg-blue-50 p-4 rounded-lg mb-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
             <Settings className="w-5 h-5 mr-2" />
             AMC Contract Details
@@ -464,7 +492,7 @@ const AMCQuotationViewModal: React.FC<AMCQuotationViewModalProps> = ({
               <span className="ml-2 text-gray-900">{quotation.coverageArea}</span>
             </div>
           )}
-        </div>
+        </div> */}
 
         {/* AMC Period */}
         <div className="bg-green-50 p-4 rounded-lg mb-6">
@@ -494,12 +522,12 @@ const AMCQuotationViewModal: React.FC<AMCQuotationViewModalProps> = ({
                   <th className="border border-gray-300 px-4 py-2 text-left">Make</th>
                   <th className="border border-gray-300 px-4 py-2 text-left">Engine Sl.No</th>
                   <th className="border border-gray-300 px-4 py-2 text-left">DG Rating in KVA</th>
-                  <th className="border border-gray-300 px-4 py-2 text-left">Type Of Visits</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left">No Of Visits</th>
                   <th className="border border-gray-300 px-4 py-2 text-left">Qty</th>
-                  <th className="border border-gray-300 px-4 py-2 text-left">AMC/CAMC cost per DG</th>
-                  <th className="border border-gray-300 px-4 py-2 text-left">Total AMC Amount per DG</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left">{quotation.amcType} cost per DG</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left">Total {quotation.amcType} Amount per DG</th>
                   <th className="border border-gray-300 px-4 py-2 text-left">GST @ 18%</th>
-                  <th className="border border-gray-300 px-4 py-2 text-left">Total AMC Cost</th>
+                  <th className="border border-gray-300 px-4 py-2 text-left">Total {quotation.amcType} Cost</th>
                 </tr>
               </thead>
               <tbody>

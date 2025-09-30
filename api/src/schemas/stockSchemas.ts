@@ -9,6 +9,7 @@ export interface CreateStockLocationInput {
   contactPerson?: string;
   phone?: string;
   isActive?: boolean;
+  isPrimary?: boolean;
   capacity?: number;
   description?: string;
 }
@@ -20,6 +21,7 @@ export interface UpdateStockLocationInput {
   contactPerson?: string;
   phone?: string;
   isActive?: boolean;
+  isPrimary?: boolean;
   capacity?: number;
   description?: string;
 }
@@ -191,6 +193,7 @@ const baseStockLocationFields = {
   contactPerson: Joi.string().max(100).trim().allow(''),
   phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).max(15).allow(''),
   isActive: Joi.boolean(),
+  isPrimary: Joi.boolean(),
   capacity: Joi.number().min(0), // Storage capacity
   description: Joi.string().max(500).allow('')
 };
@@ -203,6 +206,7 @@ export const createStockLocationSchema = Joi.object<CreateStockLocationInput>({
   contactPerson: baseStockLocationFields.contactPerson,
   phone: baseStockLocationFields.phone,
   isActive: baseStockLocationFields.isActive.default(true),
+  isPrimary: baseStockLocationFields.isPrimary.default(false),
   capacity: baseStockLocationFields.capacity,
   description: baseStockLocationFields.description
 });
@@ -215,6 +219,7 @@ export const updateStockLocationSchema = Joi.object<UpdateStockLocationInput>({
   contactPerson: baseStockLocationFields.contactPerson,
   phone: baseStockLocationFields.phone,
   isActive: baseStockLocationFields.isActive,
+  isPrimary: baseStockLocationFields.isPrimary,
   capacity: baseStockLocationFields.capacity,
   description: baseStockLocationFields.description
 });

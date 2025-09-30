@@ -186,6 +186,7 @@ export interface StockLocation {
   contactPerson: string;
   phone: string;
   isActive: boolean;
+  isPrimary: boolean;
   capacity: number;
   createdAt: string;
   updatedAt: string;

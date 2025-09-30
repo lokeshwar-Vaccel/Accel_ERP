@@ -471,11 +471,29 @@ const DGInvoiceFormPage: React.FC = () => {
 
       setLocations(locationsData);
 
-      // Set "Main Office" as default if not already selected
+      // Set primary location as default if not already selected
       if (!isEditMode) {
-        const mainOffice = locationsData.find(loc => loc.name === "Main Office");
-        if (mainOffice) {
-          setFormData(prev => ({ ...prev, location: mainOffice._id }));
+        const primaryLocation = locationsData.find(loc => loc.isPrimary === true);
+        if (primaryLocation) {
+          setFormData(prev => ({ ...prev, location: primaryLocation._id }));
+          
+          // Auto-load stock for the primary location
+          setTimeout(() => {
+            console.log('DGInvoiceForm: Auto-loading stock for primary location:', primaryLocation._id);
+            loadAllStockForLocation();
+          }, 500);
+        } else {
+          // Fallback to "Main Office" if no primary location is set
+          const mainOffice = locationsData.find(loc => loc.name === "Main Office");
+          if (mainOffice) {
+            setFormData(prev => ({ ...prev, location: mainOffice._id }));
+            
+            // Auto-load stock for the fallback location
+            setTimeout(() => {
+              console.log('DGInvoiceForm: Auto-loading stock for fallback location:', mainOffice._id);
+              loadAllStockForLocation();
+            }, 500);
+          }
         }
       }
     } catch (error) {

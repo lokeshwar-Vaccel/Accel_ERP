@@ -629,12 +629,30 @@ export const adjustStock = async (
   try {
     const { stockId, product, location, adjustmentType, quantity, reason, notes, reservationType, referenceId: reservationReferenceId, reservedUntil } = req.body;
 
-    // console.log("stock-1:", stockId);
+    console.log("=== STOCK ADJUSTMENT REQUEST ===");
+    console.log("Request body:", req.body);
+    console.log("Stock ID:", stockId);
+    console.log("Product ID:", product);
+    console.log("Location ID:", location);
+    console.log("Adjustment type:", adjustmentType);
+    console.log("Quantity:", quantity);
+    console.log("Reason:", reason);
+    console.log("Notes:", notes);
+
     const stock = await Stock.findById(stockId);
 
     if (!stock) {
+      console.log("❌ Stock record not found for ID:", stockId);
       return next(new AppError('Stock record not found', 404));
     }
+
+    console.log("✅ Stock record found:", {
+      id: stock._id,
+      product: stock.product,
+      location: stock.location,
+      currentQuantity: stock.quantity,
+      reservedQuantity: stock.reservedQuantity
+    });
 
     // Store the original quantity before adjustment
     const originalQuantity = stock.quantity;
@@ -663,12 +681,16 @@ export const adjustStock = async (
       stock.reservedQuantity -= quantity;
     }
 
-    console.log("stock.quantity:", originalQuantity);
-
+    console.log("Updated stock.quantity:", stock.quantity);
+    console.log("Stock ID:", stockId);
+    console.log("Adjustment type:", adjustmentType);
+    console.log("Quantity added:", quantity);
 
     stock.availableQuantity = stock.quantity - stock.reservedQuantity;
     stock.lastUpdated = new Date();
     await stock.save();
+    
+    console.log("Stock saved successfully. Final quantity:", stock.quantity);
 
     // 🔔 AUTOMATIC NOTIFICATION TRIGGER
     // Check if stock change requires notification and send real-time alert
@@ -801,6 +823,10 @@ export const adjustStock = async (
       }
     };
 
+    console.log("✅ Stock adjustment completed successfully!");
+    console.log("Final stock quantity:", stock.quantity);
+    console.log("Final available quantity:", stock.availableQuantity);
+
     res.status(200).json(response);
   } catch (error) {
     next(error);
@@ -869,6 +895,191 @@ export const adjustStock = async (
 //     next(error);
 //   }
 // }; 
+
+// @desc    Get products with stock details for a specific location (for purchase invoice)
+// @route   GET /api/v1/stock/products-by-location/:locationId
+// @access  Private
+export const getProductsByLocation = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { locationId } = req.params;
+    const { search, page = 1, limit = 50 } = req.query as {
+      search?: string;
+      page?: string;
+      limit?: string;
+    };
+
+    if (!locationId) {
+      return next(new AppError('Location ID is required', 400));
+    }
+
+    // Validate location exists
+    const { StockLocation } = await import('../models/Stock');
+    const location = await StockLocation.findById(locationId);
+    if (!location) {
+      return next(new AppError('Location not found', 404));
+    }
+
+    // Build aggregation pipeline
+    const pipeline: any[] = [
+      // Match stocks for the specific location
+      {
+        $match: {
+          location: new mongoose.Types.ObjectId(locationId),
+          quantity: { $gt: 0 } // Only show items with stock
+        }
+      },
+      // Lookup product details
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'product',
+          foreignField: '_id',
+          as: 'productInfo'
+        }
+      },
+      // Lookup room details
+      {
+        $lookup: {
+          from: 'rooms',
+          localField: 'room',
+          foreignField: '_id',
+          as: 'roomInfo'
+        }
+      },
+      // Lookup rack details
+      {
+        $lookup: {
+          from: 'racks',
+          localField: 'rack',
+          foreignField: '_id',
+          as: 'rackInfo'
+        }
+      },
+      // Unwind product info
+      {
+        $unwind: '$productInfo'
+      },
+      // Add fields for easier access
+      {
+        $addFields: {
+          product: '$productInfo',
+          room: { $arrayElemAt: ['$roomInfo', 0] },
+          rack: { $arrayElemAt: ['$rackInfo', 0] },
+          stockId: '$_id',
+          availableQuantity: '$quantity',
+          reservedQuantity: '$reservedQuantity'
+        }
+      },
+      // Project only needed fields
+      {
+        $project: {
+          _id: '$stockId',
+          product: {
+            _id: '$product._id',
+            name: '$product.name',
+            partNo: '$product.partNo',
+            brand: '$product.brand',
+            category: '$product.category',
+            hsnNumber: '$product.hsnNumber',
+            gst: '$product.gst',
+            gndp: '$product.gndp',
+            price: '$product.price',
+            uom: '$product.uom'
+          },
+          location: {
+            _id: '$location',
+            name: location.name
+          },
+          room: {
+            _id: '$room._id',
+            name: '$room.name'
+          },
+          rack: {
+            _id: '$rack._id',
+            name: '$rack.name'
+          },
+          quantity: '$quantity',
+          availableQuantity: '$availableQuantity',
+          reservedQuantity: '$reservedQuantity',
+          stockLocation: {
+            location: location.name,
+            room: { $ifNull: ['$room.name', 'No Room'] },
+            rack: { $ifNull: ['$rack.name', 'No Rack'] }
+          }
+        }
+      }
+    ];
+
+    // Add search filter if provided
+    if (search) {
+      const escapedSearch = escapeRegex(search);
+      pipeline.push({
+        $match: {
+          $or: [
+            { 'product.name': { $regex: escapedSearch, $options: 'i' } },
+            { 'product.partNo': { $regex: escapedSearch, $options: 'i' } },
+            { 'product.brand': { $regex: escapedSearch, $options: 'i' } },
+            { 'product.category': { $regex: escapedSearch, $options: 'i' } }
+          ]
+        }
+      });
+    }
+
+    // Add sorting
+    pipeline.push({
+      $sort: {
+        'product.name': 1,
+        'room.name': 1,
+        'rack.name': 1
+      }
+    });
+
+    // Add pagination
+    const skip = (Number(page) - 1) * Number(limit);
+    pipeline.push(
+      { $skip: skip },
+      { $limit: Number(limit) }
+    );
+
+    // Execute aggregation
+    const products = await Stock.aggregate(pipeline);
+
+    // Get total count for pagination
+    const countPipeline = pipeline.slice(0, -2); // Remove skip and limit
+    countPipeline.push({ $count: 'total' });
+    const countResult = await Stock.aggregate(countPipeline);
+    const total = countResult[0]?.total || 0;
+
+    const response: APIResponse = {
+      success: true,
+      message: `Products with stock at ${location.name} retrieved successfully`,
+      data: {
+        products,
+        location: {
+          _id: location._id,
+          name: location.name,
+          address: location.address,
+          type: location.type
+        }
+      },
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit))
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('Error in getProductsByLocation:', error);
+    next(error);
+  }
+};
 
 // @desc    Transfer stock between locations
 // @route   POST /api/v1/stock/transfer

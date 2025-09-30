@@ -438,6 +438,10 @@ class ApiClient {
     getLowStockItems: (locationId?: string) =>
       this.makeRequest<{ success: boolean; data: any[] }>(`/stock?lowStock=true${locationId ? `&location=${locationId}` : ''}`),
 
+    // Get products with stock details for a specific location (for purchase invoice)
+    getProductsByLocation: (locationId: string, params?: { search?: string; page?: number; limit?: number }) =>
+      this.makeRequest<{ success: boolean; data: { products: any[], location: any }; pagination: any }>(`/stock/products-by-location/${locationId}${params ? `?${new URLSearchParams(params as any)}` : ''}`),
+
     getInventoryReport: (params: any) =>
       this.makeRequest<{ success: boolean; data: any }>('/reports/inventory', {
         method: 'POST',

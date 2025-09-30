@@ -137,30 +137,32 @@ export const generateDeliveryChallanPDF = (challan: PopulatedDeliveryChallan): P
          .lineTo(rightColumnX, currentY + secondRowHeight)
          .stroke();
       
-      // Left side - Buyer (Bill to)
-      const billToStartY = currentY + 10;
-      doc.fontSize(12).font('Helvetica-Bold');
-      doc.text('Buyer (Bill to)', leftColumnX + 10, billToStartY);
-      
-      let billToCurrentY = billToStartY + 20;
-      doc.fontSize(8).font('Helvetica');
-      doc.text(challan.customer.name, leftColumnX + 10, billToCurrentY);
-      billToCurrentY += 12;
-      
-      // Add customer address if available
-      if (challan.customer.addresses && challan.customer.addresses.length > 0) {
-        const primaryAddress = challan.customer.addresses.find(addr => addr.isPrimary) || challan.customer.addresses[0];
-        doc.text(primaryAddress.address, leftColumnX + 10, billToCurrentY);
-        billToCurrentY += 12;
-        doc.text(`${primaryAddress.district}, ${primaryAddress.state}`, leftColumnX + 10, billToCurrentY);
-        billToCurrentY += 12;
-        doc.text(`Pincode: ${primaryAddress.pincode}`, leftColumnX + 10, billToCurrentY);
-        billToCurrentY += 12;
-        if (primaryAddress.gstNumber) {
-          doc.text(`GSTIN/UIN: ${primaryAddress.gstNumber}`, leftColumnX + 10, billToCurrentY);
-          billToCurrentY += 12;
-        }
-      }
+// Left side - Buyer (Bill to)
+const billToStartY = currentY + 10;
+doc.fontSize(12).font('Helvetica-Bold');
+doc.text('Buyer (Bill to)', leftColumnX + 10, billToStartY, { width: 240 });
+
+let billToCurrentY = billToStartY + 20;
+doc.fontSize(8).font('Helvetica');
+doc.text(challan.customer.name, leftColumnX + 10, billToCurrentY, { width: 240 });
+billToCurrentY += 12;
+
+// Add customer address if available
+if (challan.customer.addresses && challan.customer.addresses.length > 0) {
+  const primaryAddress = challan.customer.addresses.find(addr => addr.isPrimary) || challan.customer.addresses[0];
+  const addressHeight = doc.heightOfString(primaryAddress.address, { width: 240 });
+  doc.text(primaryAddress.address, leftColumnX + 10, billToCurrentY, { width: 240 });
+  billToCurrentY += addressHeight + 2;
+  
+  doc.text(`${primaryAddress.district}, ${primaryAddress.state}`, leftColumnX + 10, billToCurrentY, { width: 240 });
+  billToCurrentY += 12;
+  doc.text(`Pincode: ${primaryAddress.pincode}`, leftColumnX + 10, billToCurrentY, { width: 240 });
+  billToCurrentY += 12;
+  if (primaryAddress.gstNumber) {
+    doc.text(`GSTIN/UIN: ${primaryAddress.gstNumber}`, leftColumnX + 10, billToCurrentY, { width: 240 });
+    billToCurrentY += 12;
+  }
+}
       
              // Right side - Consignee (Ship to)
        const shipToStartY = currentY + 10;

@@ -81,10 +81,10 @@ interface StockLocationData {
 interface AMCOfferItem {
     make: string;
     engineSlNo: string;
-    dgRatingKVA: number;
-    typeOfVisits: string;
-    qty: number;
-    amcCostPerDG: number;
+    dgRatingKVA?: number;
+    typeOfVisits?: number;
+    qty?: number;
+    amcCostPerDG?: number;
     totalAMCAmountPerDG: number;
     gst18: number;
     totalAMCCost: number;
@@ -142,6 +142,7 @@ interface AMCQuotationData extends Omit<QuotationData, 'batteryBuyBack'> {
     amcPeriodFrom: Date;
     amcPeriodTo: Date;
     gstIncluded: boolean;
+    selectedAddressId?: string;
 }
 
 const AMCQuotationForm: React.FC = () => {
@@ -195,10 +196,10 @@ const AMCQuotationForm: React.FC = () => {
         offerItems: [{
             make: '',
             engineSlNo: '',
-            dgRatingKVA: 0,
-            typeOfVisits: '',
+            dgRatingKVA: undefined,
+            typeOfVisits: undefined,
             qty: 1,
-            amcCostPerDG: 0,
+            amcCostPerDG: undefined,
             totalAMCAmountPerDG: 0,
             gst18: 0,
             totalAMCCost: 0
@@ -211,7 +212,8 @@ const AMCQuotationForm: React.FC = () => {
         validityText: '',
         amcPeriodFrom: new Date(),
         amcPeriodTo: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
-        gstIncluded: true
+        gstIncluded: true,
+        selectedAddressId: undefined
     });
     console.log("quotationData:",quotationData);
     const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
@@ -231,11 +233,31 @@ const AMCQuotationForm: React.FC = () => {
     const [engineerSearchTerm, setEngineerSearchTerm] = useState<string | undefined>(undefined);
     const [sparesProductSearchTerms, setSparesProductSearchTerms] = useState<Record<number, string>>({});
     const [showSparesProductDropdowns, setShowSparesProductDropdowns] = useState<Record<number, boolean>>({});
+    const [showAddressDropdown, setShowAddressDropdown] = useState(false);
+    const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
 
     // Load data on component mount
     useEffect(() => {
         loadData();
     }, []);
+
+    // Close address dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as Element;
+            if (!target.closest('.address-dropdown-container')) {
+                setShowAddressDropdown(false);
+            }
+        };
+
+        if (showAddressDropdown) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [showAddressDropdown]);
 
     // Helper function to safely convert date strings to Date objects
     const safeDateConversion = (dateValue: any): Date => {
@@ -569,8 +591,8 @@ const AMCQuotationForm: React.FC = () => {
 
         // Recalculate totals for this item
         const item = updatedItems[index];
-        const safeQty = Number(item.qty) || 0;
-        const safeCost = Number(item.amcCostPerDG) || 0;
+        const safeQty = (item.qty !== undefined && item.qty !== null) ? Number(item.qty) : 0;
+        const safeCost = (item.amcCostPerDG !== undefined && item.amcCostPerDG !== null) ? Number(item.amcCostPerDG) : 0;
         const totalAMCAmountPerDG = safeQty * safeCost;
         const gst18 = totalAMCAmountPerDG * 0.18;
         const totalAMCCost = totalAMCAmountPerDG + gst18;
@@ -601,8 +623,8 @@ const AMCQuotationForm: React.FC = () => {
         let grandTotal = 0;
 
         items.forEach(item => {
-            const qty = Number(item.qty) || 0;
-            const costPerDG = Number(item.amcCostPerDG) || 0;
+            const qty = (item.qty !== undefined && item.qty !== null) ? Number(item.qty) : 0;
+            const costPerDG = (item.amcCostPerDG !== undefined && item.amcCostPerDG !== null) ? Number(item.amcCostPerDG) : 0;
             const itemSubtotal = qty * costPerDG;
             
             let itemTax = 0;
@@ -633,10 +655,10 @@ const AMCQuotationForm: React.FC = () => {
         const newItem: AMCOfferItem = {
             make: '',
             engineSlNo: '',
-            dgRatingKVA: 0,
-            typeOfVisits: '',
-            qty: 1,
-            amcCostPerDG: 0,
+            dgRatingKVA: undefined,
+            typeOfVisits: undefined,
+            qty: undefined,
+            amcCostPerDG: undefined,
             totalAMCAmountPerDG: 0,
             gst18: 0,
             totalAMCCost: 0
@@ -861,16 +883,16 @@ const AMCQuotationForm: React.FC = () => {
                 if (!item.engineSlNo?.trim()) {
                     errors.push({ field: `offerItems[${index}].engineSlNo`, message: 'Engine serial number is required' });
                 }
-                if (!item.dgRatingKVA || item.dgRatingKVA <= 0) {
+                if (item.dgRatingKVA === undefined || item.dgRatingKVA === null || item.dgRatingKVA <= 0) {
                     errors.push({ field: `offerItems[${index}].dgRatingKVA`, message: 'DG rating must be greater than 0 KVA' });
                 }
-                if (!item.typeOfVisits?.trim()) {
-                    errors.push({ field: `offerItems[${index}].typeOfVisits`, message: 'Type of visits is required' });
+                if (item.typeOfVisits === undefined || item.typeOfVisits === null || item.typeOfVisits <= 0) {
+                    errors.push({ field: `offerItems[${index}].typeOfVisits`, message: 'No of visits must be greater than 0' });
                 }
-                if (!item.qty || item.qty <= 0) {
+                if (item.qty === undefined || item.qty === null || item.qty <= 0) {
                     errors.push({ field: `offerItems[${index}].qty`, message: 'Quantity must be greater than 0' });
                 }
-                if (!item.amcCostPerDG || item.amcCostPerDG <= 0) {
+                if (item.amcCostPerDG === undefined || item.amcCostPerDG === null || item.amcCostPerDG <= 0) {
                     errors.push({ field: `offerItems[${index}].amcCostPerDG`, message: 'AMC cost per DG must be greater than 0' });
                 }
             });
@@ -975,6 +997,7 @@ const AMCQuotationForm: React.FC = () => {
                 amcPeriodFrom: quotationData.amcPeriodFrom,
                 amcPeriodTo: quotationData.amcPeriodTo,
                 gstIncluded: quotationData.gstIncluded,
+                selectedAddressId: quotationData.selectedAddressId,
                 // Calculated totals
                 subtotal: amcTotals.subtotal,
                 totalTax: amcTotals.totalTax,
@@ -1113,6 +1136,24 @@ const AMCQuotationForm: React.FC = () => {
         );
     };
 
+    const getFilteredAddresses = () => {
+        if (!quotationData.customer._id) return [];
+        
+        const customer = customers.find(c => c._id === quotationData.customer._id);
+        if (!customer || !customer.addresses) return [];
+        
+        return customer.addresses;
+    };
+
+    const getSelectedAddress = () => {
+        const addresses = getFilteredAddresses();
+        if (!quotationData.selectedAddressId) {
+            // Return primary address if no address is selected
+            return addresses.find(addr => addr.isPrimary) || addresses[0] || null;
+        }
+        return addresses.find(addr => addr.id.toString() === quotationData.selectedAddressId) || null;
+    };
+
     // Helper function to get error message for a specific field
     const getFieldError = (field: string): string | undefined => {
         const error = validationErrors.find(err => err.field === field);
@@ -1204,7 +1245,7 @@ const AMCQuotationForm: React.FC = () => {
 
             {/* Document Title */}
             <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">ANNUAL MAINTENANCE (AMC) OFFER</h1>
+                <h1 className="text-2xl font-bold text-gray-900 mb-2">ANNUAL MAINTENANCE ({quotationData.amcType}) OFFER</h1>
                 <div className="flex justify-center items-center space-x-4">
                     <div className="flex items-center">
                         <select
@@ -1294,7 +1335,9 @@ const AMCQuotationForm: React.FC = () => {
                                                                 email: customer.email,
                                                                 phone: customer.phone,
                                                                 pan: (customer as any).pan || ''
-                                                            }
+                                                            },
+                                                            // Auto-select primary address when customer is selected
+                                                            selectedAddressId: customer.addresses?.find((addr: any) => addr.isPrimary)?.id?.toString() || customer.addresses?.[0]?.id?.toString() || undefined
                                                         }));
                                                         // Reset search term to use selected value rendering
                                                         setCustomerSearchTerm(undefined);
@@ -1309,6 +1352,76 @@ const AMCQuotationForm: React.FC = () => {
                                         ) : (
                                             <div className="px-3 py-2 text-gray-500 text-sm">
                                                 No customers found
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="flex items-center space-x-4">
+                            <span className="font-medium w-20">Address</span>
+                            <div className="relative flex-1 address-dropdown-container">
+                                <div
+                                    className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 cursor-pointer ${getErrorClass('selectedAddressId')}`}
+                                    onClick={() => {
+                                        if (quotationData.customer._id) {
+                                            setShowAddressDropdown(!showAddressDropdown);
+                                        }
+                                    }}
+                                >
+                                    {(() => {
+                                        const selectedAddress = getSelectedAddress();
+                                        return selectedAddress ? (
+                                            <div>
+                                                <div className="font-medium">{selectedAddress.address}</div>
+                                                <div className="text-sm text-gray-500">
+                                                    {selectedAddress.district}, {selectedAddress.state} - {selectedAddress.pincode}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <span className="text-gray-500">
+                                                {quotationData.customer._id ? 'Select address' : 'Select customer first'}
+                                            </span>
+                                        );
+                                    })()}
+                                </div>
+                                {getFieldError('selectedAddressId') && (
+                                    <p className="mt-1 text-sm text-red-600">{getFieldError('selectedAddressId')}</p>
+                                )}
+                                {showAddressDropdown && quotationData.customer._id && (
+                                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                                        {getFilteredAddresses().length > 0 ? (
+                                            getFilteredAddresses().map((address) => (
+                                                <div
+                                                    key={address.id}
+                                                    className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                                                    onClick={() => {
+                                                        setQuotationData(prev => ({
+                                                            ...prev,
+                                                            selectedAddressId: address.id.toString()
+                                                        }));
+                                                        setShowAddressDropdown(false);
+                                                    }}
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <div>
+                                                            <div className="font-medium">{address.address}</div>
+                                                            <div className="text-sm text-gray-500">
+                                                                {address.district}, {address.state} - {address.pincode}
+                                                            </div>
+                                                        </div>
+                                                        {address.isPrimary && (
+                                                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
+                                                                Primary
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="px-3 py-2 text-gray-500 text-sm">
+                                                No addresses found for this customer
                                             </div>
                                         )}
                                     </div>
@@ -1419,12 +1532,12 @@ const AMCQuotationForm: React.FC = () => {
                                 <th className="border border-gray-300 px-4 py-2 text-left">Make</th>
                                 <th className="border border-gray-300 px-4 py-2 text-left">Engine Sl.No</th>
                                 <th className="border border-gray-300 px-4 py-2 text-left">DG Rating in KVA</th>
-                                <th className="border border-gray-300 px-4 py-2 text-left">Type Of Visits</th>
+                                <th className="border border-gray-300 px-4 py-2 text-left">No Of Visits</th>
                                 <th className="border border-gray-300 px-4 py-2 text-left">Qty</th>
-                                <th className="border border-gray-300 px-4 py-2 text-left">AMC/CAMC cost per DG</th>
-                                <th className="border border-gray-300 px-4 py-2 text-left">Total AMC Amount per DG</th>
+                                <th className="border border-gray-300 px-4 py-2 text-left">{quotationData.amcType} cost per DG</th>
+                                <th className="border border-gray-300 px-4 py-2 text-left">Total {quotationData.amcType} Amount per DG</th>
                                 <th className="border border-gray-300 px-4 py-2 text-left">GST @ 18%</th>
-                                <th className="border border-gray-300 px-4 py-2 text-left">Total AMC Cost</th>
+                                <th className="border border-gray-300 px-4 py-2 text-left">Total {quotationData.amcType} Cost</th>
                                 <th className="border border-gray-300 px-4 py-2 text-left">Actions</th>
                             </tr>
                         </thead>
@@ -1497,11 +1610,14 @@ const AMCQuotationForm: React.FC = () => {
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
                                         <input
-                                            type="text"
-                                            value={item.typeOfVisits}
-                                            onChange={(e) => handleOfferItemChange(index, 'typeOfVisits', e.target.value)}
+                                            type="number"
+                                            value={item.typeOfVisits || ''}
+                                            onChange={(e) => {
+                                                const v = e.target.value;
+                                                handleOfferItemChange(index, 'typeOfVisits', v === '' ? undefined : parseInt(v));
+                                            }}
                                             className={`w-full border-none focus:outline-none ${hasFieldError(`offerItems[${index}].typeOfVisits`) ? 'bg-red-50' : ''}`}
-                                            placeholder="Manual Typing"
+                                            placeholder="Enter number of visits"
                                         />
                                         {getFieldError(`offerItems[${index}].typeOfVisits`) && (
                                             <p className="text-xs text-red-600 mt-1">{getFieldError(`offerItems[${index}].typeOfVisits`)}</p>
@@ -1511,6 +1627,7 @@ const AMCQuotationForm: React.FC = () => {
                                         <input
                                             type="number"
                                             value={item.qty ?? ''}
+                                            min={1}
                                             onChange={(e) => {
                                                 const v = e.target.value;
                                                 handleOfferItemChange(index, 'qty', v === '' ? undefined : parseInt(v));
@@ -1792,9 +1909,9 @@ const AMCQuotationForm: React.FC = () => {
                                                                             <div className="text-xs text-gray-600 mt-0.5">
                                                                                 <strong>Name:</strong> {p.name || 'Unnamed Product'}
                                                                             </div>
-                                                                            <div className="text-xs text-gray-500">
+                                                                            {/* <div className="text-xs text-gray-500">
                                                                                 <strong>Category:</strong> {p.category || 'Uncategorized'}
-                                                                            </div>
+                                                                            </div> */}
                                                                             {p.brand && (
                                                                                 <div className="text-xs text-gray-500">
                                                                                     <strong>Brand:</strong> {p.brand}

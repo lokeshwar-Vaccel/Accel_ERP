@@ -6,7 +6,8 @@ import {
   createStockLocation,
   updateStockLocation,
   deleteStockLocation,
-  toggleStockLocationStatus
+  toggleStockLocationStatus,
+  setPrimaryLocation
 } from '../controllers/stockLocationController';
 import { 
   stockQuerySchema,
@@ -23,7 +24,8 @@ import { UserRole } from '../types';
 import {
   getStockLevels as getStock,
   adjustStock,
-  transferStock
+  transferStock,
+  getProductsByLocation
 } from '../controllers/stockController';
 import { createRoom, deleteRoom, getRooms, toggleRoomStatus, updateRoom } from '../controllers/stockRoomController';
 import { createRack, deleteRack, getRacks, toggleRackStatus, updateRack } from '../controllers/stockRackController';
@@ -43,6 +45,7 @@ const getLowStockItems = getStock;
 // Stock routes
 router.get('/', checkPermission('read'), getStock);
 router.get('/low-stock', checkPermission('read'), getLowStockItems);
+router.get('/products-by-location/:locationId', checkPermission('read'), getProductsByLocation);
 
 // Stock adjustments
 router.post('/adjust', validate(stockAdjustmentSchema), checkPermission('write'), adjustStock);
@@ -70,6 +73,11 @@ router.delete('/locations/:id',
 router.patch('/locations/:id/toggle', 
   checkPermission('write'), 
   toggleStockLocationStatus
+);
+
+router.patch('/locations/:id/set-primary', 
+  checkPermission('write'), 
+  setPrimaryLocation
 );
 
 // Room Routes

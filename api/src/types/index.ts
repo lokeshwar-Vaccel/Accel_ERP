@@ -320,6 +320,7 @@ export interface IStockLocation extends Document {
   contactPerson?: string;
   phone?: string;
   isActive: boolean;
+  isPrimary: boolean;
   gstNumber?: string;
 }
 

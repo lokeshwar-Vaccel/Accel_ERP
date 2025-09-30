@@ -230,6 +230,7 @@ const invoiceSchema = new Schema<IInvoice>({
     type: [
       {
         description: { type: String, required: true },
+        hsnNumber: { type: String, required: false }, // Add HSN field for service charges
         quantity: { type: Number, required: true },
         unitPrice: { type: Number, required: true },
         discount: { type: Number, default: 0 },
@@ -244,6 +245,7 @@ const invoiceSchema = new Schema<IInvoice>({
   batteryBuyBack: {
     type: {
       description: { type: String, required: true },
+      hsnNumber: { type: String, required: false }, // Add HSN field for battery buy back
       quantity: { type: Number, required: true },
       unitPrice: { type: Number, required: true },
       discount: { type: Number, default: 0 },

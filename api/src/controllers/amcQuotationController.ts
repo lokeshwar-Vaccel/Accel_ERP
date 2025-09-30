@@ -63,6 +63,7 @@ export const getAMCQuotations = async (req: Request, res: Response, next: NextFu
     const [quotations, total] = await Promise.all([
       AMCQuotation.find(filter)
         .populate('location', 'name address type gstNumber')
+        .populate('customer', 'name email phone pan addresses')
         .populate('assignedEngineer', 'firstName lastName email phone')
         .skip(skip)
         .limit(limit)
@@ -70,23 +71,48 @@ export const getAMCQuotations = async (req: Request, res: Response, next: NextFu
       AMCQuotation.countDocuments(filter)
     ]);
 
-    // Populate customer data with addresses for each quotation
-    const quotationsWithCustomerData = await Promise.all(
-      quotations.map(async (quotation) => {
-        if (quotation.customer._id) {
-          const customer = await Customer.findById(quotation.customer._id, 'name email phone pan addresses');
-          if (customer) {
-            (quotation.customer as any).addresses = customer.addresses;
+    // Process quotations to merge customer data properly
+    const processedQuotations = await Promise.all(quotations.map(async (quotation) => {
+      const quotationObj = quotation.toObject();
+      
+      // If customer has _id, fetch the full customer data from Customer collection
+      if (quotationObj.customer && typeof quotationObj.customer === 'object' && quotationObj.customer._id) {
+        try {
+          const fullCustomer = await Customer.findById(quotationObj.customer._id).select('name panNumber addresses');
+          if (fullCustomer) {
+            // Get primary address email and phone
+            const primaryAddress = fullCustomer.addresses?.find(addr => addr.isPrimary);
+            const primaryEmail = primaryAddress?.email || '';
+            const primaryPhone = primaryAddress?.phone || '';
+            
+            quotationObj.customer = {
+              _id: (fullCustomer._id as any).toString(),
+              name: fullCustomer.name || quotationObj.customer.name,
+              email: primaryEmail || quotationObj.customer.email,
+              phone: primaryPhone || quotationObj.customer.phone,
+              pan: fullCustomer.panNumber || quotationObj.customer.pan,
+              addresses: (fullCustomer.addresses || []) as any[]
+            };
           }
+        } catch (error) {
+          console.error('Error fetching customer data:', error);
+          // Fallback to existing customer data with empty addresses
+          quotationObj.customer.addresses = [];
         }
-        return quotation;
-      })
-    );
+      }
+      
+      return quotationObj;
+    }));
+
+    // Debug: Log customer data to check addresses population
+    if (processedQuotations.length > 0) {
+      console.log('Sample customer data:', JSON.stringify(processedQuotations[0].customer, null, 2));
+    }
 
     const response: APIResponse = {
       success: true,
       message: 'AMC quotations retrieved successfully',
-      data: quotationsWithCustomerData,
+      data: processedQuotations,
       pagination: {
         page,
         limit,
@@ -108,24 +134,46 @@ export const getAMCQuotationById = async (req: Request, res: Response, next: Nex
   try {
     const quotation = await AMCQuotation.findById(req.params.id)
       .populate('location', 'name address type gstNumber')
+      .populate('customer', 'name email phone pan addresses')
       .populate('assignedEngineer', 'firstName lastName email phone');
 
     if (!quotation) {
       return next(new AppError('AMC quotation not found', 404));
     }
 
-    // Populate customer data with addresses
-    if (quotation.customer._id) {
-      const customer = await Customer.findById(quotation.customer._id, 'name email phone pan addresses');
-      if (customer) {
-        (quotation.customer as any).addresses = customer.addresses;
+    // Process quotation to merge customer data properly
+    const quotationObj = quotation.toObject();
+    
+    // If customer has _id, fetch the full customer data from Customer collection
+    if (quotationObj.customer && typeof quotationObj.customer === 'object' && quotationObj.customer._id) {
+      try {
+        const fullCustomer = await Customer.findById(quotationObj.customer._id).select('name panNumber addresses');
+        if (fullCustomer) {
+          // Get primary address email and phone
+          const primaryAddress = fullCustomer.addresses?.find(addr => addr.isPrimary);
+          const primaryEmail = primaryAddress?.email || '';
+          const primaryPhone = primaryAddress?.phone || '';
+          
+          quotationObj.customer = {
+            _id: (fullCustomer._id as any).toString(),
+            name: fullCustomer.name || quotationObj.customer.name,
+            email: primaryEmail || quotationObj.customer.email,
+            phone: primaryPhone || quotationObj.customer.phone,
+            pan: fullCustomer.panNumber || quotationObj.customer.pan,
+            addresses: (fullCustomer.addresses || []) as any[]
+          };
+        }
+      } catch (error) {
+        console.error('Error fetching customer data:', error);
+        // Fallback to existing customer data with empty addresses
+        quotationObj.customer.addresses = [];
       }
     }
 
     const response: APIResponse = {
       success: true,
       message: 'AMC quotation retrieved successfully',
-      data: quotation
+      data: quotationObj
     };
 
     res.status(200).json(response);
@@ -655,10 +703,10 @@ const sanitizeAMCQuotationData = (data: any): any => {
     offerItems: Array.isArray(data.offerItems) ? data.offerItems.map((item: any) => ({
       make: String(item.make || '').trim(),
       engineSlNo: String(item.engineSlNo || '').trim(),
-      dgRatingKVA: Number(item.dgRatingKVA) || 0,
-      typeOfVisits: String(item.typeOfVisits || '').trim(),
-      qty: Number(item.qty) || 1,
-      amcCostPerDG: Number(item.amcCostPerDG) || 0,
+      dgRatingKVA: item.dgRatingKVA !== undefined ? Number(item.dgRatingKVA) : undefined,
+      typeOfVisits: item.typeOfVisits !== undefined ? Number(item.typeOfVisits) : undefined,
+      qty: item.qty !== undefined ? Number(item.qty) : undefined,
+      amcCostPerDG: item.amcCostPerDG !== undefined ? Number(item.amcCostPerDG) : undefined,
       totalAMCAmountPerDG: Number(item.totalAMCAmountPerDG) || 0,
       gst18: Number(item.gst18) || 0,
       totalAMCCost: Number(item.totalAMCCost) || 0
@@ -686,6 +734,7 @@ const sanitizeAMCQuotationData = (data: any): any => {
     amcPeriodFrom: data.amcPeriodFrom ? new Date(data.amcPeriodFrom) : undefined,
     amcPeriodTo: data.amcPeriodTo ? new Date(data.amcPeriodTo) : undefined,
     gstIncluded: Boolean(data.gstIncluded),
+    selectedAddressId: data.selectedAddressId ? String(data.selectedAddressId).trim() : undefined,
     // Standard quotation fields
     items: Array.isArray(data.items) ? data.items.map((item: any) => ({
       product: String(item.product || '').trim(),
@@ -770,16 +819,16 @@ const validateAMCQuotationData = (data: any): { isValid: boolean; errors: any[] 
       if (!item.engineSlNo || (typeof item.engineSlNo === 'string' && !item.engineSlNo.trim())) {
         errors.push({ field: `offerItems[${index}].engineSlNo`, message: 'Engine serial number is required' });
       }
-      if (!isValidNumber(item.dgRatingKVA) || item.dgRatingKVA <= 0) {
+      if (item.dgRatingKVA !== undefined && (!isValidNumber(item.dgRatingKVA) || item.dgRatingKVA <= 0)) {
         errors.push({ field: `offerItems[${index}].dgRatingKVA`, message: 'DG rating must be greater than 0' });
       }
-      if (!item.typeOfVisits || (typeof item.typeOfVisits === 'string' && !item.typeOfVisits.trim())) {
-        errors.push({ field: `offerItems[${index}].typeOfVisits`, message: 'Type of visits is required' });
+      if (item.typeOfVisits !== undefined && (!isValidNumber(item.typeOfVisits) || item.typeOfVisits <= 0)) {
+        errors.push({ field: `offerItems[${index}].typeOfVisits`, message: 'No of visits must be greater than 0' });
       }
-      if (!isValidNumber(item.qty) || item.qty <= 0) {
+      if (item.qty !== undefined && (!isValidNumber(item.qty) || item.qty <= 0)) {
         errors.push({ field: `offerItems[${index}].qty`, message: 'Quantity must be greater than 0' });
       }
-      if (!isValidNumber(item.amcCostPerDG) || item.amcCostPerDG < 0) {
+      if (item.amcCostPerDG !== undefined && (!isValidNumber(item.amcCostPerDG) || item.amcCostPerDG < 0)) {
         errors.push({ field: `offerItems[${index}].amcCostPerDG`, message: 'AMC cost per DG must be non-negative' });
       }
     });
@@ -847,78 +896,71 @@ export const sendAMCQuotationEmailToCustomer = async (
     const { id } = req.params;
 
     // Find the AMC quotation
-    const quotation = await AMCQuotation.findById(id);
+    const quotation = await AMCQuotation.findById(id)
+      .populate('customer', 'name email phone addresses');
 
     if (!quotation) {
       return next(new AppError('AMC Quotation not found', 404));
     }
 
-    // Populate customer data with addresses
-    let customer = quotation.customer as any;
-    if (quotation.customer._id) {
-      const customerData = await Customer.findById(quotation.customer._id, 'name email phone pan addresses');
-      if (customerData) {
-        customer = {
-          ...quotation.customer,
-          addresses: customerData.addresses
-        };
+    // Process quotation to merge customer data properly
+    const quotationObj = quotation.toObject();
+    
+    // If customer has _id, fetch the full customer data from Customer collection
+    if (quotationObj.customer && typeof quotationObj.customer === 'object' && quotationObj.customer._id) {
+      try {
+        const fullCustomer = await Customer.findById(quotationObj.customer._id).select('name panNumber addresses');
+        if (fullCustomer) {
+          // Get primary address email and phone
+          const primaryAddress = fullCustomer.addresses?.find(addr => addr.isPrimary);
+          const primaryEmail = primaryAddress?.email || '';
+          const primaryPhone = primaryAddress?.phone || '';
+          
+          quotationObj.customer = {
+            _id: (fullCustomer._id as any).toString(),
+            name: fullCustomer.name || quotationObj.customer.name,
+            email: primaryEmail || quotationObj.customer.email,
+            phone: primaryPhone || quotationObj.customer.phone,
+            pan: fullCustomer.panNumber || quotationObj.customer.pan,
+            addresses: (fullCustomer.addresses || []) as any[]
+          };
+        }
+      } catch (error) {
+        console.error('Error fetching customer data:', error);
+        // Fallback to existing customer data with empty addresses
+        quotationObj.customer.addresses = [];
       }
     }
 
-    // Get customer primary address email
-    let primaryEmail = null;
+    // Get customer emails (both primary address and main email)
+    const customer = quotationObj.customer as any;
+    const emailsToSend: string[] = [];
 
-    console.log('Customer data for email:', {
-      customerId: customer._id,
-      customerName: customer.name,
-      customerEmail: customer.email,
-      addresses: customer.addresses,
-      addressesLength: customer.addresses?.length || 0
-    });
-
-    // First try to get primary address email
+    // Get primary address email
     if (customer.addresses && customer.addresses.length > 0) {
       const primaryAddress = customer.addresses.find((addr: any) => addr.isPrimary);
-      console.log('Primary address found:', primaryAddress);
       if (primaryAddress && primaryAddress.email) {
-        primaryEmail = primaryAddress.email;
-        console.log('Using primary address email:', primaryEmail);
+        emailsToSend.push(primaryAddress.email);
       }
     }
 
-    // If no primary address email, try customer's main email
-    if (!primaryEmail && customer.email) {
-      primaryEmail = customer.email;
-      console.log('Using customer main email:', primaryEmail);
+    // Get customer's main email (if different from primary address email)
+    if (customer.email && !emailsToSend.includes(customer.email)) {
+      emailsToSend.push(customer.email);
     }
 
-    // If still no email, try to find any address with email
-    if (!primaryEmail && customer.addresses && customer.addresses.length > 0) {
-      const addressWithEmail = customer.addresses.find((addr: any) => addr.email);
-      if (addressWithEmail && addressWithEmail.email) {
-        primaryEmail = addressWithEmail.email;
-        console.log('Using first available address email:', primaryEmail);
-      }
-    }
-
-    if (!primaryEmail) {
-      console.log('No email found for customer:', customer._id);
+    if (emailsToSend.length === 0) {
       const response: APIResponse = {
         success: false,
-        message: 'Customer email not available for this AMC quotation. Please ensure customer has a valid email address.',
-        data: {
-          customerId: customer._id,
-          customerName: customer.name,
-          hasAddresses: customer.addresses && customer.addresses.length > 0,
-          addressesCount: customer.addresses?.length || 0
-        }
+        message: 'Customer email not available for this AMC quotation',
+        data: null
       };
       res.status(400).json(response);
       return;
     }
 
     // Create email subject
-    const subject = `AMC Quotation ${quotation.quotationNumber} - Sun Power Services`;
+    const subject = `AMC Quotation ${quotationObj.quotationNumber} - Sun Power Services`;
 
     // Create HTML email content
     const htmlContent = `
@@ -927,7 +969,7 @@ export const sendAMCQuotationEmailToCustomer = async (
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>AMC Quotation ${quotation.quotationNumber}</title>
+          <title>AMC Quotation ${quotationObj.quotationNumber}</title>
           <style>
             body {
               font-family: Arial, sans-serif;
@@ -995,35 +1037,35 @@ export const sendAMCQuotationEmailToCustomer = async (
             <table>
               <tr>
                 <td><strong>Quotation Number:</strong></td>
-                <td class="highlight">${quotation.quotationNumber}</td>
+                <td class="highlight">${quotationObj.quotationNumber}</td>
               </tr>
               <tr>
                 <td><strong>Issue Date:</strong></td>
-                <td>${new Date(quotation.issueDate).toLocaleDateString('en-IN')}</td>
+                <td>${new Date(quotationObj.issueDate).toLocaleDateString('en-IN')}</td>
               </tr>
               <tr>
                 <td><strong>Valid Until:</strong></td>
-                <td>${new Date(quotation.validUntil).toLocaleDateString('en-IN')}</td>
+                <td>${new Date(quotationObj.validUntil).toLocaleDateString('en-IN')}</td>
               </tr>
               <tr>
                 <td><strong>AMC Type:</strong></td>
-                <td>${quotation.amcType}</td>
+                <td>${quotationObj.amcType}</td>
               </tr>
               <tr>
                 <td><strong>Contract Duration:</strong></td>
-                <td>${quotation.contractDuration} months</td>
+                <td>${quotationObj.contractDuration} months</td>
               </tr>
               <tr>
                 <td><strong>Billing Cycle:</strong></td>
-                <td>${quotation.billingCycle}</td>
+                <td>${quotationObj.billingCycle}</td>
               </tr>
               <tr>
                 <td><strong>Grand Total:</strong></td>
-                <td class="amount">₹${quotation.grandTotal?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}</td>
+                <td class="amount">₹${quotationObj.grandTotal?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}</td>
               </tr>
             </table>
 
-            ${quotation.offerItems && quotation.offerItems.length > 0 ? `
+            ${quotationObj.offerItems && quotation.offerItems.length > 0 ? `
               <h3>AMC Offer Items</h3>
               <table>
                 <thead>
@@ -1038,7 +1080,7 @@ export const sendAMCQuotationEmailToCustomer = async (
                   </tr>
                 </thead>
                 <tbody>
-                  ${quotation.offerItems.map((item: any) => `
+                  ${quotationObj.offerItems.map((item: any) => `
                     <tr>
                       <td>${item.make || 'N/A'}</td>
                       <td>${item.engineSlNo || 'N/A'}</td>
@@ -1053,7 +1095,7 @@ export const sendAMCQuotationEmailToCustomer = async (
               </table>
             ` : ''}
 
-            ${quotation.sparesItems && quotation.sparesItems.length > 0 ? `
+            ${quotationObj.sparesItems && quotation.sparesItems.length > 0 ? `
               <h3>Spares Items</h3>
               <table>
                 <thead>
@@ -1065,7 +1107,7 @@ export const sendAMCQuotationEmailToCustomer = async (
                   </tr>
                 </thead>
                 <tbody>
-                  ${quotation.sparesItems.map((item: any) => `
+                  ${quotationObj.sparesItems.map((item: any) => `
                     <tr>
                       <td>${item.partNo || 'N/A'}</td>
                       <td>${item.description || 'N/A'}</td>
@@ -1077,14 +1119,14 @@ export const sendAMCQuotationEmailToCustomer = async (
               </table>
             ` : ''}
 
-            ${quotation.notes ? `
+            ${quotationObj.notes ? `
               <h3>Notes</h3>
-              <p>${quotation.notes}</p>
+              <p>${quotationObj.notes}</p>
             ` : ''}
 
-            ${quotation.terms ? `
+            ${quotationObj.terms ? `
               <h3>Terms & Conditions</h3>
-              <p>${quotation.terms}</p>
+              <p>${quotationObj.terms}</p>
             ` : ''}
           </div>
 
@@ -1097,28 +1139,28 @@ export const sendAMCQuotationEmailToCustomer = async (
       </html>
     `;
 
-    // Send the email
-    await sendQuotationEmailViaNodemailer(
-      primaryEmail,
-      subject,
-      htmlContent
+    // Send the email to all recipients
+    const emailPromises = emailsToSend.map(email => 
+      sendQuotationEmailViaNodemailer(email, subject, htmlContent)
     );
 
+    await Promise.all(emailPromises);
+
     // Log the email sending attempt
-    console.log(`Attempting to send AMC quotation email to ${primaryEmail} for quotation ${quotation.quotationNumber}`);
+    console.log(`Attempting to send AMC quotation email to ${emailsToSend.join(', ')} for quotation ${quotationObj.quotationNumber}`);
 
     // Always update quotation status to 'sent' after sending email
     await AMCQuotation.findByIdAndUpdate(id, { status: 'sent' });
 
     // Log the email sending
-    console.log(`AMC quotation email sent successfully to ${primaryEmail} for quotation ${quotation.quotationNumber}`);
+    console.log(`AMC quotation email sent successfully to ${emailsToSend.join(', ')} for quotation ${quotationObj.quotationNumber}`);
 
     const response: APIResponse = {
       success: true,
-      message: `AMC quotation email sent successfully to ${primaryEmail}`,
+      message: `AMC quotation email sent successfully to ${emailsToSend.join(', ')}`,
       data: {
-        quotationNumber: quotation.quotationNumber,
-        customerEmail: primaryEmail,
+        quotationNumber: quotationObj.quotationNumber,
+        customerEmails: emailsToSend,
         status: 'sent'
       }
     };

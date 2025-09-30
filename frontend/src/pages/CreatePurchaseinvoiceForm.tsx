@@ -42,6 +42,12 @@ interface POItem {
   partNo?: string; // For new products
   brand?: string; // For new products
   category?: string; // For new products
+  stockId?: string; // Stock ID for inventory tracking
+  stockLocation?: {
+    location: string;
+    room: string;
+    rack: string;
+  };
 }
 
 interface SupplierAddress {
@@ -75,6 +81,42 @@ interface Product {
   hsnNumber?: string;
   uom?: string;
   availableQuantity?: number;
+}
+
+interface StockProduct {
+  _id: string; // Stock ID
+  product: {
+    _id: string;
+    name: string;
+    partNo?: string;
+    brand: string;
+    category: string;
+    hsnNumber?: string;
+    gst?: number;
+    gndp?: number;
+    price: number;
+    uom?: string;
+  };
+  location: {
+    _id: string;
+    name: string;
+  };
+  room?: {
+    _id: string;
+    name: string;
+  };
+  rack?: {
+    _id: string;
+    name: string;
+  };
+  quantity: number;
+  availableQuantity: number;
+  reservedQuantity: number;
+  stockLocation: {
+    location: string;
+    room: string;
+    rack: string;
+  };
 }
 
 interface PurchaseOrder {
@@ -129,6 +171,7 @@ interface POFormData {
   supplierEmail: string;
   supplierAddress?: SupplierAddress;
   location: string;
+  invoiceNumber: string;
   invoiceDate: string;
   dueDate: string;
   sourceId?: string;
@@ -165,6 +208,7 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
       pincode: ''
     },
     location: '',
+    invoiceNumber: '',
     invoiceDate: new Date().toISOString().split('T')[0],
     dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
     department: 'retail',
@@ -189,10 +233,12 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [stockProducts, setStockProducts] = useState<StockProduct[]>([]);
   const [addresses, setAddresses] = useState<SupplierAddress[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
+  const [selectedLocationId, setSelectedLocationId] = useState<string>('');
 
   // Dropdown states
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
@@ -415,6 +461,29 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
     }
   };
 
+  const fetchProductsByLocation = async (locationId: string, searchTerm?: string) => {
+    try {
+      // Fetch all products without pagination limit
+      const params: any = { limit: 10000 }; // Set a very high limit to get all products
+      if (searchTerm) {
+        params.search = searchTerm;
+      }
+
+      const response = await apiClient.stock.getProductsByLocation(locationId, params);
+      
+      if (response.success && response.data?.products) {
+        setStockProducts(response.data.products);
+        setSelectedLocationId(locationId);
+      } else {
+        setStockProducts([]);
+      }
+    } catch (error) {
+      console.error('Error fetching products by location:', error);
+      toast.error('Failed to load products for selected location');
+      setStockProducts([]);
+    }
+  };
+
   const fetchLocations = async () => {
     try {
       const response = await apiClient.stock.getLocations();
@@ -430,11 +499,33 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
 
       setLocations(locationsData);
 
-      // Set "Main Office" as default if not already selected
+      // Set primary location as default if not already selected
       if (!isEditMode) {
-        const mainOffice = locationsData.find(loc => loc.name === "Main Office");
-        if (mainOffice) {
-          setFormData(prev => ({ ...prev, location: mainOffice._id }));
+        const primaryLocation = locationsData.find(loc => loc.isPrimary === true);
+        if (primaryLocation) {
+          setFormData(prev => ({ ...prev, location: primaryLocation._id }));
+          setLocationSearchTerm(primaryLocation.name);
+          setSelectedLocationId(primaryLocation._id);
+          
+          // Auto-load products for the primary location
+          setTimeout(() => {
+            console.log('CreatePurchaseinvoiceForm: Auto-loading products for primary location:', primaryLocation._id);
+            fetchProductsByLocation(primaryLocation._id);
+          }, 500);
+        } else {
+          // Fallback to "Main Office" if no primary location is set
+          const mainOffice = locationsData.find(loc => loc.name === "Main Office");
+          if (mainOffice) {
+            setFormData(prev => ({ ...prev, location: mainOffice._id }));
+            setLocationSearchTerm(mainOffice.name);
+            setSelectedLocationId(mainOffice._id);
+            
+            // Auto-load products for the fallback location
+            setTimeout(() => {
+              console.log('CreatePurchaseinvoiceForm: Auto-loading products for fallback location:', mainOffice._id);
+              fetchProductsByLocation(mainOffice._id);
+            }, 500);
+          }
         }
       }
     } catch (error) {
@@ -467,6 +558,7 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
           supplierEmail: typeof po.supplierEmail === 'string' ? po.supplierEmail : (po.supplierEmail as any)?.email || '',
           supplierAddress,
           location: '', // Default empty location for now
+          invoiceNumber: po.poNumber || '',
           invoiceDate: po.orderDate ? po.orderDate.split('T')[0] : new Date().toISOString().split('T')[0],
           dueDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.split('T')[0] : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           sourceId: po.sourceId || '',
@@ -549,10 +641,10 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
       setAddresses([]);
     }
 
-    // Auto-focus on address field after supplier selection
+    // Auto-focus on invoice number field after supplier selection
     setTimeout(() => {
-      addressInputRef.current?.focus();
-      setShowAddressDropdown(true);
+      const invoiceNumberInput = document.querySelector('[data-field="invoice-number"]') as HTMLInputElement;
+      if (invoiceNumberInput) invoiceNumberInput.focus();
     }, 50);
   };
 
@@ -635,20 +727,33 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
         if (i === index) {
           const updatedItem = { ...item, [field]: value };
 
-          // Auto-populate product fields when product is selected
-          if (field === 'product') {
-            const productObj = products.find(p => p._id === value);
-            if (productObj) {
-              updatedItem.gndp = productObj.gndp || 0;
-              updatedItem.name = productObj.name;
-              updatedItem.taxRate = productObj.gst || 0;
-              updatedItem.hsnNumber = (productObj as any).hsnNumber || '';
-              updatedItem.uom = (productObj as any).uom || 'nos';
+          // Auto-populate product fields when stock is selected
+          if (field === 'stockId') {
+            const stockProduct = stockProducts.find(sp => sp._id === value);
+            if (stockProduct) {
+              updatedItem.product = stockProduct.product._id; // Set the product ID
+              updatedItem.gndp = stockProduct.product.gndp || stockProduct.product.price || 0;
+              updatedItem.name = stockProduct.product.name;
+              updatedItem.taxRate = stockProduct.product.gst || 0;
+              updatedItem.hsnNumber = stockProduct.product.hsnNumber || '';
+              updatedItem.uom = stockProduct.product.uom || 'nos';
+              updatedItem.stockId = stockProduct._id;
+              updatedItem.stockLocation = stockProduct.stockLocation;
+              
+              // Debug log to ensure stock ID is being set correctly
+              console.log(`Selected stock for product ${stockProduct.product.name}:`, {
+                productId: stockProduct.product._id,
+                stockId: stockProduct._id,
+                location: stockProduct.stockLocation.location,
+                room: stockProduct.stockLocation.room,
+                rack: stockProduct.stockLocation.rack,
+                availableQuantity: stockProduct.availableQuantity
+              });
             }
           }
 
           // Auto-calculate total price
-          if (field === 'quantity' || field === 'gndp' || field === 'taxRate' || field === 'product') {
+          if (field === 'quantity' || field === 'gndp' || field === 'taxRate' || field === 'product' || field === 'stockId') {
             const quantity = Number(field === 'quantity' ? value : (updatedItem.quantity || item.quantity)) || 0;
             const gndp = Number(field === 'gndp' ? value : (updatedItem.gndp || item.gndp)) || 0;
             const taxRate = Number(field === 'taxRate' ? value : (updatedItem.taxRate || item.taxRate)) || 0;
@@ -664,20 +769,31 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
   };
 
   const getFilteredProducts = (searchTerm: string = '') => {
-    return products.filter(product =>
-      product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.partNo?.toLowerCase().includes(searchTerm.toLowerCase())
+    // If no location is selected, return empty array
+    if (!selectedLocationId) {
+      return [];
+    }
+    
+    return stockProducts.filter(stockProduct =>
+      stockProduct.product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      stockProduct.product.partNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      stockProduct.product.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      stockProduct.product.category?.toLowerCase().includes(searchTerm.toLowerCase())
     );
   };
 
   const getProductName = (productId: string) => {
-    const product = products.find(p => p._id === productId);
-    return product?.name || '';
+    const stockProduct = stockProducts.find(sp => sp.product._id === productId);
+    return stockProduct?.product.name || '';
   };
 
   const getProductPartNo = (productId: string) => {
-    const product = products.find(p => p._id === productId);
-    return product?.partNo || '';
+    const stockProduct = stockProducts.find(sp => sp.product._id === productId);
+    return stockProduct?.product.partNo || '';
+  };
+
+  const getStockProductByProductId = (productId: string) => {
+    return stockProducts.find(sp => sp.product._id === productId);
   };
 
   const getSupplierName = (supplierId: string) => {
@@ -730,6 +846,9 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
 
     if (!formData.supplier) {
       newErrors.push('Supplier is required');
+    }
+    if (!formData.invoiceNumber) {
+      newErrors.push('Invoice number is required');
     }
     if (!formData.location) {
       newErrors.push('To address is required');
@@ -1015,6 +1134,49 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
         }
       }
 
+      // Update stock quantities for items with stock information
+      for (const item of updatedItems) {
+        if (item.stockId && item.quantity > 0) {
+          try {
+            console.log(`Updating stock for item:`, {
+              productName: item.name,
+              productId: item.product,
+              stockId: item.stockId,
+              quantity: item.quantity,
+              stockLocation: item.stockLocation,
+              formDataLocation: formData.location
+            });
+            
+            const stockAdjustmentData = {
+              stockId: item.stockId,
+              product: item.product,
+              location: formData.location,
+              adjustmentType: 'add',
+              quantity: item.quantity,
+              reason: `Purchase Invoice - Added ${item.quantity} units`,
+              notes: `Purchase invoice created with ${item.quantity} units added to stock at ${item.stockLocation?.location} → ${item.stockLocation?.room} → ${item.stockLocation?.rack}`
+            };
+            
+            console.log('Stock adjustment data being sent:', stockAdjustmentData);
+            
+            await apiClient.stock.adjustStock(stockAdjustmentData);
+            
+            console.log(`Successfully updated stock for ${item.name}`);
+          } catch (error) {
+            console.error('Error updating stock:', error);
+            // Don't fail the entire operation for stock update errors
+            toast.error(`Failed to update stock for ${item.name || 'product'}`);
+          }
+        } else {
+          console.log(`Skipping stock update for item:`, {
+            productName: item.name,
+            hasStockId: !!item.stockId,
+            quantity: item.quantity,
+            reason: !item.stockId ? 'No stock ID' : 'Zero quantity'
+          });
+        }
+      }
+
       console.log("updatedItems:", updatedItems);
 
       // Filter out empty items and map our frontend fields to backend expected fields
@@ -1049,9 +1211,10 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
         supplierEmail: formData.supplierEmail,
         supplierAddress: formData.supplierAddress,
         location: formData.location,
+        invoiceNumber: formData.invoiceNumber,
         issueDate: formData.invoiceDate,
         dueDate: formData.dueDate,
-        poNumber: `PO-${Date.now()}`, // Generate a temporary PO number
+        poNumber: formData.invoiceNumber, // Use the manual invoice number as PO number
         items: mappedItems,
         subtotal: calculateSubtotal(),
         taxAmount: calculateTotalTax(),
@@ -1179,6 +1342,22 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
     }
   };
 
+  const handleLocationSelect = (locationId: string) => {
+    setFormData(prev => ({ ...prev, location: locationId }));
+    setShowLocationDropdown(false);
+    setLocationSearchTerm('');
+    setHighlightedLocationIndex(-1);
+    
+    // Fetch products for the selected location
+    fetchProductsByLocation(locationId);
+    
+    // Auto-focus on invoice date field after location selection
+    setTimeout(() => {
+      const invoiceDateInput = document.querySelector('[data-field="invoice-date"]') as HTMLInputElement;
+      if (invoiceDateInput) invoiceDateInput.focus();
+    }, 50);
+  };
+
   const handleLocationKeyDown = (e: React.KeyboardEvent) => {
     const filteredLocations = locations.filter(location =>
       location.name.toLowerCase().includes(locationSearchTerm.toLowerCase())
@@ -1199,14 +1378,7 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
         } else {
           // Tab: Move to next field (Invoice Date)
           if (highlightedLocationIndex >= 0 && filteredLocations[highlightedLocationIndex]) {
-            setFormData({ ...formData, location: filteredLocations[highlightedLocationIndex]._id });
-            setShowLocationDropdown(false);
-            setLocationSearchTerm('');
-            setHighlightedLocationIndex(-1);
-            setTimeout(() => {
-              const invoiceDateInput = document.querySelector('[data-field="invoice-date"]') as HTMLInputElement;
-              if (invoiceDateInput) invoiceDateInput.focus();
-            }, 50);
+            handleLocationSelect(filteredLocations[highlightedLocationIndex]._id);
           } else {
             setShowLocationDropdown(false);
             setLocationSearchTerm('');
@@ -1231,14 +1403,7 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
       case 'Enter':
         e.preventDefault();
         if (highlightedLocationIndex >= 0 && filteredLocations[highlightedLocationIndex]) {
-          setFormData({ ...formData, location: filteredLocations[highlightedLocationIndex]._id });
-          setShowLocationDropdown(false);
-          setLocationSearchTerm('');
-          setHighlightedLocationIndex(-1);
-          setTimeout(() => {
-            const invoiceDateInput = document.querySelector('[data-field="invoice-date"]') as HTMLInputElement;
-            if (invoiceDateInput) invoiceDateInput.focus();
-          }, 50);
+          handleLocationSelect(filteredLocations[highlightedLocationIndex]._id);
         }
         break;
       case 'Escape':
@@ -1295,16 +1460,9 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
             setSupplierSearchTerm('');
             setHighlightedSupplierIndex(-1);
                         setTimeout(() => {
-              // Check if address field is disabled (no supplier selected)
-              if (!formData.supplier) {
-                // Address is disabled, skip to invoice date
-                const invoiceDateInput = document.querySelector('[data-field="invoice-date"]') as HTMLInputElement;
-                if (invoiceDateInput) invoiceDateInput.focus();
-              } else {
-                // Address is enabled, go to address field
-                addressInputRef.current?.focus();
-                setShowAddressDropdown(true);
-              }
+              // Go to invoice number field
+              const invoiceNumberInput = document.querySelector('[data-field="invoice-number"]') as HTMLInputElement;
+              if (invoiceNumberInput) invoiceNumberInput.focus();
             }, 50);
           }
         }
@@ -1694,10 +1852,10 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
 
       if (hasUserInteracted && matchingProducts.length > 0) {
         // User has searched or navigated, update to new selection
-        const selectedProduct = currentHighlighted >= 0 && currentHighlighted < matchingProducts.length
+        const selectedStockProduct = currentHighlighted >= 0 && currentHighlighted < matchingProducts.length
           ? matchingProducts[currentHighlighted]
           : matchingProducts[0]; // Select first product if no highlighted one
-        updateItem(rowIndex, 'product', selectedProduct._id);
+        updateItem(rowIndex, 'stockId', selectedStockProduct._id);
         updateProductSearchTerm(rowIndex, '');
         setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
         setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
@@ -1707,8 +1865,8 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
         setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
       } else if (matchingProducts.length > 0) {
         // No product selected and no interaction, select first product
-        const selectedProduct = matchingProducts[0];
-        updateItem(rowIndex, 'product', selectedProduct._id);
+        const selectedStockProduct = matchingProducts[0];
+        updateItem(rowIndex, 'stockId', selectedStockProduct._id);
         updateProductSearchTerm(rowIndex, '');
         setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
         setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
@@ -1744,10 +1902,10 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
 
       if (hasUserInteracted && matchingProducts.length > 0) {
         // User has searched or navigated, update to new selection
-        const selectedProduct = currentHighlighted >= 0 && currentHighlighted < matchingProducts.length
+        const selectedStockProduct = currentHighlighted >= 0 && currentHighlighted < matchingProducts.length
           ? matchingProducts[currentHighlighted]
           : matchingProducts[0]; // Select first product if no highlighted one
-        updateItem(rowIndex, 'product', selectedProduct._id);
+        updateItem(rowIndex, 'stockId', selectedStockProduct._id);
         updateProductSearchTerm(rowIndex, '');
         setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
         setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
@@ -1775,8 +1933,8 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
         }, 100);
       } else if (matchingProducts.length > 0) {
         // No product selected and no interaction, select first product
-        const selectedProduct = matchingProducts[0];
-        updateItem(rowIndex, 'product', selectedProduct._id);
+        const selectedStockProduct = matchingProducts[0];
+        updateItem(rowIndex, 'stockId', selectedStockProduct._id);
         updateProductSearchTerm(rowIndex, '');
         setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
         setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
@@ -2129,7 +2287,7 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
           )}
 
           {/* Basic Information */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {/* Supplier */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2223,6 +2381,7 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                 )}
               </div>
             </div>
+
 
             {/* Supplier Address */}
             <div>
@@ -2398,6 +2557,8 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                         setFormData({ ...formData, location: '' });
                         setShowLocationDropdown(false);
                         setLocationSearchTerm('');
+                        setStockProducts([]);
+                        setSelectedLocationId('');
                       }}
                       className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.location ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
                     >
@@ -2410,12 +2571,7 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                       <button
                         key={location._id}
                         data-location-index={index}
-                        onClick={() => {
-                          setFormData({ ...formData, location: location._id });
-                          setShowLocationDropdown(false);
-                          setLocationSearchTerm('');
-                          setHighlightedLocationIndex(-1);
-                        }}
+                        onClick={() => handleLocationSelect(location._id)}
                         className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.location === location._id ? 'bg-blue-100 text-blue-800' :
                           highlightedLocationIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
                             'text-gray-700 hover:bg-gray-50'
@@ -2431,64 +2587,6 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                 )}
               </div>
             </div>
-
-            {/* Invoice Date */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Invoice Date *
-              </label>
-              <input
-                type="date"
-                value={formData.invoiceDate}
-                onChange={(e) => setFormData({ ...formData, invoiceDate: e.target.value })}
-                min={new Date().toISOString().split('T')[0]}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                data-field="invoice-date"
-              />
-            </div>
-
-            {/* Due Date */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Due Date *
-              </label>
-              <input
-                ref={deliveryDateInputRef}
-                type="date"
-                value={formData.dueDate}
-                onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === 'Tab') {
-                    e.preventDefault();
-                    if (e.shiftKey) {
-                      // Shift+Tab: Move back to invoice date field
-                      setTimeout(() => {
-                        const invoiceDateInput = document.querySelector('[data-field="invoice-date"]') as HTMLInputElement;
-                        if (invoiceDateInput) invoiceDateInput.focus();
-                      }, 50);
-                    } else {
-                      // Tab: Move to department field
-                      setTimeout(() => {
-                        departmentSelectRef.current?.focus();
-                        setShowDepartmentDropdown(true);
-                      }, 50);
-                    }
-                  } else if (e.key === 'Enter') {
-                    e.preventDefault();
-                    setTimeout(() => {
-                      departmentSelectRef.current?.focus();
-                      setShowDepartmentDropdown(true);
-                    }, 50);
-                  }
-                }}
-                min={new Date().toISOString().split('T')[0]}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                data-field="delivery-date"
-              />
-            </div>
-
-
-
 
 
             {/* Department */}
@@ -2569,6 +2667,108 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                 )}
               </div>
             </div>
+
+
+            {/* Invoice Number */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Invoice Number *
+              </label>
+              <input
+                type="text"
+                value={formData.invoiceNumber}
+                onChange={(e) => setFormData({ ...formData, invoiceNumber: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab') {
+                    e.preventDefault();
+                    if (e.shiftKey) {
+                      // Shift+Tab: Move back to supplier field
+                      setTimeout(() => {
+                        supplierInputRef.current?.focus();
+                        setShowSupplierDropdown(true);
+                      }, 50);
+                    } else {
+                      // Tab: Move to supplier address field
+                      setTimeout(() => {
+                        addressInputRef.current?.focus();
+                        setShowAddressDropdown(true);
+                      }, 50);
+                    }
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    setTimeout(() => {
+                      addressInputRef.current?.focus();
+                      setShowAddressDropdown(true);
+                    }, 50);
+                  }
+                }}
+                placeholder="Enter invoice number"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                data-field="invoice-number"
+                autoComplete="off"
+                required
+              />
+            </div>
+
+            {/* Invoice Date */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Invoice Date *
+              </label>
+              <input
+                type="date"
+                value={formData.invoiceDate}
+                onChange={(e) => setFormData({ ...formData, invoiceDate: e.target.value })}
+                min={new Date().toISOString().split('T')[0]}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                data-field="invoice-date"
+              />
+            </div>
+
+            {/* Due Date */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Due Date *
+              </label>
+              <input
+                ref={deliveryDateInputRef}
+                type="date"
+                value={formData.dueDate}
+                onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab') {
+                    e.preventDefault();
+                    if (e.shiftKey) {
+                      // Shift+Tab: Move back to invoice date field
+                      setTimeout(() => {
+                        const invoiceDateInput = document.querySelector('[data-field="invoice-date"]') as HTMLInputElement;
+                        if (invoiceDateInput) invoiceDateInput.focus();
+                      }, 50);
+                    } else {
+                      // Tab: Move to department field
+                      setTimeout(() => {
+                        departmentSelectRef.current?.focus();
+                        setShowDepartmentDropdown(true);
+                      }, 50);
+                    }
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    setTimeout(() => {
+                      departmentSelectRef.current?.focus();
+                      setShowDepartmentDropdown(true);
+                    }, 50);
+                  }
+                }}
+                min={new Date().toISOString().split('T')[0]}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                data-field="delivery-date"
+              />
+            </div>
+
+
+
+
+
           </div>
 
 
@@ -2735,26 +2935,30 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                             {getFilteredProducts(productSearchTerms[index] || '').length === 0 ? (
                               <div className="px-3 py-4 text-center text-sm text-gray-500">
                                 <div>No products found</div>
-                                <div className="text-xs mt-1">Try different search terms</div>
-                                <button
-                                  onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    handleCreateNewProductInline(index, productSearchTerms[index] || '');
-                                  }}
-                                  className="mt-2 px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs"
-                                >
-                                  + Create New Product
-                                </button>
+                                <div className="text-xs mt-1">
+                                  {!selectedLocationId ? 'Please select a location first' : 'Try different search terms'}
+                                </div>
+                                {selectedLocationId && (
+                                  <button
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleCreateNewProductInline(index, productSearchTerms[index] || '');
+                                    }}
+                                    className="mt-2 px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs"
+                                  >
+                                    + Create New Product
+                                  </button>
+                                )}
                               </div>
                             ) : (
-                              getFilteredProducts(productSearchTerms[index] || '').map((product, productIndex) => (
+                              getFilteredProducts(productSearchTerms[index] || '').map((stockProduct, productIndex) => (
                                 <button
-                                  key={product._id}
+                                  key={`${stockProduct.product._id}-${stockProduct._id}`}
                                   data-product-index={productIndex}
                                   onMouseDown={(e) => {
                                     e.preventDefault();
-                                    updateItem(index, 'product', product._id);
+                                    updateItem(index, 'stockId', stockProduct._id);
                                     setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
                                     updateProductSearchTerm(index, '');
                                     setHighlightedProductIndex({ ...highlightedProductIndex, [index]: -1 });
@@ -2766,7 +2970,7 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                                       }
                                     }, 50);
                                   }}
-                                  className={`w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 ${item.product === product._id ? 'bg-blue-100 text-blue-800' :
+                                  className={`w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 ${item.stockId === stockProduct._id ? 'bg-blue-100 text-blue-800' :
                                     highlightedProductIndex[index] === productIndex ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
                                       'text-gray-700'
                                     } ${productIndex === 0 && productSearchTerms[index] && highlightedProductIndex[index] === -1 ? 'bg-yellow-50 border-l-4 border-l-blue-500' : ''}`}
@@ -2774,7 +2978,7 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                                   <div className="flex justify-between items-start">
                                     <div className="flex-1 min-w-0 pr-4">
                                       <div className="font-medium text-gray-900 mb-1 flex items-center">
-                                        <div><span className="font-medium">Part No:</span>{product?.partNo}</div>
+                                        <div><span className="font-medium">Part No:</span>{stockProduct.product?.partNo}</div>
                                         {highlightedProductIndex[index] === productIndex && (
                                           <span className="ml-2 text-xs bg-blue-600 text-white px-2 py-0.5 rounded">
                                             Selected - Press Enter
@@ -2787,14 +2991,21 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                                         )}
                                       </div>
                                       <div className="text-xs text-gray-600 space-y-0.5">
-                                        <div><span className="font-medium">Product Name:</span> {product?.name || 'N/A'}</div>
-                                        <div>
-                                          <span className="font-medium">Category:</span> {product?.category || 'N/A'}
+                                        <div><span className="font-medium">Product Name:</span> {stockProduct.product?.name || 'N/A'}</div>
+                                        {/* <div><span className="font-medium">Category:</span> {stockProduct.product?.category || 'N/A'}</div> */}
+                                        <div className="text-blue-600 font-medium">
+                                          📍 {stockProduct.stockLocation.location} → {stockProduct.stockLocation.room} → {stockProduct.stockLocation.rack}
                                         </div>
+                                        <div className="text-green-600 font-medium">
+                                          📦 Available: {stockProduct.availableQuantity} units
+                                        </div>
+                                        {/* <div className="text-purple-600 font-medium text-xs">
+                                          🏷️ Stock ID: {stockProduct._id.slice(-8)}
+                                        </div> */}
                                       </div>
                                     </div>
                                     <div className="text-right flex-shrink-0 ml-4">
-                                      <div className="font-bold text-lg text-green-600">₹{product?.gndp?.toLocaleString() || 0}</div>
+                                      <div className="font-bold text-lg text-green-600">₹{stockProduct.product?.gndp?.toLocaleString() || stockProduct.product?.price?.toLocaleString() || 0}</div>
                                       <div className="text-xs text-gray-500 mt-0.5">GNDP</div>
                                     </div>
                                   </div>
@@ -2815,7 +3026,7 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                     </div>
 
                     {/* Product Name */}
-                    <div className="p-1 border-r border-gray-200">
+                    <div className="p-1 border-r border-gray-200 relative">
                       <input
                         type="text"
                         value={item.isNewProduct ? (item.name || '') : (item.product ? getProductName(item.product) : '')}
@@ -2831,6 +3042,25 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                         disabled={!!(item.product && !item.isNewProduct)}
                         required={item.isNewProduct}
                       />
+                      {item.stockLocation && (
+                        <div className="absolute top-0 right-0 flex flex-col gap-1">
+                          <div className="text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded text-center font-medium">
+                            📍 {item.stockLocation.room} → {item.stockLocation.rack}
+                          </div>
+                          {/* {(() => {
+                            // Find the stock product to get available quantity
+                            const stockProduct = stockProducts.find(sp => sp._id === item.stockId);
+                            if (stockProduct) {
+                              return (
+                                <div className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded text-center font-medium">
+                                  📦 {stockProduct.availableQuantity} units
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()} */}
+                        </div>
+                      )}
                     </div>
 
 
@@ -3289,22 +3519,31 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                         </div>
                         {showProductDropdowns[index] && (
                           <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
-                            {getFilteredProducts(productSearchTerms[index] || '').map((product, productIndex) => (
+                            {getFilteredProducts(productSearchTerms[index] || '').map((stockProduct, productIndex) => (
                               <button
-                                key={product._id}
+                                key={`${stockProduct.product._id}-${stockProduct._id}`}
                                 onMouseDown={(e) => {
                                   e.preventDefault();
-                                  updateItem(index, 'product', product._id);
+                                  updateItem(index, 'stockId', stockProduct._id);
                                   setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
                                   updateProductSearchTerm(index, '');
                                   setHighlightedProductIndex({ ...highlightedProductIndex, [index]: -1 });
                                 }}
-                                className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 ${item.product === product._id ? 'bg-blue-100 text-blue-800' : 'text-gray-700'
+                                className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 ${item.stockId === stockProduct._id ? 'bg-blue-100 text-blue-800' : 'text-gray-700'
                                   }`}
                               >
-                                <div className="font-medium">{product.name}</div>
+                                <div className="font-medium">{stockProduct.product.name}</div>
                                 <div className="text-xs text-gray-500">
-                                  {product.partNo} • ₹{product.gndp?.toLocaleString()}
+                                  {stockProduct.product.partNo} • ₹{stockProduct.product.gndp?.toLocaleString() || stockProduct.product.price?.toLocaleString()}
+                                </div>
+                                <div className="text-xs text-blue-600">
+                                  📍 {stockProduct.stockLocation.location} → {stockProduct.stockLocation.room} → {stockProduct.stockLocation.rack}
+                                </div>
+                                <div className="text-xs text-green-600">
+                                  📦 Available: {stockProduct.availableQuantity} units
+                                </div>
+                                <div className="text-xs text-purple-600">
+                                  🏷️ Stock ID: {stockProduct._id.slice(-8)}
                                 </div>
                               </button>
                             ))}

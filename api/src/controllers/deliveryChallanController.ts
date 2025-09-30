@@ -43,8 +43,16 @@ export const getDeliveryChallans = async (
 
     if (dateFrom || dateTo) {
       query.dated = {};
-      if (dateFrom) query.dated.$gte = new Date(dateFrom);
-      if (dateTo) query.dated.$lte = new Date(dateTo);
+      if (dateFrom) {
+        const startDate = new Date(dateFrom);
+        startDate.setHours(0, 0, 0, 0); // Start of day
+        query.dated.$gte = startDate;
+      }
+      if (dateTo) {
+        const endDate = new Date(dateTo);
+        endDate.setHours(23, 59, 59, 999); // End of day
+        query.dated.$lte = endDate;
+      }
     }
 
     // Search functionality
@@ -102,7 +110,8 @@ export const getDeliveryChallan = async (
   try {
     const deliveryChallan = await DeliveryChallan.findById(req.params.id)
       .populate('customer', 'name email phone address customerType addresses')
-      .populate('createdBy', 'firstName lastName email');
+      .populate('createdBy', 'firstName lastName email')
+      .populate('sourceInvoice', 'invoiceNumber issueDate totalAmount customer items');
 
     if (!deliveryChallan) {
       return next(new AppError('Delivery challan not found', 404));
@@ -146,7 +155,12 @@ export const createDeliveryChallan = async (
       dispatchedThrough,
       termsOfDelivery,
       consignee,
-      notes
+      notes,
+      // Invoice reference fields
+      sourceInvoice,
+      invoiceNumber,
+      invoiceDate,
+      invoiceDetails
     } = req.body;
 
     // Clean up empty string fields
@@ -299,6 +313,11 @@ export const createDeliveryChallan = async (
       termsOfDelivery: cleanTermsOfDelivery,
       consignee: consignee && consignee.trim() !== '' ? consignee : undefined,
       notes: cleanNotes,
+      // Invoice reference fields
+      sourceInvoice: sourceInvoice || undefined,
+      invoiceNumber: invoiceNumber || undefined,
+      invoiceDate: invoiceDate ? new Date(invoiceDate) : undefined,
+      invoiceDetails: invoiceDetails || undefined,
       createdBy: req.user!.id
     });
 
@@ -891,10 +910,14 @@ export const exportDeliveryChallans = async (
     if (dateFrom || dateTo) {
       filter.dated = {};
       if (dateFrom && dateFrom !== 'undefined' && dateFrom !== 'null') {
-        filter.dated.$gte = new Date(dateFrom);
+        const startDate = new Date(dateFrom);
+        startDate.setHours(0, 0, 0, 0); // Start of day
+        filter.dated.$gte = startDate;
       }
       if (dateTo && dateTo !== 'undefined' && dateTo !== 'null') {
-        filter.dated.$lte = new Date(dateTo);
+        const endDate = new Date(dateTo);
+        endDate.setHours(23, 59, 59, 999); // End of day
+        filter.dated.$lte = endDate;
       }
     }
 

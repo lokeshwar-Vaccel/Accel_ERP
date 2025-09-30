@@ -3,10 +3,10 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 export interface IAMCOfferItem {
   make: string;
   engineSlNo: string;
-  dgRatingKVA: number;
-  typeOfVisits: string;
-  qty: number;
-  amcCostPerDG: number;
+  dgRatingKVA?: number;
+  typeOfVisits?: number;
+  qty?: number;
+  amcCostPerDG?: number;
   totalAMCAmountPerDG: number;
   gst18: number;
   totalAMCCost: number;
@@ -43,16 +43,16 @@ export interface IAMCQuotation extends Document {
     addresses?: Array<{
       id: number;
       address: string;
-      state?: string;
-      district?: string;
-      pincode?: string;
+      state: string;
+      district: string;
+      pincode: string;
       isPrimary: boolean;
       gstNumber?: string;
-      contactPersonName?: string;
-      designation?: string;
       email?: string;
       phone?: string;
-      registrationStatus: 'registered' | 'non_registered';
+      contactPersonName?: string;
+      designation?: string;
+      registrationStatus?: string;
     }>;
   };
   company: {
@@ -105,6 +105,7 @@ export interface IAMCQuotation extends Document {
   amcPeriodFrom: Date;
   amcPeriodTo: Date;
   gstIncluded: boolean;
+  selectedAddressId?: string;
   
   // Standard quotation fields
   items: Array<{
@@ -182,10 +183,10 @@ export interface IAMCQuotation extends Document {
 const AMCOfferItemSchema = new Schema<IAMCOfferItem>({
   make: { type: String, required: true },
   engineSlNo: { type: String, required: true },
-  dgRatingKVA: { type: Number, required: true },
-  typeOfVisits: { type: String, required: true },
-  qty: { type: Number, required: true, default: 1 },
-  amcCostPerDG: { type: Number, required: true, default: 0 },
+  dgRatingKVA: { type: Number, required: false },
+  typeOfVisits: { type: Number, required: false },
+  qty: { type: Number, required: false },
+  amcCostPerDG: { type: Number, required: false },
   totalAMCAmountPerDG: { type: Number, required: true, default: 0 },
   gst18: { type: Number, required: true, default: 0 },
   totalAMCCost: { type: Number, required: true, default: 0 }
@@ -273,6 +274,7 @@ const AMCQuotationSchema = new Schema<IAMCQuotation>({
   amcPeriodFrom: { type: Date, required: true },
   amcPeriodTo: { type: Date, required: true },
   gstIncluded: { type: Boolean, default: true },
+  selectedAddressId: { type: String, required: false },
   
   // Standard quotation fields
   items: [{
@@ -366,7 +368,9 @@ AMCQuotationSchema.pre('save', function(next) {
   // Calculate AMC offer totals
   if (this.offerItems && this.offerItems.length > 0) {
     this.offerItems.forEach(item => {
-      item.totalAMCAmountPerDG = item.qty * item.amcCostPerDG;
+      const costPerDG = (item.amcCostPerDG !== undefined && item.amcCostPerDG !== null) ? item.amcCostPerDG : 0;
+      const qty = (item.qty !== undefined && item.qty !== null) ? item.qty : 0;
+      item.totalAMCAmountPerDG = qty * costPerDG;
       item.gst18 = item.totalAMCAmountPerDG * 0.18;
       item.totalAMCCost = item.totalAMCAmountPerDG + item.gst18;
     });
@@ -392,8 +396,8 @@ AMCQuotationSchema.pre('save', function(next) {
     const gstIncluded = this.gstIncluded !== false; // Default to true if not specified
     
     this.offerItems.forEach(item => {
-      const qty = Number(item.qty) || 0;
-      const costPerDG = Number(item.amcCostPerDG) || 0;
+      const qty = (item.qty !== undefined && item.qty !== null) ? Number(item.qty) : 0;
+      const costPerDG = (item.amcCostPerDG !== undefined && item.amcCostPerDG !== null) ? Number(item.amcCostPerDG) : 0;
       const itemSubtotal = qty * costPerDG;
       
       let itemTax = 0;

@@ -48,6 +48,7 @@ import apiClientQuotation from '../utils/api';
 import UpdatePaymentModal from '../components/UpdatePaymentModal';
 import QuotationPrintModal from '../components/QuotationPrintModal';
 import AMCQuotationManagement from './AMCQuotationManagement';
+import DocumentViewModal from '../components/billing/DocumentViewModal';
 import * as XLSX from 'xlsx';
 
 // Helper function to convert invoice data to Excel with proper formatting
@@ -954,6 +955,8 @@ const InvoiceManagement: React.FC = () => {
   const [toDateSale, setToDateSale] = useState('');
   const [fromDatePurchase, setFromDatePurchase] = useState('');
   const [toDatePurchase, setToDatePurchase] = useState('');
+  const [fromDateChallan, setFromDateChallan] = useState('');
+  const [toDateChallan, setToDateChallan] = useState('');
   const [deliveryChallans, setDeliveryChallans] = useState<any[]>([]);
   const [deliveryChallanLoading, setDeliveryChallanLoading] = useState(false);
 
@@ -1583,7 +1586,7 @@ const InvoiceManagement: React.FC = () => {
       if (invoiceType === 'quotation') {
         await fetchQuotations();
       } else if (invoiceType === 'challan') {
-        fetchDeliveryChallans();
+        await fetchDeliveryChallans();
       } else {
         await fetchInvoices();
       }
@@ -1592,7 +1595,7 @@ const InvoiceManagement: React.FC = () => {
     };
 
     loadDataAndStats();
-  }, [currentPage, limit, sort, searchTerm, statusFilter, paymentFilter, invoiceType, searchQuotationTerm, fromDate, toDate, fromDateSale, toDateSale, fromDatePurchase, toDatePurchase]);
+  }, [currentPage, limit, sort, searchTerm, statusFilter, paymentFilter, invoiceType, searchQuotationTerm, fromDate, toDate, fromDateSale, toDateSale, fromDatePurchase, toDatePurchase, fromDateChallan, toDateChallan]);
 
 
 
@@ -1698,15 +1701,26 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const fetchDeliveryChallans = async () => {
+    // Check for date range validation before making API call
+    if (fromDateChallan && toDateChallan && !validateDateRange(fromDateChallan, toDateChallan)) {
+      return; // Don't fetch if date range is invalid
+    }
+
     setDeliveryChallanLoading(true);
     try {
-      const response = await apiClient.deliveryChallans.getAll({
+      const params: any = {
         page: currentPage,
         limit,
         sort,
         search: searchTerm,
         ...(statusFilter !== 'all' && { status: statusFilter }),
-      });
+      };
+
+      // Add date filters for delivery challans
+      if (fromDateChallan) params.dateFrom = fromDateChallan;
+      if (toDateChallan) params.dateTo = toDateChallan;
+
+      const response = await apiClient.deliveryChallans.getAll(params);
 
       const responseData = response.data as any;
       console.log("Delivery challans response:", responseData);
@@ -2083,6 +2097,10 @@ const InvoiceManagement: React.FC = () => {
         search: searchTerm,
       };
 
+      // Add date filters for delivery challans
+      if (fromDateChallan) exportParams.dateFrom = fromDateChallan;
+      if (toDateChallan) exportParams.dateTo = toDateChallan;
+
       console.log('Exporting delivery challans with params:', exportParams);
 
       // Call the export API
@@ -2095,9 +2113,10 @@ const InvoiceManagement: React.FC = () => {
       const link = document.createElement('a');
       link.href = url;
 
-      // Generate filename with current date
+      // Generate filename with current date and filters
       const currentDate = new Date().toISOString().split('T')[0];
-      link.download = `delivery_challans_${currentDate}.xlsx`;
+      const filterSuffix = fromDateChallan || toDateChallan ? `_${fromDateChallan || 'start'}_to_${toDateChallan || 'end'}` : '';
+      link.download = `delivery_challans_${currentDate}${filterSuffix}.xlsx`;
 
       document.body.appendChild(link);
       link.click();
@@ -4366,654 +4385,690 @@ const InvoiceManagement: React.FC = () => {
     return result + ' Only';
   }
 
-  // Print invoice function
-  const printInvoice = () => {
-    if (!selectedInvoice) return;
+ // Print invoice function with proper calculations (matching quotation logic)
+const printInvoice = () => {
+  if (!selectedInvoice) return;
 
-    const printWindow = window.open('', '_blank');
+  console.log("invoice00000:");
 
-    const printContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Invoice ${selectedInvoice.invoiceNumber}</title>
-        <style>
-          @media print {
-            @page {
-              margin: 0.5in;
-              size: A4;
-            }
-            body {
-              margin: 0;
-              padding: 0;
-            }
+  // Create a new window for printing
+  const printWindow = window.open('', '_blank');
+
+  const printContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Invoice ${selectedInvoice.invoiceNumber}</title>
+      <style>
+        @media print {
+          @page {
+            margin: 0.5in;
+            size: A4;
           }
-          
           body {
-            font-family: Arial, sans-serif;
-            font-size: 12px;
-            line-height: 1.2;
             margin: 0;
-            padding: 20px;
-            background: white;
+            padding: 0;
           }
-          
-          .invoice-container {
-            width: 100%;
-            max-width: 210mm;
-            margin: 0 auto;
-            background: white;
-          }
-          
-          .header {
-            text-align: center;
-            margin-bottom: 30px;
-          }
-          
-          .invoice-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin: 20px 0;
-            text-align: center;
-          }
-          
-          .info-section {
-            display: table;
-            width: 100%;
-            margin-bottom: 20px;
-          }
-          
-          .info-row {
-            display: table-row;
-          }
-          
-          .info-cell {
-            display: table-cell;
-            padding: 3px 5px;
-            vertical-align: top;
-            border: none;
-          }
-          
-          .info-left {
-            width: 50%;
-            padding-right: 20px;
-          }
-          
-          .info-right {
-            width: 50%;
-            padding-left: 20px;
-          }
-          
-          .subject-line {
-            font-weight: bold;
-            margin: 20px 0 10px 0;
-            font-size: 13px;
-          }
-          
-          .greeting {
-            margin: 15px 0 5px 0;
-          }
-          
-          .intro-text {
-            margin: 5px 0 20px 0;
-          }
-          
-          .items-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-            font-size: 11px;
-          }
-          
-          .items-table th,
-          .items-table td {
-            border: 1px solid #333;
-            padding: 4px 6px;
-            text-align: left;
-          }
-          
-          .items-table th {
-            background-color: #f0f0f0;
-            font-weight: bold;
-            text-align: center;
-          }
-          
-          .items-table .number-cell {
-            text-align: right;
-          }
-          
-          .items-table .center-cell {
-            text-align: center;
-          }
-          
-          .totals-row {
-            font-weight: bold;
-            background-color: #f9f9f9;
-          }
-          
-          .grand-total-row {
-            font-weight: bold;
-            background-color: #e9e9e9;
-            font-size: 12px;
-          }
-          
-          .terms-section {
-            margin: 5px 0;
-          }
-          
-          .terms-title {
-            font-weight: bold;
-            margin-bottom: 10px;
-          }
-          
-          .terms-table {
-            width: 100%;
-            margin-bottom: 20px;
-          }
-          
-          .terms-table td {
-            padding: 3px 0;
-            vertical-align: top;
-          }
-          
-          .terms-number {
-            width: 20px;
-            text-align: left;
-          }
-          
-          .terms-label {
-            width: 150px;
-            text-align: left;
-          }
-          
-          .terms-colon {
-            width: 15px;
-            text-align: left;
-          }
-          
-          .terms-value {
-            text-align: left;
-          }
-          
-          .closing-text {
-            margin: 15px 0;
-            line-height: 1.4;
-          }
-          
-          .footer-section {
-            display: table;
-            width: 100%;
-            margin-top: 30px;
-            border-top: 1px solid #ddd;
-            padding-top: 15px;
-          }
-          
-          .footer-left {
-            display: table-cell;
-            width: 40%;
-            vertical-align: top;
-            padding-right: 20px;
-          }
-          
-          .footer-center {
-            display: table-cell;
-            width: 20%;
-            text-align: center;
-            vertical-align: top;
-          }
-          
-          .footer-right {
-            display: table-cell;
-            width: 40%;
-            text-align: center;
-            vertical-align: top;
-          }
-          
-          .signature-line {
-            margin-top: 40px;
-            text-align: center;
-            border-top: 1px solid #333;
-            padding-top: 5px;
-            width: 200px;
-            margin-left: auto;
-            margin-right: auto;
-          }
-          
-          .company-details {
-            font-size: 10px;
-            line-height: 1.3;
-          }
-          
-          .section-title {
-            font-weight: bold;
-            margin: 20px 0 10px 0;
-            font-size: 13px;
-            color: #374151;
-            border-bottom: 1px solid #d1d5db;
-            padding-bottom: 5px;
-          }
-          
-          .qr-code-container {
-            border: 1px solid #333;
-            padding: 10px;
-            margin: 10px;
-            text-align: center;
-            background: white;
-          }
-          
-          .qr-code-image {
-            max-width: 100px;
-            max-height: 100px;
-            display: block;
-            margin: 0 auto;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="invoice-container">
-          <div class="invoice-title">INVOICE</div>
-          
-          <div class="info-section">
-            <div class="info-row">
-              <div class="info-cell info-left">
-                <strong>Ref:</strong> ${selectedInvoice.invoiceNumber || 'N/A'}
-              </div>
-              <div class="info-cell info-right">
-                <strong>Date:</strong> ${selectedInvoice.issueDate ? new Date(selectedInvoice.issueDate).toLocaleDateString() : 'N/A'}
-              </div>
+        }
+        
+        body {
+          font-family: Arial, sans-serif;
+          font-size: 12px;
+          line-height: 1.2;
+          margin: 0;
+          padding: 20px;
+          background: white;
+        }
+        
+        .invoice-container {
+          width: 100%;
+          max-width: 210mm;
+          margin: 0 auto;
+          background: white;
+        }
+        
+        .header {
+          text-align: center;
+          margin-bottom: 30px;
+        }
+        
+        .invoice-title {
+          font-size: 18px;
+          font-weight: bold;
+          margin: 20px 0;
+          text-align: center;
+        }
+        
+        .info-section {
+          display: table;
+          width: 100%;
+          margin-bottom: 20px;
+        }
+        
+        .info-row {
+          display: table-row;
+        }
+        
+        .info-cell {
+          display: table-cell;
+          padding: 3px 5px;
+          vertical-align: top;
+          border: none;
+        }
+        
+        .info-left {
+          width: 50%;
+          padding-right: 20px;
+        }
+        
+        .info-right {
+          width: 50%;
+          padding-left: 20px;
+        }
+        
+        .subject-line {
+          font-weight: bold;
+          margin: 20px 0 10px 0;
+          font-size: 13px;
+        }
+        
+        .greeting {
+          margin: 15px 0 5px 0;
+        }
+        
+        .intro-text {
+          margin: 5px 0 20px 0;
+        }
+        
+        .items-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 20px 0;
+          font-size: 11px;
+        }
+        
+        .items-table th,
+        .items-table td {
+          border: 1px solid #333;
+          padding: 4px 6px;
+          text-align: left;
+        }
+        
+        .items-table th {
+          background-color: #f0f0f0;
+          font-weight: bold;
+          text-align: center;
+        }
+        
+        .items-table .number-cell {
+          text-align: right;
+        }
+        
+        .items-table .center-cell {
+          text-align: center;
+        }
+        
+        .totals-row {
+          font-weight: bold;
+          background-color: #f9f9f9;
+        }
+        
+        .grand-total-row {
+          font-weight: bold;
+          background-color: #e9e9e9;
+          font-size: 12px;
+        }
+        
+        .terms-section {
+          margin: 5px 0;
+        }
+        
+        .terms-title {
+          font-weight: bold;
+          margin-bottom: 10px;
+        }
+        
+        .terms-table {
+          width: 100%;
+          margin-bottom: 20px;
+        }
+        
+        .terms-table td {
+          padding: 3px 0;
+          vertical-align: top;
+        }
+        
+        .terms-number {
+          width: 20px;
+          text-align: left;
+        }
+        
+        .terms-label {
+          width: 150px;
+          text-align: left;
+        }
+        
+        .terms-colon {
+          width: 15px;
+          text-align: left;
+        }
+        
+        .terms-value {
+          text-align: left;
+        }
+        
+        .closing-text {
+          margin: 15px 0;
+          line-height: 1.4;
+        }
+        
+        .footer-section {
+          display: table;
+          width: 100%;
+          margin-top: 30px;
+          border-top: 1px solid #ddd;
+          padding-top: 15px;
+        }
+        
+        .footer-left {
+          display: table-cell;
+          width: 40%;
+          vertical-align: top;
+          padding-right: 20px;
+        }
+        
+        .footer-center {
+          display: table-cell;
+          width: 20%;
+          text-align: center;
+          vertical-align: top;
+        }
+        
+        .footer-right {
+          display: table-cell;
+          width: 40%;
+          text-align: center;
+          vertical-align: top;
+        }
+        
+        .signature-line {
+          margin-top: 40px;
+          text-align: center;
+          border-top: 1px solid #333;
+          padding-top: 5px;
+          width: 200px;
+          margin-left: auto;
+          margin-right: auto;
+        }
+        
+        .company-details {
+          font-size: 10px;
+          line-height: 1.3;
+        }
+        
+        .section-title {
+          font-weight: bold;
+          margin: 20px 0 10px 0;
+          font-size: 13px;
+          color: #374151;
+          border-bottom: 1px solid #d1d5db;
+          padding-bottom: 5px;
+        }
+        
+        .qr-code-container {
+          border: 1px solid #333;
+          padding: 10px;
+          margin: 10px;
+          text-align: center;
+          background: white;
+        }
+        
+        .qr-code-image {
+          max-width: 100px;
+          max-height: 100px;
+          display: block;
+          margin: 0 auto;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="invoice-container">
+        <div class="invoice-title">INVOICE</div>
+        
+        <div class="info-section">
+          <div class="info-row">
+            <div class="info-cell info-left">
+              <strong>Ref:</strong> ${selectedInvoice.invoiceNumber || 'N/A'}
             </div>
-            <div class="info-row">
-              <div class="info-cell info-left">
-                <strong>Reference Name:</strong> ${selectedInvoice.assignedEngineer ? `${selectedInvoice.assignedEngineer.firstName || ''} ${selectedInvoice.assignedEngineer.lastName || ''}`.trim() : 'N/A'}
-              </div>
-            </div>
-          </div>
-          
-          <div class="info-section">
-            <div class="info-row">
-              <div class="info-cell info-left">
-                <strong>Customer Billing Address:</strong><br>
-                ${selectedInvoice.customer?.name || 'N/A'}<br>
-                ${selectedInvoice.billToAddress ? `${selectedInvoice.billToAddress.address || ''}<br>${selectedInvoice.billToAddress.district || ''}, ${selectedInvoice.billToAddress.pincode || ''}<br>${selectedInvoice.billToAddress.state || ''}${selectedInvoice.billToAddress.gstNumber ? `<br><strong>GST:</strong> ${selectedInvoice.billToAddress.gstNumber}` : ''}` : 'Same as billing address'}
-              </div>
-              <div class="info-cell info-right">
-                <strong>Customer Delivery Address:</strong><br>
-                ${selectedInvoice.shipToAddress ? `${selectedInvoice.shipToAddress.address || ''}<br>${selectedInvoice.shipToAddress.district || ''}, ${selectedInvoice.shipToAddress.pincode || ''}<br>${selectedInvoice.shipToAddress.state || ''}${selectedInvoice.shipToAddress.gstNumber ? `<br><strong>GST:</strong> ${selectedInvoice.shipToAddress.gstNumber}` : ''}` : 'Same as billing address'}
-              </div>
+            <div class="info-cell info-right">
+              <strong>Date:</strong> ${selectedInvoice.issueDate ? new Date(selectedInvoice.issueDate).toLocaleDateString() : 'N/A'}
             </div>
           </div>
-          
-          <div class="info-section">
-            <div class="info-row">
-              <div class="info-cell info-left">
-                <strong>Engine Seriel Number:</strong> ${selectedInvoice?.engineSerialNumber || 'N/A'}
-              </div>
-              <div class="info-cell info-right">
-                <strong>Last Service Done Date:</strong> ${selectedInvoice?.serviceRequestDate ? new Date(selectedInvoice.serviceRequestDate).toLocaleDateString() : 'N/A'}
-              </div>
-            </div>
-            <div class="info-row">
-              <div class="info-cell info-left">
-                <strong>DG Rating:</strong> ${selectedInvoice?.kva || 'N/A'}
-              </div>
-              <div class="info-cell info-right">
-                <strong>Last Service Done HMR:</strong> ${selectedInvoice?.hourMeterReading || 'N/A'}
-              </div>
+          <div class="info-row">
+            <div class="info-cell info-left">
+              <strong>Reference Name:</strong> ${selectedInvoice.assignedEngineer ? `${selectedInvoice.assignedEngineer.firstName || ''} ${selectedInvoice.assignedEngineer.lastName || ''}`.trim() : 'N/A'}
             </div>
           </div>
-          
-          <div class="subject-line">
-            Sub: ${selectedInvoice.subject || 'INVOICE FOR DG SET SERVICES'}
+        </div>
+        
+        <div class="info-section">
+          <div class="info-row">
+            <div class="info-cell info-left">
+              <strong>Customer Billing Address:</strong><br>
+              ${selectedInvoice.customer?.name || 'N/A'}<br>
+              ${selectedInvoice.billToAddress ? `${selectedInvoice.billToAddress.address || ''}<br>${selectedInvoice.billToAddress.district || ''}, ${selectedInvoice.billToAddress.pincode || ''}<br>${selectedInvoice.billToAddress.state || ''}${selectedInvoice.billToAddress.gstNumber ? `<br><strong>GST:</strong> ${selectedInvoice.billToAddress.gstNumber}` : ''}` : 'Same as billing address'}
+            </div>
+            <div class="info-cell info-right">
+              <strong>Customer Delivery Address:</strong><br>
+              ${selectedInvoice.shipToAddress ? `${selectedInvoice.shipToAddress.address || ''}<br>${selectedInvoice.shipToAddress.district || ''}, ${selectedInvoice.shipToAddress.pincode || ''}<br>${selectedInvoice.shipToAddress.state || ''}${selectedInvoice.shipToAddress.gstNumber ? `<br><strong>GST:</strong> ${selectedInvoice.shipToAddress.gstNumber}` : ''}` : 'Same as billing address'}
+            </div>
           </div>
-          
-          <div class="greeting">Dear Sir,</div>
-          <div class="intro-text">
-            With reference to the subject D.G. set we are here by furnishing our invoice for Services
+        </div>
+        
+        <div class="info-section">
+          <div class="info-row">
+            <div class="info-cell info-left">
+              <strong>Engine Serial Number:</strong> ${selectedInvoice?.engineSerialNumber || 'N/A'}
+            </div>
+            <div class="info-cell info-right">
+              <strong>Last Service Done Date:</strong> ${selectedInvoice?.serviceRequestDate ? new Date(selectedInvoice.serviceRequestDate).toLocaleDateString() : 'N/A'}
+            </div>
           </div>
-          
-          ${selectedInvoice.items && selectedInvoice.items.length > 0 ? `
-          <table class="items-table">
-            <thead>
-              <tr>
-                <th style="width: 6%;">Sr.No</th>
-                <th style="width: 15%;">Part No</th>
-                <th style="width: 25%;">Description</th>
-                <th style="width: 8%;">HSN Code</th>
-                <th style="width: 6%;">UOM</th>
-                <th style="width: 5%;">Qty</th>
-                <th style="width: 10%;">Basic Amount</th>
-                ${(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
-                <th style="width: 9%;">Total Basic</th>
-                <th style="width: 5%;">GST</th>
-                <th style="width: 9%;">GST Amount</th>
-                <th style="width: 10%;">Total Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${(selectedInvoice.items || []).map((item: any, idx: number) => {
-      const basicAmount = item.unitPrice || 0;
-      const discountPercent = item.discount || 0;
-      const totalBasic = basicAmount * (1 - discountPercent / 100);
-      const gstRate = item.taxRate || 0;
-      const gstAmount = item.taxAmount || totalBasic * (gstRate / 100);
-      const totalAmount = item.totalPrice || item.quantity * (totalBasic + gstAmount);
-      const showDiscount = (selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0);
+          <div class="info-row">
+            <div class="info-cell info-left">
+              <strong>DG Rating:</strong> ${selectedInvoice?.kva || 'N/A'}
+            </div>
+            <div class="info-cell info-right">
+              <strong>Last Service Done HMR:</strong> ${selectedInvoice?.hourMeterReading || 'N/A'}
+            </div>
+          </div>
+        </div>
+        
+        <div class="subject-line">
+          Sub: ${selectedInvoice.subject || 'INVOICE FOR DG SET SERVICES'}
+        </div>
+        
+        <div class="greeting">Dear Sir,</div>
+        <div class="intro-text">
+          With reference to the subject D.G. set we are here by furnishing our invoice for Services
+        </div>
+        
+        ${selectedInvoice.items && selectedInvoice.items.length > 0 ? `
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th style="width: 6%;">Sr.No</th>
+              <th style="width: 15%;">Part No</th>
+              <th style="width: 25%;">Description</th>
+              <th style="width: 8%;">HSN Code</th>
+              <th style="width: 6%;">UOM</th>
+              <th style="width: 5%;">Qty</th>
+              <th style="width: 10%;">Basic Amount</th>
+              <th style="width: 10%;">Total Basic</th>
+              ${(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th><th style="width: 10%;">Final Amount</th>' : ''}
+              <th style="width: 5%;">GST %</th>
+              <th style="width: 9%;">GST Amount</th>
+              <th style="width: 12%;">Total Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(() => {
+              let totalQty = 0;
+              let totalBasicSum = 0;
+              let totalDiscountSum = 0;
+              let totalFinalSum = 0;
+              let totalGstSum = 0;
+              let totalAmountSum = 0;
+              const hasDiscount = (selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0);
+              
+              const itemRows = (selectedInvoice.items || []).map((item: any, idx: number) => {
+                const basicAmount = item.unitPrice || 0;
+                const quantity = item.quantity || 0;
+                const totalBasic = basicAmount * quantity;
+                const discountAmount = totalBasic * ((item.discount || 0) / 100);
+                const finalAmount = totalBasic - discountAmount;
+                const gstAmount = finalAmount * ((item.taxRate || 0) / 100);
+                const totalAmount = finalAmount + gstAmount;
 
-      return `
+                // Add to running totals
+                totalQty += quantity;
+                totalBasicSum += totalBasic;
+                totalDiscountSum += discountAmount;
+                totalFinalSum += finalAmount;
+                totalGstSum += gstAmount;
+                totalAmountSum += totalAmount;
+
+                return `
                   <tr>
                     <td class="center-cell">${idx + 1}</td>
                     <td>${item.partNo || item?.product?.partNo || '-'}</td>
                     <td>${item.description || ''}</td>
                     <td class="center-cell">${item.hsnNumber || item?.product?.hsnNumber || '-'}</td>
                     <td class="center-cell">${item.uom || 'NOS'}</td>
-                    <td class="center-cell">${item.quantity || 0}</td>
-                    <td class="number-cell">${basicAmount.toFixed(2)}</td>
-                    ${showDiscount ? `<td class="center-cell">${discountPercent}%</td>` : ''}
-                    <td class="number-cell">${totalBasic.toFixed(2)}</td>
-                    <td class="center-cell">${gstRate}%</td>
-                    <td class="number-cell">${gstAmount.toFixed(2)}</td>
-                    <td class="number-cell">${totalAmount.toFixed(2)}</td>
+                    <td class="center-cell">${quantity}</td>
+                    <td class="number-cell">₹${basicAmount.toFixed(2)}</td>
+                    <td class="number-cell">₹${totalBasic.toFixed(2)}</td>
+                    ${hasDiscount ? `<td class="center-cell">${item.discount || 0}%</td><td class="number-cell">₹${finalAmount.toFixed(2)}</td>` : ''}
+                    <td class="center-cell">${item.taxRate || 0}%</td>
+                    <td class="number-cell">₹${gstAmount.toFixed(2)}</td>
+                    <td class="number-cell">₹${totalAmount.toFixed(2)}</td>
                   </tr>
                 `;
-    }).join('')}
-              <tr class="totals-row">
-                <td colspan="${(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) ? '8' : '7'}" style="text-align: left; font-weight: bold;">Total Amount</td>
-                <td class="number-cell">${(selectedInvoice.items || []).reduce((sum: number, item: any) => {
-      const basicAmount = item.unitPrice || 0;
-      const discountPercent = item.discount || 0;
-      return sum + (basicAmount * (1 - discountPercent / 100));
-    }, 0).toFixed(2)}</td>
-                <td></td>
-                <td class="number-cell">${(selectedInvoice.items || []).reduce((sum: number, item: any) => {
-      const basicAmount = item.unitPrice || 0;
-      const discountPercent = item.discount || 0;
-      const quantity = item.quantity || 0;
-      const totalBasic = basicAmount * (1 - discountPercent / 100);
-      const gstRate = item.taxRate || 0;
-      return sum + (totalBasic * (gstRate / 100)) * (quantity || 0);
-    }, 0).toFixed(2)}</td>
-                <td class="number-cell">${(selectedInvoice.items || []).reduce((sum: number, item: any) => {
-      const basicAmount = item.unitPrice || 0;
-      const quantity = item.quantity || 0;
-      const discountPercent = item.discount || 0;
-      const totalBasic = basicAmount * (1 - discountPercent / 100);
-      const gstRate = item.taxRate || 0;
-      const gstAmount = item.taxAmount || totalBasic * (gstRate / 100);
-      return sum + (totalBasic + gstAmount) * (quantity || 0);
-    }, 0).toFixed(2)}</td>
-              </tr>
-            </tbody>
-          </table>` : ''}
-          
-          ${selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 ? `
-            <div style="margin: 10px 0 5px 0; font-weight: bold; color: #059669;">SERVICE CHARGES</div>
-            <table class="items-table">
-              <thead>
-                <tr>
-                  <th style="width: 8%;">Sr.No</th>
-                  <th style="width: 35%;">Description</th>
-                  <th style="width: 8%;">HSN Code</th>
-                  <th style="width: 6%;">UOM</th>
-                  <th style="width: 5%;">Qty</th>
-                  <th style="width: 10%;">Basic Amount</th>
-                  ${(selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
-                  <th style="width: 9%;">Total Basic</th>
-                  <th style="width: 5%;">GST</th>
-                  <th style="width: 9%;">GST Amount</th>
-                  <th style="width: 10%;">Total Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${selectedInvoice.serviceCharges.map((service: any, idx: number) => {
-      const basicAmount = service.unitPrice || 0;
-      const discountPercent = service.discount || 0;
-      const totalBasic = basicAmount * (1 - discountPercent / 100);
-      const gstRate = service.taxRate || 0;
-      const gstAmount = service?.taxAmount || totalBasic * (gstRate / 100);
-      const totalAmount = service.quantity * (totalBasic + gstAmount);
-      const showDiscount = (selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0);
+              }).join('');
 
-      return `
+              const totalRow = `
+                <tr class="totals-row">
+                  <td colspan="5" style="text-align: left; font-weight: bold;">TOTAL (Items)</td>
+                  <td class="center-cell">${totalQty}</td>
+                  <td class="number-cell">-</td>
+                  <td class="number-cell">₹${totalBasicSum.toFixed(2)}</td>
+                  ${hasDiscount ? `<td class="center-cell">-</td><td class="number-cell">₹${totalFinalSum.toFixed(2)}</td>` : ''}
+                  <td class="center-cell">-</td>
+                  <td class="number-cell">₹${totalGstSum.toFixed(2)}</td>
+                  <td class="number-cell">₹${totalAmountSum.toFixed(2)}</td>
+                </tr>
+              `;
+
+              return itemRows + totalRow;
+            })()}
+          </tbody>
+        </table>` : ''}
+        
+        ${selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 ? `
+          <div style="margin: 10px 0 5px 0; font-weight: bold; color: #059669;">SERVICE CHARGES</div>
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="width: 8%;">Sr.No</th>
+                <th style="width: 35%;">Description</th>
+                <th style="width: 8%;">HSN Code</th>
+                <th style="width: 6%;">UOM</th>
+                <th style="width: 5%;">Qty</th>
+                <th style="width: 10%;">Basic Amount</th>
+                <th style="width: 10%;">Total Basic</th>
+                ${(selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th><th style="width: 10%;">Final Amount</th>' : ''}
+                <th style="width: 5%;">GST %</th>
+                <th style="width: 9%;">GST Amount</th>
+                <th style="width: 12%;">Total Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(() => {
+                let serviceTotalQty = 0;
+                let serviceTotalBasicSum = 0;
+                let serviceTotalFinalSum = 0;
+                let serviceTotalGstSum = 0;
+                let serviceTotalAmountSum = 0;
+                const serviceHasDiscount = (selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0);
+                
+                const serviceRows = selectedInvoice.serviceCharges.map((service: any, idx: number) => {
+                  const basicAmount = service.unitPrice || 0;
+                  const quantity = service.quantity || 0;
+                  const totalBasic = basicAmount * quantity;
+                  const discountAmount = totalBasic * ((service.discount || 0) / 100);
+                  const finalAmount = totalBasic - discountAmount;
+                  const gstAmount = finalAmount * ((service.taxRate || 0) / 100);
+                  const totalAmount = finalAmount + gstAmount;
+
+                  // Add to running totals
+                  serviceTotalQty += quantity;
+                  serviceTotalBasicSum += totalBasic;
+                  serviceTotalFinalSum += finalAmount;
+                  serviceTotalGstSum += gstAmount;
+                  serviceTotalAmountSum += totalAmount;
+
+                  return `
                     <tr>
                       <td class="center-cell">${idx + 1}</td>
                       <td>${service.description || ''}</td>
                       <td class="center-cell">${service.hsnNumber || '-'}</td>
                       <td class="center-cell">NOS</td>
-                      <td class="center-cell">${service.quantity || 0}</td>
-                      <td class="number-cell">${basicAmount.toFixed(2)}</td>
-                      ${showDiscount ? `<td class="center-cell">${discountPercent}%</td>` : ''}
-                      <td class="number-cell">${totalBasic.toFixed(2)}</td>
-                      <td class="center-cell">${gstRate}%</td>
-                      <td class="number-cell">${gstAmount.toFixed(2)}</td>
-                      <td class="number-cell">${totalAmount.toFixed(2)}</td>
+                      <td class="center-cell">${quantity}</td>
+                      <td class="number-cell">₹${basicAmount.toFixed(2)}</td>
+                      <td class="number-cell">₹${totalBasic.toFixed(2)}</td>
+                      ${serviceHasDiscount ? `<td class="center-cell">${service.discount || 0}%</td><td class="number-cell">₹${finalAmount.toFixed(2)}</td>` : ''}
+                      <td class="center-cell">${service.taxRate || 0}%</td>
+                      <td class="number-cell">₹${gstAmount.toFixed(2)}</td>
+                      <td class="number-cell">₹${totalAmount.toFixed(2)}</td>
                     </tr>
                   `;
-    }).join('')}
-                <tr class="totals-row">
-  <td colspan="${(selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) ? '4' : '4'}" style="text-align: left; font-weight: bold;">
-    Total Service Charges
-  </td>
-  <td class="center-cell">
-    ${(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.quantity || 0), 0)}
-  </td>
-  <td class="number-cell">
-    ${(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => {
-      const basicAmount = service.unitPrice || 0;
-      const quantity = service.quantity || 0;
-      return sum + basicAmount;
-    }, 0).toFixed(2)}
-  </td>
-  ${(selectedInvoice.serviceCharges || []).some((service: any) => (service.discountedAmount || 0) > 0) ? '<td></td>' : ''}
-  <td class="number-cell">
-    ${(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => {
-      const basicAmount = service.unitPrice || 0;
-      const discountPercent = service.discount || 0;
-      const quantity = service.quantity || 0;
-      return sum + (basicAmount * (1 - discountPercent / 100)) * (quantity || 0);
-    }, 0).toFixed(2)}
-  </td>
-  <td></td>
-  <td class="number-cell">
-    ${(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => {
-      const basicAmount = service.unitPrice || 0;
-      const quantity = service.quantity || 0;
-      const discountPercent = service.discount || 0;
-      const totalBasic = basicAmount * (1 - discountPercent / 100);
-      return sum + (totalBasic * (service.taxRate || 0) / 100) * (quantity || 0);
-    }, 0).toFixed(2)}
-  </td>
-  <td class="number-cell">
-    ${(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => {
-      const basicAmount = service.unitPrice || 0;
-      const discountPercent = service.discount || 0;
-      const totalBasic = basicAmount * (1 - discountPercent / 100);
-      const gstAmount = totalBasic * (service.taxRate || 0) / 100;
-      return sum + (totalBasic + gstAmount) * (service.quantity || 1);
-    }, 0).toFixed(2)}
-  </td>
-</tr>
+                }).join('');
 
-              </tbody>
-            </table>
-          ` : ''}
-          
-          ${selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.quantity > 0 ? `
-            <div style="margin: 10px 0 5px 0; font-weight: bold; color: #ea580c;">BATTERY BUYBACK CHARGES</div>
-            <table class="items-table">
-              <thead>
-                <tr>
-                  <th style="width: 8%;">Sr.No</th>
-                  <th style="width: 35%;">Description</th>
-                  <th style="width: 8%;">HSN Code</th>
-                  <th style="width: 6%;">UOM</th>
-                  <th style="width: 5%;">Qty</th>
-                  <th style="width: 10%;">Basic Amount</th>
-                  ${(selectedInvoice.batteryBuyBack?.discount || 0) > 0 ? '<th style="width: 8%;">Discount %</th>' : ''}
-                  ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 5%;">GST</th>' : ''}
-                  ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 9%;">GST Amount</th>' : ''}
-                  <th style="width: 10%;">Total Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td class="center-cell">1</td>
-                  <td>${selectedInvoice.batteryBuyBack.description || ''}</td>
-                  <td class="center-cell">${selectedInvoice.batteryBuyBack.hsnNumber || '-'}</td>
-                  <td class="center-cell">NOS</td>
-                  <td class="center-cell">${selectedInvoice.batteryBuyBack.quantity || 0}</td>
-                  <td class="number-cell">${(selectedInvoice.batteryBuyBack.unitPrice || 0).toFixed(2)}</td>
-                  ${(selectedInvoice.batteryBuyBack?.discount || 0) > 0 ? `<td class="center-cell">${selectedInvoice.batteryBuyBack.discount}%</td>` : ''}
-                  ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="center-cell">${selectedInvoice.batteryBuyBack.taxRate || 0}%</td>` : ''}
-                  ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="number-cell">${(selectedInvoice.batteryBuyBack.taxAmount || 0).toFixed(2)}</td>` : ''}
-                  <td class="number-cell">${(selectedInvoice.batteryBuyBack.totalPrice || 0).toFixed(2)}</td>
-                </tr>
-                <tr class="totals-row">
-  <td colspan="${(selectedInvoice.batteryBuyBack?.discount || 0) > 0 ? '4' : '3'}" style="text-align: left; font-weight: bold;">
-    Total Battery Buyback
-  </td>
-  <td class="center-cell">${selectedInvoice.batteryBuyBack?.quantity || 0}</td>
-  <td class="number-cell">${(selectedInvoice.batteryBuyBack?.unitPrice || 0).toFixed(2)}</td>
-  <td class="number-cell">- ${(selectedInvoice.batteryBuyBack?.discountedAmount || 0).toFixed(2)}</td>
-  ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? '<td></td><td class="number-cell">' + (selectedInvoice.batteryBuyBack?.taxAmount || 0).toFixed(2) + '</td>' : ''}
-  <td class="number-cell">${(selectedInvoice.batteryBuyBack?.totalPrice || 0).toFixed(2)}</td>
-</tr>
+                const serviceTotalRow = `
+                  <tr class="totals-row">
+                    <td colspan="4" style="text-align: left; font-weight: bold;">TOTAL (Service Charges)</td>
+                    <td class="center-cell">${serviceTotalQty}</td>
+                    <td class="number-cell">-</td>
+                    <td class="number-cell">₹${serviceTotalBasicSum.toFixed(2)}</td>
+                    ${serviceHasDiscount ? `<td class="center-cell">-</td><td class="number-cell">₹${serviceTotalFinalSum.toFixed(2)}</td>` : ''}
+                    <td class="center-cell">-</td>
+                    <td class="number-cell">₹${serviceTotalGstSum.toFixed(2)}</td>
+                    <td class="number-cell">₹${serviceTotalAmountSum.toFixed(2)}</td>
+                  </tr>
+                `;
 
-              </tbody>
-            </table>
-          ` : ''}
-          
-          
-          
-          
-         <div style="margin-top: 15px; width: 100%; font-size: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
-  
-  <!-- ✅ Left: Terms & Conditions -->
-  <div style="width: 60%;">
-    ${selectedInvoice.terms ? `
-      <div class="terms-section">
-        <div style="font-weight: bold; margin-bottom: 5px;">TERMS & CONDITIONS:-</div>
-        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-          ${selectedInvoice.terms.split('\n').map((term: string, idx: number) => {
-            const parts = term.split(':');
-            const label = parts[0]?.trim() || '';
-            const value = parts.slice(1).join(':').trim() || '';
-            return `
-              <tr>
-                <td style="width: 5%; vertical-align: top;">${idx + 1}</td>
-                <td style="width: 30%; vertical-align: top;">${label}</td>
-                <td style="width: 5%; vertical-align: top;">:</td>
-                <td style="width: 60%; vertical-align: top;">${value}</td>
-              </tr>
-            `;
-          }).join('')}
-        </table>
-      </div>
-    ` : ''}
-  </div>
-
-  <!-- ✅ Right: Totals Summary -->
-  <div style="width: 35%; font-size: 12px;">
-    <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-      <tbody>
-        <tr>
-          <td style="text-align: right; padding: 4px 8px;">Subtotal:</td>
-          <td style="text-align: right; padding: 4px 8px; font-weight: bold;">
-            ₹${selectedInvoice.subtotal?.toFixed(2) || '0.00'}
-          </td>
-        </tr>
-        <tr>
-          <td style="text-align: right; padding: 4px 8px;">Total Tax:</td>
-          <td style="text-align: right; padding: 4px 8px; font-weight: bold;">
-            ₹${selectedInvoice.taxAmount?.toFixed(2) || '0.00'}
-          </td>
-        </tr>
-        ${selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 ? `
-        <tr>
-          <td style="text-align: right; padding: 4px 8px;">Service Charges:</td>
-          <td style="text-align: right; padding: 4px 8px; font-weight: bold; color: #059669;">
-            +₹${(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2) || '0.00'}
-          </td>
-        </tr>` : ''}
+                return serviceRows + serviceTotalRow;
+              })()}
+            </tbody>
+          </table>
+        ` : ''}
+        
         ${selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.quantity > 0 ? `
-        <tr>
-          <td style="text-align: right; padding: 4px 8px;">Battery Buyback:</td>
-          <td style="text-align: right; padding: 4px 8px; font-weight: bold; color: #ea580c;">
-            -₹${selectedInvoice.batteryBuyBack?.totalPrice?.toFixed(2) || '0.00'}
-          </td>
-        </tr>` : ''}
-        <tr>
-          <td colspan="2"><hr style="margin-top: 8px; margin-bottom: 2px; border: none; border-top: 1px solid #ddd;"></td>
-        </tr>
-        <tr class="grand-total-row">
-          <td style="text-align: right; padding: 6px 8px; font-size: 14px; font-weight: bold;">Grand Total:</td>
-          <td style="text-align: right; padding: 6px 8px; font-size: 14px; font-weight: bold; color: #1d4ed8;">
-            ₹${selectedInvoice.totalAmount?.toFixed(2) || '0.00'}
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+          <div style="margin: 10px 0 5px 0; font-weight: bold; color: #ea580c;">BATTERY BUYBACK CHARGES</div>
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="width: 8%;">Sr.No</th>
+                <th style="width: 35%;">Description</th>
+                <th style="width: 8%;">HSN Code</th>
+                <th style="width: 6%;">UOM</th>
+                <th style="width: 5%;">Qty</th>
+                <th style="width: 12%;">Basic Amount</th>
+                <th style="width: 12%;">Total Basic</th>
+                ${(selectedInvoice.batteryBuyBack?.discount || 0) > 0 ? '<th style="width: 8%;">Discount %</th><th style="width: 12%;">Final Amount</th>' : ''}
+                <th style="width: 14%;">Total Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(() => {
+                const batteryBasicAmount = selectedInvoice.batteryBuyBack.unitPrice || 0;
+                const batteryQuantity = selectedInvoice.batteryBuyBack.quantity || 0;
+                const batteryTotalBasic = batteryBasicAmount * batteryQuantity;
+                const batteryDiscountAmount = batteryTotalBasic * ((selectedInvoice.batteryBuyBack.discount || 0) / 100);
+                const batteryFinalAmount = batteryTotalBasic - batteryDiscountAmount;
+                const batteryHasDiscount = (selectedInvoice.batteryBuyBack?.discount || 0) > 0;
+
+                const batteryRow = `
+                  <tr>
+                    <td class="center-cell">1</td>
+                    <td>${selectedInvoice.batteryBuyBack.description || ''}</td>
+                    <td class="center-cell">${selectedInvoice.batteryBuyBack.hsnNumber || '-'}</td>
+                    <td class="center-cell">NOS</td>
+                    <td class="center-cell">${batteryQuantity}</td>
+                    <td class="number-cell">₹${batteryBasicAmount.toFixed(2)}</td>
+                    <td class="number-cell">₹${batteryTotalBasic.toFixed(2)}</td>
+                    ${batteryHasDiscount ? `<td class="center-cell">${selectedInvoice.batteryBuyBack.discount}%</td><td class="number-cell">₹${batteryFinalAmount.toFixed(2)}</td>` : ''}
+                    <td class="number-cell">₹${(selectedInvoice.batteryBuyBack.totalPrice || 0).toFixed(2)}</td>
+                  </tr>
+                `;
+
+                const batteryTotalRow = `
+                  <tr class="totals-row">
+                    <td colspan="4" style="text-align: left; font-weight: bold;">TOTAL (Battery Buyback)</td>
+                    <td class="center-cell">${batteryQuantity}</td>
+                    <td class="number-cell">-</td>
+                    <td class="number-cell">₹${batteryTotalBasic.toFixed(2)}</td>
+                    ${batteryHasDiscount ? `<td class="center-cell">-</td><td class="number-cell">₹${batteryFinalAmount.toFixed(2)}</td>` : ''}
+                    <td class="number-cell">₹${(selectedInvoice.batteryBuyBack.totalPrice || 0).toFixed(2)}</td>
+                  </tr>
+                `;
+
+                return batteryRow + batteryTotalRow;
+              })()}
+            </tbody>
+          </table>
+        ` : ''}
+        
+        <div style="margin-top: 15px; width: 100%; font-size: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
           
-          
-          <div class="footer-section">
-            <div class="footer-left">
-              <div style="font-weight: bold;">Sun Power Bank Details: -</div>
-              <div class="company-details">
-                ${selectedInvoice?.company?.address || 'Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116'}<br>
-                Mobile: ${selectedInvoice?.company?.phone || '+91 9176660123'}<br>
-                PAN: ${selectedInvoice?.company?.pan || '33BLFPS9951M1ZC'}<br>
-                Mail Id: ${selectedInvoice?.company?.email || 'service@sunpowerservices.in'}
-                ${selectedInvoice?.company?.bankDetails && (
+          <!-- Left: Terms & Conditions -->
+          <div style="width: 60%;">
+            ${selectedInvoice.terms ? `
+              <div class="terms-section">
+                <div style="font-weight: bold; margin-bottom: 5px;">TERMS & CONDITIONS:-</div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                  ${selectedInvoice.terms.split('\\n').map((term: string, idx: number) => {
+                    const parts = term.split(':');
+                    const label = parts[0]?.trim() || '';
+                    const value = parts.slice(1).join(':').trim() || '';
+                    return `
+                      <tr>
+                        <td style="width: 5%; vertical-align: top;">${idx + 1}</td>
+                        <td style="width: 30%; vertical-align: top;">${label}</td>
+                        <td style="width: 5%; vertical-align: top;">:</td>
+                        <td style="width: 60%; vertical-align: top;">${value}</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </table>
+              </div>
+            ` : ''}
+          </div>
+
+          <!-- Right: Totals Summary -->
+          <div style="width: 35%; font-size: 12px;">
+            <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+              <tbody>
+                ${(() => {
+                  // Calculate proper totals
+                  const itemsSubtotal = (selectedInvoice.items || []).reduce((sum: number, item: any) => {
+                    const basicAmount = (item.unitPrice || 0) * (item.quantity || 0);
+                    const discountAmount = basicAmount * ((item.discount || 0) / 100);
+                    return sum + (basicAmount - discountAmount);
+                  }, 0);
+                  
+                  const itemsTax = (selectedInvoice.items || []).reduce((sum: number, item: any) => {
+                    const basicAmount = (item.unitPrice || 0) * (item.quantity || 0);
+                    const discountAmount = basicAmount * ((item.discount || 0) / 100);
+                    const finalAmount = basicAmount - discountAmount;
+                    return sum + (finalAmount * ((item.taxRate || 0) / 100));
+                  }, 0);
+
+                  const serviceSubtotal = (selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => {
+                    const basicAmount = (service.unitPrice || 0) * (service.quantity || 0);
+                    const discountAmount = basicAmount * ((service.discount || 0) / 100);
+                    return sum + (basicAmount - discountAmount);
+                  }, 0);
+                  
+                  const serviceTax = (selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => {
+                    const basicAmount = (service.unitPrice || 0) * (service.quantity || 0);
+                    const discountAmount = basicAmount * ((service.discount || 0) / 100);
+                    const finalAmount = basicAmount - discountAmount;
+                    return sum + (finalAmount * ((service.taxRate || 0) / 100));
+                  }, 0);
+
+                  const batteryAmount = selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.quantity > 0 
+                    ? (selectedInvoice.batteryBuyBack.totalPrice || 0) 
+                    : 0;
+
+                  const totalSubtotal = itemsSubtotal + serviceSubtotal;
+                  const totalTax = itemsTax + serviceTax;
+                  const finalTotal = totalSubtotal + totalTax - batteryAmount;
+
+                  return `
+                    <tr>
+                      <td style="text-align: right; padding: 4px 8px;">Subtotal:</td>
+                      <td style="text-align: right; padding: 4px 8px; font-weight: bold;">
+                        ₹${totalSubtotal.toFixed(2)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="text-align: right; padding: 4px 8px;">Total Tax:</td>
+                      <td style="text-align: right; padding: 4px 8px; font-weight: bold;">
+                        ₹${totalTax.toFixed(2)}
+                      </td>
+                    </tr>
+                    ${batteryAmount > 0 ? `
+                    <tr>
+                      <td style="text-align: right; padding: 4px 8px;">Battery Buyback:</td>
+                      <td style="text-align: right; padding: 4px 8px; font-weight: bold; color: #ea580c;">
+                        -₹${batteryAmount.toFixed(2)}
+                      </td>
+                    </tr>` : ''}
+                    <tr>
+                      <td colspan="2"><hr style="margin-top: 8px; margin-bottom: 2px; border: none; border-top: 1px solid #ddd;"></td>
+                    </tr>
+                    <tr class="grand-total-row">
+                      <td style="text-align: right; padding: 6px 8px; font-size: 14px; font-weight: bold;">Grand Total:</td>
+                      <td style="text-align: right; padding: 6px 8px; font-size: 14px; font-weight: bold; color: #1d4ed8;">
+                        ₹${finalTotal.toFixed(2)}
+                      </td>
+                    </tr>
+                  `;
+                })()}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <div class="footer-section">
+          <div class="footer-left">
+            <div style="font-weight: bold;">Sun Power Bank Details: -</div>
+            <div class="company-details">
+              ${selectedInvoice?.company?.address || 'Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116'}<br>
+              Mobile: ${selectedInvoice?.company?.phone || '+91 9176660123'}<br>
+              PAN: ${selectedInvoice?.company?.pan || '33BLFPS9951M1ZC'}<br>
+              Mail Id: ${selectedInvoice?.company?.email || 'service@sunpowerservices.in'}
+              ${selectedInvoice?.company?.bankDetails && (
         selectedInvoice.company.bankDetails.bankName ||
         selectedInvoice.company.bankDetails.accountNo ||
         selectedInvoice.company.bankDetails.ifsc ||
         selectedInvoice.company.bankDetails.branch
       ) ? `
-                <br><br>
-                <div style="font-weight: bold; margin-top: 10px;">Banking Details:</div>
-                ${selectedInvoice?.company?.bankDetails?.bankName ? `<div>Bank: ${selectedInvoice.company.bankDetails.bankName}</div>` : ''}
-                ${selectedInvoice?.company?.bankDetails?.accountNo ? `<div>A/C No: ${selectedInvoice.company.bankDetails.accountNo}</div>` : ''}
-                ${selectedInvoice?.company?.bankDetails?.ifsc ? `<div>IFSC: ${selectedInvoice.company.bankDetails.ifsc}</div>` : ''}
-                ${selectedInvoice?.company?.bankDetails?.branch ? `<div>Branch: ${selectedInvoice.company.bankDetails.branch}</div>` : ''}
-                ` : ''}
-              </div>
-            </div>
-            <div class="footer-center">
-              ${selectedInvoice.qrCodeImage ? `
-                <div class="qr-code-container">
-                  <img src="${selectedInvoice.qrCodeImage}" alt="QR Code" class="qr-code-image" />
-                  <div style="font-size: 10px; margin-top: 5px;">QR Code Scanner</div>
-                </div>
-              ` : `
-                <div style="border: 1px solid #333; padding: 20px; margin: 10px;">
-                  QR Code<br>
-                  Scanner
-                </div>
-              `}
-            </div>
-            <div class="footer-right">
-              <div style="margin-bottom: 10px; font-weight: bold;">For Sun Power Services</div>
-              <div class="signature-line">Authorised Signature</div>
+              <br><br>
+              <div style="font-weight: bold; margin-top: 10px;">Banking Details:</div>
+              ${selectedInvoice?.company?.bankDetails?.bankName ? `<div>Bank: ${selectedInvoice.company.bankDetails.bankName}</div>` : ''}
+              ${selectedInvoice?.company?.bankDetails?.accountNo ? `<div>A/C No: ${selectedInvoice.company.bankDetails.accountNo}</div>` : ''}
+              ${selectedInvoice?.company?.bankDetails?.ifsc ? `<div>IFSC: ${selectedInvoice.company.bankDetails.ifsc}</div>` : ''}
+              ${selectedInvoice?.company?.bankDetails?.branch ? `<div>Branch: ${selectedInvoice.company.bankDetails.branch}</div>` : ''}
+              ` : ''}
             </div>
           </div>
+          <div class="footer-center">
+            ${selectedInvoice.qrCodeImage ? `
+              <div class="qr-code-container">
+                <img src="${selectedInvoice.qrCodeImage}" alt="QR Code" class="qr-code-image" />
+                <div style="font-size: 10px; margin-top: 5px;">QR Code Scanner</div>
+              </div>
+            ` : `
+              <div style="border: 1px solid #333; padding: 20px; margin: 10px;">
+                QR Code<br>
+                Scanner
+              </div>
+            `}
+          </div>
+          <div class="footer-right">
+            <div style="margin-bottom: 10px; font-weight: bold;">For Sun Power Services</div>
+            <div class="signature-line">Authorised Signature</div>
+          </div>
         </div>
-      </body>
-      </html>
-    `;
+      </div>
+    </body>
+    </html>
+  `;
 
-    if (printWindow) {
-      printWindow.document.write(printContent);
-      printWindow.document.close();
+  if (printWindow) {
+    printWindow.document.write(printContent);
+    printWindow.document.close();
 
-      // Wait for content to load, then print
-      printWindow.onload = () => {
-        setTimeout(() => {
-          printWindow.print();
-        }, 500);
-      };
-    }
-  };
+    // Wait for content to load, then print
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.print();
+      }, 500);
+    };
+  }
+};
 
   // Payment Receipt Generation Function
   const generatePaymentReceipt = (invoice: Invoice) => {
@@ -5284,708 +5339,688 @@ const InvoiceManagement: React.FC = () => {
     return sub - disc + tax;
   }
 
-  // Print quotation function
-  const printQuotation = (quotation: any) => {
-    console.log("quotation00000:");
+// Print quotation function with proper calculations
+const printQuotation = (quotation: any) => {
+  console.log("quotation00000:");
 
-    // Create a new window for printing
-    const printWindow = window.open('', '_blank');
+  // Create a new window for printing
+  const printWindow = window.open('', '_blank');
 
-    const printContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Service Quotation</title>
-        <style>
-          @media print {
-            @page {
-              margin: 0.5in;
-              size: A4;
-            }
-            body {
-              margin: 0;
-              padding: 0;
-            }
+  const printContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Service Quotation</title>
+      <style>
+        @media print {
+          @page {
+            margin: 0.5in;
+            size: A4;
           }
-          
           body {
-            font-family: Arial, sans-serif;
-            font-size: 12px;
-            line-height: 1.2;
             margin: 0;
-            padding: 20px;
-            background: white;
+            padding: 0;
           }
-          
-          .quotation-container {
-            width: 100%;
-            max-width: 210mm;
-            margin: 0 auto;
-            background: white;
-          }
-          
-          .header {
-            text-align: center;
-            margin-bottom: 30px;
-          }
-          
-          .quotation-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin: 20px 0;
-            text-align: center;
-          }
-          
-          .info-section {
-            display: table;
-            width: 100%;
-            margin-bottom: 20px;
-          }
-          
-          .info-row {
-            display: table-row;
-          }
-          
-          .info-cell {
-            display: table-cell;
-            padding: 3px 5px;
-            vertical-align: top;
-            border: none;
-          }
-          
-          .info-left {
-            width: 50%;
-            padding-right: 20px;
-          }
-          
-          .info-right {
-            width: 50%;
-            padding-left: 20px;
-          }
-          
-          .subject-line {
-            font-weight: bold;
-            margin: 20px 0 10px 0;
-            font-size: 13px;
-          }
-          
-          .greeting {
-            margin: 15px 0 5px 0;
-          }
-          
-          .intro-text {
-            margin: 5px 0 20px 0;
-          }
-          
-          .items-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-            font-size: 11px;
-          }
-          
-          .items-table th,
-          .items-table td {
-            border: 1px solid #333;
-            padding: 4px 6px;
-            text-align: left;
-          }
-          
-          .items-table th {
-            background-color: #f0f0f0;
-            font-weight: bold;
-            text-align: center;
-          }
-          
-          .items-table .number-cell {
-            text-align: right;
-          }
-          
-          .items-table .center-cell {
-            text-align: center;
-          }
-          
-          .totals-row {
-            font-weight: bold;
-            background-color: #f9f9f9;
-          }
-          
-          .grand-total-row {
-            font-weight: bold;
-            background-color: #e9e9e9;
-            font-size: 12px;
-          }
-          
-          .terms-section {
-            margin: 5px 0;
-          }
-          
-          .terms-title {
-            font-weight: bold;
-            margin-bottom: 10px;
-          }
-          
-          .terms-table {
-            width: 100%;
-            margin-bottom: 20px;
-          }
-          
-          .terms-table td {
-            padding: 3px 0;
-            vertical-align: top;
-          }
-          
-          .terms-number {
-            width: 20px;
-            text-align: left;
-          }
-          
-          .terms-label {
-            width: 150px;
-            text-align: left;
-          }
-          
-          .terms-colon {
-            width: 15px;
-            text-align: left;
-          }
-          
-          .terms-value {
-            text-align: left;
-          }
-          
-          .closing-text {
-            margin: 15px 0;
-            line-height: 1.4;
-          }
-          
-          .footer-section {
-            display: table;
-            width: 100%;
-            margin-top: 30px;
-            border-top: 1px solid #ddd;
-            padding-top: 15px;
-          }
-          
-          .footer-left {
-            display: table-cell;
-            width: 40%;
-            vertical-align: top;
-            padding-right: 20px;
-          }
-          
-          .footer-center {
-            display: table-cell;
-            width: 20%;
-            text-align: center;
-            vertical-align: top;
-          }
-          
-          .footer-right {
-            display: table-cell;
-            width: 40%;
-            text-align: center;
-            vertical-align: top;
-          }
-          
-          .signature-line {
-            margin-top: 40px;
-            text-align: center;
-            border-top: 1px solid #333;
-            padding-top: 5px;
-            width: 200px;
-            margin-left: auto;
-            margin-right: auto;
-          }
-          
-          .company-details {
-            font-size: 10px;
-            line-height: 1.3;
-          }
-          
-          .section-title {
-            font-weight: bold;
-            margin: 20px 0 10px 0;
-            font-size: 13px;
-            color: #374151;
-            border-bottom: 1px solid #d1d5db;
-            padding-bottom: 5px;
-          }
-          
-          .qr-code-container {
-            border: 1px solid #333;
-            padding: 10px;
-            margin: 10px;
-            text-align: center;
-            background: white;
-          }
-          
-          .qr-code-image {
-            max-width: 100px;
-            max-height: 100px;
-            display: block;
-            margin: 0 auto;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="quotation-container">
-          <div class="quotation-title">QUOTATION</div>
-          
-          <div class="info-section">
-            <div class="info-row">
-              <div class="info-cell info-left">
-                <strong>Ref:</strong> ${quotation.quotationNumber || 'N/A'}
-              </div>
-              <div class="info-cell info-right">
-                <strong>Date:</strong> ${quotation.issueDate ? new Date(quotation.issueDate).toLocaleDateString() : 'N/A'}
-              </div>
+        }
+        
+        body {
+          font-family: Arial, sans-serif;
+          font-size: 12px;
+          line-height: 1.2;
+          margin: 0;
+          padding: 20px;
+          background: white;
+        }
+        
+        .quotation-container {
+          width: 100%;
+          max-width: 210mm;
+          margin: 0 auto;
+          background: white;
+        }
+        
+        .header {
+          text-align: center;
+          margin-bottom: 30px;
+        }
+        
+        .quotation-title {
+          font-size: 18px;
+          font-weight: bold;
+          margin: 20px 0;
+          text-align: center;
+        }
+        
+        .info-section {
+          display: table;
+          width: 100%;
+          margin-bottom: 20px;
+        }
+        
+        .info-row {
+          display: table-row;
+        }
+        
+        .info-cell {
+          display: table-cell;
+          padding: 3px 5px;
+          vertical-align: top;
+          border: none;
+        }
+        
+        .info-left {
+          width: 50%;
+          padding-right: 20px;
+        }
+        
+        .info-right {
+          width: 50%;
+          padding-left: 20px;
+        }
+        
+        .subject-line {
+          font-weight: bold;
+          margin: 20px 0 10px 0;
+          font-size: 13px;
+        }
+        
+        .greeting {
+          margin: 15px 0 5px 0;
+        }
+        
+        .intro-text {
+          margin: 5px 0 20px 0;
+        }
+        
+        .items-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 20px 0;
+          font-size: 11px;
+        }
+        
+        .items-table th,
+        .items-table td {
+          border: 1px solid #333;
+          padding: 4px 6px;
+          text-align: left;
+        }
+        
+        .items-table th {
+          background-color: #f0f0f0;
+          font-weight: bold;
+          text-align: center;
+        }
+        
+        .items-table .number-cell {
+          text-align: right;
+        }
+        
+        .items-table .center-cell {
+          text-align: center;
+        }
+        
+        .totals-row {
+          font-weight: bold;
+          background-color: #f9f9f9;
+        }
+        
+        .grand-total-row {
+          font-weight: bold;
+          background-color: #e9e9e9;
+          font-size: 12px;
+        }
+        
+        .terms-section {
+          margin: 5px 0;
+        }
+        
+        .terms-title {
+          font-weight: bold;
+          margin-bottom: 10px;
+        }
+        
+        .terms-table {
+          width: 100%;
+          margin-bottom: 20px;
+        }
+        
+        .terms-table td {
+          padding: 3px 0;
+          vertical-align: top;
+        }
+        
+        .terms-number {
+          width: 20px;
+          text-align: left;
+        }
+        
+        .terms-label {
+          width: 150px;
+          text-align: left;
+        }
+        
+        .terms-colon {
+          width: 15px;
+          text-align: left;
+        }
+        
+        .terms-value {
+          text-align: left;
+        }
+        
+        .closing-text {
+          margin: 15px 0;
+          line-height: 1.4;
+        }
+        
+        .footer-section {
+          display: table;
+          width: 100%;
+          margin-top: 30px;
+          border-top: 1px solid #ddd;
+          padding-top: 15px;
+        }
+        
+        .footer-left {
+          display: table-cell;
+          width: 40%;
+          vertical-align: top;
+          padding-right: 20px;
+        }
+        
+        .footer-center {
+          display: table-cell;
+          width: 20%;
+          text-align: center;
+          vertical-align: top;
+        }
+        
+        .footer-right {
+          display: table-cell;
+          width: 40%;
+          text-align: center;
+          vertical-align: top;
+        }
+        
+        .signature-line {
+          margin-top: 40px;
+          text-align: center;
+          border-top: 1px solid #333;
+          padding-top: 5px;
+          width: 200px;
+          margin-left: auto;
+          margin-right: auto;
+        }
+        
+        .company-details {
+          font-size: 10px;
+          line-height: 1.3;
+        }
+        
+        .section-title {
+          font-weight: bold;
+          margin: 20px 0 10px 0;
+          font-size: 13px;
+          color: #374151;
+          border-bottom: 1px solid #d1d5db;
+          padding-bottom: 5px;
+        }
+        
+        .qr-code-container {
+          border: 1px solid #333;
+          padding: 10px;
+          margin: 10px;
+          text-align: center;
+          background: white;
+        }
+        
+        .qr-code-image {
+          max-width: 100px;
+          max-height: 100px;
+          display: block;
+          margin: 0 auto;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="quotation-container">
+        <div class="quotation-title">QUOTATION</div>
+        
+        <div class="info-section">
+          <div class="info-row">
+            <div class="info-cell info-left">
+              <strong>Ref:</strong> ${quotation.quotationNumber || 'N/A'}
             </div>
-            <div class="info-row">
-              <div class="info-cell info-left">
-                <strong>Reference Name:</strong> ${quotation.assignedEngineer ? `${quotation.assignedEngineer.firstName || ''} ${quotation.assignedEngineer.lastName || ''}`.trim() : 'N/A'}
-              </div>
-            </div>
-          </div>
-          
-          <div class="info-section">
-            <div class="info-row">
-              <div class="info-cell info-left">
-                <strong>Customer Billing Address:</strong><br>
-                ${quotation.customer?.name || 'N/A'}<br>
-                ${quotation.billToAddress ? `${quotation.billToAddress.address || ''}<br>${quotation.billToAddress.district || ''}, ${quotation.billToAddress.pincode || ''}<br>${quotation.billToAddress.state || ''}${quotation.billToAddress.gstNumber ? `<br><strong>GST:</strong> ${quotation.billToAddress.gstNumber}` : ''}` : 'Same as billing address'}
-              </div>
-              <div class="info-cell info-right">
-                <strong>Customer Delivery Address:</strong><br>
-                ${quotation.shipToAddress ? `${quotation.shipToAddress.address || ''}<br>${quotation.shipToAddress.district || ''}, ${quotation.shipToAddress.pincode || ''}<br>${quotation.shipToAddress.state || ''}${quotation.shipToAddress.gstNumber ? `<br><strong>GST:</strong> ${quotation.shipToAddress.gstNumber}` : ''}` : 'Same as billing address'}
-              </div>
+            <div class="info-cell info-right">
+              <strong>Date:</strong> ${quotation.issueDate ? new Date(quotation.issueDate).toLocaleDateString() : 'N/A'}
             </div>
           </div>
-          
-          <div class="info-section">
-            <div class="info-row">
-              <div class="info-cell info-left">
-                <strong>Engine Seriel Number:</strong> ${quotation?.engineSerialNumber || 'N/A'}
-              </div>
-              <div class="info-cell info-right">
-                <strong>Last Service Done Date:</strong> ${quotation?.serviceRequestDate ? new Date(quotation.serviceRequestDate).toLocaleDateString() : 'N/A'}
-              </div>
-            </div>
-            <div class="info-row">
-              <div class="info-cell info-left">
-                <strong>DG Rating:</strong> ${quotation?.kva || 'N/A'}
-              </div>
-              <div class="info-cell info-right">
-                <strong>Last Service Done HMR:</strong> ${quotation?.hourMeterReading || 'N/A'}
-              </div>
+          <div class="info-row">
+            <div class="info-cell info-left">
+              <strong>Reference Name:</strong> ${quotation.assignedEngineer ? `${quotation.assignedEngineer.firstName || ''} ${quotation.assignedEngineer.lastName || ''}`.trim() : 'N/A'}
             </div>
           </div>
-          
-          <div class="subject-line">
-            Sub: ${quotation.subject || 'SPARES QUOTATION FOR DG SET'}
+        </div>
+        
+        <div class="info-section">
+          <div class="info-row">
+            <div class="info-cell info-left">
+              <strong>Customer Billing Address:</strong><br>
+              ${quotation.customer?.name || 'N/A'}<br>
+              ${quotation.billToAddress ? `${quotation.billToAddress.address || ''}<br>${quotation.billToAddress.district || ''}, ${quotation.billToAddress.pincode || ''}<br>${quotation.billToAddress.state || ''}${quotation.billToAddress.gstNumber ? `<br><strong>GST:</strong> ${quotation.billToAddress.gstNumber}` : ''}` : 'Same as billing address'}
+            </div>
+            <div class="info-cell info-right">
+              <strong>Customer Delivery Address:</strong><br>
+              ${quotation.shipToAddress ? `${quotation.shipToAddress.address || ''}<br>${quotation.shipToAddress.district || ''}, ${quotation.shipToAddress.pincode || ''}<br>${quotation.shipToAddress.state || ''}${quotation.shipToAddress.gstNumber ? `<br><strong>GST:</strong> ${quotation.shipToAddress.gstNumber}` : ''}` : 'Same as billing address'}
+            </div>
           </div>
-          
-          <div class="greeting">Dear Sir,</div>
-          <div class="intro-text">
-            With reference to the subject D.G. set we are here by furnishing our offer for Spares
+        </div>
+        
+        <div class="info-section">
+          <div class="info-row">
+            <div class="info-cell info-left">
+              <strong>Engine Serial Number:</strong> ${quotation?.engineSerialNumber || 'N/A'}
+            </div>
+            <div class="info-cell info-right">
+              <strong>Last Service Done Date:</strong> ${quotation?.serviceRequestDate ? new Date(quotation.serviceRequestDate).toLocaleDateString() : 'N/A'}
+            </div>
           </div>
-          
-          ${quotation.items && quotation.items.length > 0 ? `
+          <div class="info-row">
+            <div class="info-cell info-left">
+              <strong>DG Rating:</strong> ${quotation?.kva || 'N/A'}
+            </div>
+            <div class="info-cell info-right">
+              <strong>Last Service Done HMR:</strong> ${quotation?.hourMeterReading || 'N/A'}
+            </div>
+          </div>
+        </div>
+        
+        <div class="subject-line">
+          Sub: ${quotation.subject || 'SPARES QUOTATION FOR DG SET'}
+        </div>
+        
+        <div class="greeting">Dear Sir,</div>
+        <div class="intro-text">
+          With reference to the subject D.G. set we are here by furnishing our offer for Spares
+        </div>
+        
+        ${quotation.items && quotation.items.length > 0 ? `
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th style="width: 6%;">Sr.No</th>
+              <th style="width: 15%;">Part No</th>
+              <th style="width: 25%;">Description</th>
+              <th style="width: 8%;">HSN Code</th>
+              <th style="width: 6%;">UOM</th>
+              <th style="width: 5%;">Qty</th>
+              <th style="width: 10%;">Basic Amount</th>
+              <th style="width: 10%;">Total Basic</th>
+              ${(quotation.items || []).some((item: any) => (item.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th><th style="width: 10%;">Final Amount</th>' : ''}
+              <th style="width: 5%;">GST %</th>
+              <th style="width: 9%;">GST Amount</th>
+              <th style="width: 12%;">Total Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(() => {
+              let totalQty = 0;
+              let totalBasicSum = 0;
+              let totalDiscountSum = 0;
+              let totalFinalSum = 0;
+              let totalGstSum = 0;
+              let totalAmountSum = 0;
+              const hasDiscount = (quotation.items || []).some((item: any) => (item.discount || 0) > 0);
+              
+              const itemRows = (quotation.items || []).map((item: any, idx: number) => {
+                const basicAmount = item.unitPrice || 0;
+                const quantity = item.quantity || 0;
+                const totalBasic = basicAmount * quantity;
+                const discountAmount = totalBasic * ((item.discount || 0) / 100);
+                const finalAmount = totalBasic - discountAmount;
+                const gstAmount = finalAmount * ((item.taxRate || 0) / 100);
+                const totalAmount = finalAmount + gstAmount;
+
+                // Add to running totals
+                totalQty += quantity;
+                totalBasicSum += totalBasic;
+                totalDiscountSum += discountAmount;
+                totalFinalSum += finalAmount;
+                totalGstSum += gstAmount;
+                totalAmountSum += totalAmount;
+
+                return `
+                  <tr>
+                    <td class="center-cell">${idx + 1}</td>
+                    <td>${item.partNo || '-'}</td>
+                    <td>${item.description || ''}</td>
+                    <td class="center-cell">${item.hsnNumber || '-'}</td>
+                    <td class="center-cell">${item.uom || 'NOS'}</td>
+                    <td class="center-cell">${quantity}</td>
+                    <td class="number-cell">₹${basicAmount.toFixed(2)}</td>
+                    <td class="number-cell">₹${totalBasic.toFixed(2)}</td>
+                    ${hasDiscount ? `<td class="center-cell">${item.discount || 0}%</td><td class="number-cell">₹${finalAmount.toFixed(2)}</td>` : ''}
+                    <td class="center-cell">${item.taxRate || 0}%</td>
+                    <td class="number-cell">₹${gstAmount.toFixed(2)}</td>
+                    <td class="number-cell">₹${totalAmount.toFixed(2)}</td>
+                  </tr>
+                `;
+              }).join('');
+
+              const totalRow = `
+                <tr class="totals-row">
+                  <td colspan="5" style="text-align: left; font-weight: bold;">TOTAL (Items)</td>
+                  <td class="center-cell">${totalQty}</td>
+                  <td class="number-cell">-</td>
+                  <td class="number-cell">₹${totalBasicSum.toFixed(2)}</td>
+                  ${hasDiscount ? `<td class="center-cell">-</td><td class="number-cell">₹${totalFinalSum.toFixed(2)}</td>` : ''}
+                  <td class="center-cell">-</td>
+                  <td class="number-cell">₹${totalGstSum.toFixed(2)}</td>
+                  <td class="number-cell">₹${totalAmountSum.toFixed(2)}</td>
+                </tr>
+              `;
+
+              return itemRows + totalRow;
+            })()}
+          </tbody>
+        </table>` : ''}
+        
+        ${quotation.serviceCharges && quotation.serviceCharges.length > 0 ? `
+          <div style="margin: 10px 0 5px 0; font-weight: bold; color: #059669;">SERVICE CHARGES</div>
           <table class="items-table">
             <thead>
               <tr>
-                <th style="width: 6%;">Sr.No</th>
-                <th style="width: 15%;">Part No</th>
-                <th style="width: 25%;">Description</th>
+                <th style="width: 8%;">Sr.No</th>
+                <th style="width: 35%;">Description</th>
                 <th style="width: 8%;">HSN Code</th>
                 <th style="width: 6%;">UOM</th>
                 <th style="width: 5%;">Qty</th>
                 <th style="width: 10%;">Basic Amount</th>
-                ${(quotation.items || []).some((item: any) => (item.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
-                <th style="width: 9%;">Total Basic</th>
-                <th style="width: 5%;">GST</th>
+                <th style="width: 10%;">Total Basic</th>
+                ${(quotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th><th style="width: 10%;">Final Amount</th>' : ''}
+                <th style="width: 5%;">GST %</th>
                 <th style="width: 9%;">GST Amount</th>
-                <th style="width: 10%;">Total Amount</th>
+                <th style="width: 12%;">Total Amount</th>
               </tr>
             </thead>
             <tbody>
-              ${(quotation.items || []).map((item: any, idx: number) => {
-      const basicAmount = item.unitPrice || 0;
-      const discountPercent = item.discount || 0;
-      const totalBasic = basicAmount * (1 - discountPercent / 100);
-      const gstRate = item.taxRate || 0;
-      const gstAmount = item.taxAmount || totalBasic * (gstRate / 100);
-      const totalAmount = item.totalPrice || item.quantity * (totalBasic + gstAmount);
-      const showDiscount = (quotation.items || []).some((item: any) => (item.discount || 0) > 0);
+              ${(() => {
+                let serviceTotalQty = 0;
+                let serviceTotalBasicSum = 0;
+                let serviceTotalFinalSum = 0;
+                let serviceTotalGstSum = 0;
+                let serviceTotalAmountSum = 0;
+                const serviceHasDiscount = (quotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0);
+                
+                const serviceRows = quotation.serviceCharges.map((service: any, idx: number) => {
+                  const basicAmount = service.unitPrice || 0;
+                  const quantity = service.quantity || 0;
+                  const totalBasic = basicAmount * quantity;
+                  const discountAmount = totalBasic * ((service.discount || 0) / 100);
+                  const finalAmount = totalBasic - discountAmount;
+                  const gstAmount = finalAmount * ((service.taxRate || 0) / 100);
+                  const totalAmount = finalAmount + gstAmount;
 
-      return `
-                  <tr>
-                    <td class="center-cell">${idx + 1}</td>
-                    <td>${item.partNo || item?.product?.partNo || '-'}</td>
-                    <td>${item.description || ''}</td>
-                    <td class="center-cell">${item.hsnNumber || item?.product?.hsnNumber || '-'}</td>
-                    <td class="center-cell">${item.uom || 'NOS'}</td>
-                    <td class="center-cell">${item.quantity || 0}</td>
-                    <td class="number-cell">${basicAmount.toFixed(2)}</td>
-                    ${showDiscount ? `<td class="center-cell">${discountPercent}%</td>` : ''}
-                    <td class="number-cell">${totalBasic.toFixed(2)}</td>
-                    <td class="center-cell">${gstRate}%</td>
-                    <td class="number-cell">${gstAmount.toFixed(2)}</td>
-                    <td class="number-cell">${totalAmount.toFixed(2)}</td>
-                  </tr>
-                `;
-    }).join('')}
-              <tr class="totals-row">
-                <td colspan="${(quotation.items || []).some((item: any) => (item.discount || 0) > 0) ? '8' : '7'}" style="text-align: left; font-weight: bold;">Total Amount</td>
-                <td class="number-cell">${(quotation.items || []).reduce((sum: number, item: any) => {
-      const basicAmount = item.unitPrice || 0;
-      const discountPercent = item.discount || 0;
-      return sum + (basicAmount * (1 - discountPercent / 100));
-    }, 0).toFixed(2)}</td>
-                <td></td>
-                <td class="number-cell">${(quotation.items || []).reduce((sum: number, item: any) => {
-      const basicAmount = item.unitPrice || 0;
-      const discountPercent = item.discount || 0;
-      const quantity = item.quantity || 0;
-      const totalBasic = basicAmount * (1 - discountPercent / 100);
-      const gstRate = item.taxRate || 0;
-      return sum + (totalBasic * (gstRate / 100)) * (quantity || 0);
-    }, 0).toFixed(2)}</td>
-                <td class="number-cell">${(quotation.items || []).reduce((sum: number, item: any) => {
-      const basicAmount = item.unitPrice || 0;
-      const quantity = item.quantity || 0;
-      const discountPercent = item.discount || 0;
-      const totalBasic = basicAmount * (1 - discountPercent / 100);
-      const gstRate = item.taxRate || 0;
-      const gstAmount = item.taxAmount || totalBasic * (gstRate / 100);
-      return sum + (totalBasic + gstAmount) * (quantity || 0);
-    }, 0).toFixed(2)}</td>
-              </tr>
-            </tbody>
-          </table>` : ''}
-          
-          ${quotation.serviceCharges && quotation.serviceCharges.length > 0 ? `
-            <div style="margin: 10px 0 5px 0; font-weight: bold; color: #059669;">SERVICE CHARGES</div>
-            <table class="items-table">
-              <thead>
-                <tr>
-                  <th style="width: 8%;">Sr.No</th>
-                  <th style="width: 35%;">Description</th>
-                  <th style="width: 8%;">HSN Code</th>
-                  <th style="width: 6%;">UOM</th>
-                  <th style="width: 5%;">Qty</th>
-                  <th style="width: 10%;">Basic Amount</th>
-                  ${(quotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
-                  <th style="width: 9%;">Total Basic</th>
-                  <th style="width: 5%;">GST</th>
-                  <th style="width: 9%;">GST Amount</th>
-                  <th style="width: 10%;">Total Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${quotation.serviceCharges.map((service: any, idx: number) => {
-      const basicAmount = service.unitPrice || 0;
-      const discountPercent = service.discount || 0;
-      const totalBasic = basicAmount * (1 - discountPercent / 100);
-      const gstRate = service.taxRate || 0;
-      const gstAmount = service?.taxAmount || totalBasic * (gstRate / 100);
-      const totalAmount = service.quantity * (totalBasic + gstAmount);
-      const showDiscount = (quotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0);
+                  // Add to running totals
+                  serviceTotalQty += quantity;
+                  serviceTotalBasicSum += totalBasic;
+                  serviceTotalFinalSum += finalAmount;
+                  serviceTotalGstSum += gstAmount;
+                  serviceTotalAmountSum += totalAmount;
 
-      return `
+                  return `
                     <tr>
                       <td class="center-cell">${idx + 1}</td>
                       <td>${service.description || ''}</td>
                       <td class="center-cell">${service.hsnNumber || '-'}</td>
                       <td class="center-cell">NOS</td>
-                      <td class="center-cell">${service.quantity || 0}</td>
-                      <td class="number-cell">${basicAmount.toFixed(2)}</td>
-                      ${showDiscount ? `<td class="center-cell">${discountPercent}%</td>` : ''}
-                      <td class="number-cell">${totalBasic.toFixed(2)}</td>
-                      <td class="center-cell">${gstRate}%</td>
-                      <td class="number-cell">${gstAmount.toFixed(2)}</td>
-                      <td class="number-cell">${totalAmount.toFixed(2)}</td>
+                      <td class="center-cell">${quantity}</td>
+                      <td class="number-cell">₹${basicAmount.toFixed(2)}</td>
+                      <td class="number-cell">₹${totalBasic.toFixed(2)}</td>
+                      ${serviceHasDiscount ? `<td class="center-cell">${service.discount || 0}%</td><td class="number-cell">₹${finalAmount.toFixed(2)}</td>` : ''}
+                      <td class="center-cell">${service.taxRate || 0}%</td>
+                      <td class="number-cell">₹${gstAmount.toFixed(2)}</td>
+                      <td class="number-cell">₹${totalAmount.toFixed(2)}</td>
                     </tr>
                   `;
-    }).join('')}
-                <tr class="totals-row">
-  <td colspan="${(quotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) ? '4' : '4'}" style="text-align: left; font-weight: bold;">
-    Total Service Charges
-  </td>
-  <td class="center-cell">
-    ${(quotation.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.quantity || 0), 0)}
-  </td>
-  <td class="number-cell">
-    ${(quotation.serviceCharges || []).reduce((sum: number, service: any) => {
-      const basicAmount = service.unitPrice || 0;
-      const quantity = service.quantity || 0;
-      return sum + basicAmount;
-    }, 0).toFixed(2)}
-  </td>
-  ${(quotation.serviceCharges || []).some((service: any) => (service.discountedAmount || 0) > 0) ? '<td></td>' : ''}
-  <td class="number-cell">
-    ${(quotation.serviceCharges || []).reduce((sum: number, service: any) => {
-      const basicAmount = service.unitPrice || 0;
-      const discountPercent = service.discount || 0;
-      const quantity = service.quantity || 0;
-      return sum + (basicAmount * (1 - discountPercent / 100)) * (quantity || 0);
-    }, 0).toFixed(2)}
-  </td>
-  <td></td>
-  <td class="number-cell">
-    ${(quotation.serviceCharges || []).reduce((sum: number, service: any) => {
-      const basicAmount = service.unitPrice || 0;
-      const quantity = service.quantity || 0;
-      const discountPercent = service.discount || 0;
-      const totalBasic = basicAmount * (1 - discountPercent / 100);
-      return sum + (totalBasic * (service.taxRate || 0) / 100) * (quantity || 0);
-    }, 0).toFixed(2)}
-  </td>
-  <td class="number-cell">
-    ${(quotation.serviceCharges || []).reduce((sum: number, service: any) => {
-      const basicAmount = service.unitPrice || 0;
-      const discountPercent = service.discount || 0;
-      const totalBasic = basicAmount * (1 - discountPercent / 100);
-      const gstAmount = totalBasic * (service.taxRate || 0) / 100;
-      return sum + (totalBasic + gstAmount) * (service.quantity || 1);
-    }, 0).toFixed(2)}
-  </td>
-</tr>
+                }).join('');
 
-              </tbody>
-            </table>
-          ` : ''}
-          
-          
-          ${quotation.batteryBuyBack && quotation.batteryBuyBack.quantity > 0 ? `
-            <div style="margin: 10px 0 5px 0; font-weight: bold; color: #ea580c;">BATTERY BUYBACK CHARGES</div>
-            <table class="items-table">
-              <thead>
-                <tr>
-                  <th style="width: 8%;">Sr.No</th>
-                  <th style="width: 35%;">Description</th>
-                  <th style="width: 8%;">HSN Code</th>
-                  <th style="width: 6%;">UOM</th>
-                  <th style="width: 5%;">Qty</th>
-                  <th style="width: 10%;">Basic Amount</th>
-                  ${(quotation.batteryBuyBack?.discount || 0) > 0 ? '<th style="width: 8%;">Discount %</th>' : ''}
-                  ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 5%;">GST</th>' : ''}
-                  ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 9%;">GST Amount</th>' : ''}
-                  <th style="width: 10%;">Total Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td class="center-cell">1</td>
-                  <td>${quotation.batteryBuyBack.description || ''}</td>
-                  <td class="center-cell">${quotation.batteryBuyBack.hsnNumber || '-'}</td>
-                  <td class="center-cell">NOS</td>
-                  <td class="center-cell">${quotation.batteryBuyBack.quantity || 0}</td>
-                  <td class="number-cell">${(quotation.batteryBuyBack.unitPrice || 0).toFixed(2)}</td>
-                  ${(quotation.batteryBuyBack?.discount || 0) > 0 ? `<td class="center-cell">${quotation.batteryBuyBack.discount}%</td>` : ''}
-                  ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="center-cell">${quotation.batteryBuyBack.taxRate || 0}%</td>` : ''}
-                  ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="number-cell">${(quotation.batteryBuyBack.taxAmount || 0).toFixed(2)}</td>` : ''}
-                  <td class="number-cell">${(quotation.batteryBuyBack.totalPrice || 0).toFixed(2)}</td>
-                </tr>
-                <tr class="totals-row">
-  <td colspan="${(quotation.batteryBuyBack?.discount || 0) > 0 ? '4' : '3'}" style="text-align: left; font-weight: bold;">
-    Total Battery Buyback
-  </td>
-  <td class="center-cell">${quotation.batteryBuyBack?.quantity || 0}</td>
-  <td class="number-cell">${(quotation.batteryBuyBack?.unitPrice || 0).toFixed(2)}</td>
-  <td class="number-cell">- ${(quotation.batteryBuyBack?.discountedAmount || 0).toFixed(2)}</td>
-  ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? '<td></td><td class="number-cell">' + (quotation.batteryBuyBack?.taxAmount || 0).toFixed(2) + '</td>' : ''}
-  <td class="number-cell">${(quotation.batteryBuyBack?.totalPrice || 0).toFixed(2)}</td>
-</tr>
+                const serviceTotalRow = `
+                  <tr class="totals-row">
+                    <td colspan="4" style="text-align: left; font-weight: bold;">TOTAL (Service Charges)</td>
+                    <td class="center-cell">${serviceTotalQty}</td>
+                    <td class="number-cell">-</td>
+                    <td class="number-cell">₹${serviceTotalBasicSum.toFixed(2)}</td>
+                    ${serviceHasDiscount ? `<td class="center-cell">-</td><td class="number-cell">₹${serviceTotalFinalSum.toFixed(2)}</td>` : ''}
+                    <td class="center-cell">-</td>
+                    <td class="number-cell">₹${serviceTotalGstSum.toFixed(2)}</td>
+                    <td class="number-cell">₹${serviceTotalAmountSum.toFixed(2)}</td>
+                  </tr>
+                `;
 
-              </tbody>
-            </table>
-          ` : ''}
-          
-          
-          
-         <div style="margin-top: 15px; width: 100%; font-size: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
-  
-  <!-- ✅ Left: Terms & Conditions -->
-  <div style="width: 60%;">
-    ${quotation.terms ? `
-      <div class="terms-section">
-        <div style="font-weight: bold; margin-bottom: 5px;">TERMS & CONDITIONS:-</div>
-        <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-          ${quotation.terms.split('\n').map((term: string, idx: number) => {
-            const parts = term.split(':');
-            const label = parts[0]?.trim() || '';
-            const value = parts.slice(1).join(':').trim() || '';
-            return `
-              <tr>
-                <td style="width: 5%; vertical-align: top;">${idx + 1}</td>
-                <td style="width: 30%; vertical-align: top;">${label}</td>
-                <td style="width: 5%; vertical-align: top;">:</td>
-                <td style="width: 60%; vertical-align: top;">${value}</td>
-              </tr>
-            `;
-          }).join('')}
-        </table>
-      </div>
-    ` : ''}
-  </div>
-
-  <!-- ✅ Right: Totals Summary -->
-  <div style="width: 35%; font-size: 12px;">
-    <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-      <tbody>
-        <tr>
-          <td style="text-align: right; padding: 4px 8px;">Subtotal:</td>
-          <td style="text-align: right; padding: 4px 8px; font-weight: bold;">
-            ₹${quotation.subtotal?.toFixed(2) || '0.00'}
-          </td>
-        </tr>
-        <tr>
-          <td style="text-align: right; padding: 4px 8px;">Total Tax:</td>
-          <td style="text-align: right; padding: 4px 8px; font-weight: bold;">
-            ₹${(() => {
-              // Calculate total tax from items
-              const itemsTax = (quotation.items || []).reduce((sum: number, item: any) => {
-                const basicAmount = item.unitPrice || 0;
-                const discountPercent = item.discount || 0;
-                const quantity = item.quantity || 0;
-                const totalBasic = basicAmount * (1 - discountPercent / 100);
-                const gstRate = item.taxRate || 0;
-                return sum + (totalBasic * (gstRate / 100)) * quantity;
-              }, 0);
-              
-              // Calculate total tax from service charges
-              const serviceTax = (quotation.serviceCharges || []).reduce((sum: number, service: any) => {
-                const basicAmount = service.unitPrice || 0;
-                const discountPercent = service.discount || 0;
-                const quantity = service.quantity || 0;
-                const totalBasic = basicAmount * (1 - discountPercent / 100);
-                const gstRate = service.taxRate || 0;
-                return sum + (totalBasic * (gstRate / 100)) * quantity;
-              }, 0);
-              
-              return (itemsTax + serviceTax).toFixed(2);
-            })()}
-          </td>
-        </tr>
-        ${quotation.serviceCharges && quotation.serviceCharges.length > 0 ? `
-        <tr>
-          <td style="text-align: right; padding: 4px 8px;">Service Charges:</td>
-          <td style="text-align: right; padding: 4px 8px; font-weight: bold; color: #059669;">
-            +₹${(quotation.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2) || '0.00'}
-          </td>
-        </tr>` : ''}
+                return serviceRows + serviceTotalRow;
+              })()}
+            </tbody>
+          </table>
+        ` : ''}
+        
         ${quotation.batteryBuyBack && quotation.batteryBuyBack.quantity > 0 ? `
-        <tr>
-          <td style="text-align: right; padding: 4px 8px;">Battery Buyback:</td>
-          <td style="text-align: right; padding: 4px 8px; font-weight: bold; color: #ea580c;">
-            -₹${quotation.batteryBuyBack?.totalPrice?.toFixed(2) || '0.00'}
-          </td>
-        </tr>` : ''}
-        <tr>
-          <td colspan="2"><hr style="margin-top: 8px; margin-bottom: 2px; border: none; border-top: 1px solid #ddd;"></td>
-        </tr>
-        <tr class="grand-total-row">
-          <td style="text-align: right; padding: 6px 8px; font-size: 14px; font-weight: bold;">Grand Total:</td>
-          <td style="text-align: right; padding: 6px 8px; font-size: 14px; font-weight: bold; color: #1d4ed8;">
-            ₹${(() => {
-              const subtotal = quotation.subtotal || 0;
-              const totalTax = (() => {
-                const itemsTax = (quotation.items || []).reduce((sum: number, item: any) => {
-                  const basicAmount = item.unitPrice || 0;
-                  const discountPercent = item.discount || 0;
-                  const quantity = item.quantity || 0;
-                  const totalBasic = basicAmount * (1 - discountPercent / 100);
-                  const gstRate = item.taxRate || 0;
-                  return sum + (totalBasic * (gstRate / 100)) * quantity;
-                }, 0);
-                
-                const serviceTax = (quotation.serviceCharges || []).reduce((sum: number, service: any) => {
-                  const basicAmount = service.unitPrice || 0;
-                  const discountPercent = service.discount || 0;
-                  const quantity = service.quantity || 0;
-                  const totalBasic = basicAmount * (1 - discountPercent / 100);
-                  const gstRate = service.taxRate || 0;
-                  return sum + (totalBasic * (gstRate / 100)) * quantity;
-                }, 0);
-                
-                return itemsTax + serviceTax;
-              })();
-              const serviceCharges = (quotation.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0);
-              const batteryBuyback = quotation.batteryBuyBack?.totalPrice || 0;
-              
-              return (subtotal + totalTax + serviceCharges - batteryBuyback).toFixed(2);
-            })()}
-          </td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+          <div style="margin: 10px 0 5px 0; font-weight: bold; color: #ea580c;">BATTERY BUYBACK CHARGES</div>
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="width: 8%;">Sr.No</th>
+                <th style="width: 35%;">Description</th>
+                <th style="width: 8%;">HSN Code</th>
+                <th style="width: 6%;">UOM</th>
+                <th style="width: 5%;">Qty</th>
+                <th style="width: 12%;">Basic Amount</th>
+                <th style="width: 12%;">Total Basic</th>
+                ${(quotation.batteryBuyBack?.discount || 0) > 0 ? '<th style="width: 8%;">Discount %</th><th style="width: 12%;">Final Amount</th>' : ''}
+                <th style="width: 14%;">Total Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(() => {
+                const batteryBasicAmount = quotation.batteryBuyBack.unitPrice || 0;
+                const batteryQuantity = quotation.batteryBuyBack.quantity || 0;
+                const batteryTotalBasic = batteryBasicAmount * batteryQuantity;
+                const batteryDiscountAmount = batteryTotalBasic * ((quotation.batteryBuyBack.discount || 0) / 100);
+                const batteryFinalAmount = batteryTotalBasic - batteryDiscountAmount;
+                const batteryHasDiscount = (quotation.batteryBuyBack?.discount || 0) > 0;
 
+                const batteryRow = `
+                  <tr>
+                    <td class="center-cell">1</td>
+                    <td>${quotation.batteryBuyBack.description || ''}</td>
+                    <td class="center-cell">${quotation.batteryBuyBack.hsnNumber || '-'}</td>
+                    <td class="center-cell">NOS</td>
+                    <td class="center-cell">${batteryQuantity}</td>
+                    <td class="number-cell">₹${batteryBasicAmount.toFixed(2)}</td>
+                    <td class="number-cell">₹${batteryTotalBasic.toFixed(2)}</td>
+                    ${batteryHasDiscount ? `<td class="center-cell">${quotation.batteryBuyBack.discount}%</td><td class="number-cell">₹${batteryFinalAmount.toFixed(2)}</td>` : ''}
+                    <td class="number-cell">₹${(quotation.batteryBuyBack.totalPrice || 0).toFixed(2)}</td>
+                  </tr>
+                `;
 
+                const batteryTotalRow = `
+                  <tr class="totals-row">
+                    <td colspan="4" style="text-align: left; font-weight: bold;">TOTAL (Battery Buyback)</td>
+                    <td class="center-cell">${batteryQuantity}</td>
+                    <td class="number-cell">-</td>
+                    <td class="number-cell">₹${batteryTotalBasic.toFixed(2)}</td>
+                    ${batteryHasDiscount ? `<td class="center-cell">-</td><td class="number-cell">₹${batteryFinalAmount.toFixed(2)}</td>` : ''}
+                    <td class="number-cell">₹${(quotation.batteryBuyBack.totalPrice || 0).toFixed(2)}</td>
+                  </tr>
+                `;
+
+                return batteryRow + batteryTotalRow;
+              })()}
+            </tbody>
+          </table>
+        ` : ''}
+        
+        <div style="margin-top: 15px; width: 100%; font-size: 12px; display: flex; justify-content: space-between; align-items: flex-start;">
           
-          
-          
-          
-          <div class="footer-section">
-            <div class="footer-left">
-              <div style="font-weight: bold;">Sun Power Bank Details: -</div>
-              <div class="company-details">
-                ${quotation?.company?.address || 'Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116'}<br>
-                Mobile: ${quotation?.company?.phone || '+91 9176660123'}<br>
-                PAN: ${quotation?.company?.pan || '33BLFPS9951M1ZC'}<br>
-                Mail Id: ${quotation?.company?.email || 'service@sunpowerservices.in'}
-                ${quotation?.company?.bankDetails && (
-        quotation.company.bankDetails.bankName ||
-        quotation.company.bankDetails.accountNo ||
-        quotation.company.bankDetails.ifsc ||
-        quotation.company.bankDetails.branch
-      ) ? `
-                <br><br>
-                <div style="font-weight: bold; margin-top: 10px;">Banking Details:</div>
-                ${quotation?.company?.bankDetails?.bankName ? `<div>Bank: ${quotation.company.bankDetails.bankName}</div>` : ''}
-                ${quotation?.company?.bankDetails?.accountNo ? `<div>A/C No: ${quotation.company.bankDetails.accountNo}</div>` : ''}
-                ${quotation?.company?.bankDetails?.ifsc ? `<div>IFSC: ${quotation.company.bankDetails.ifsc}</div>` : ''}
-                ${quotation?.company?.bankDetails?.branch ? `<div>Branch: ${quotation.company.bankDetails.branch}</div>` : ''}
-                ` : ''}
+          <!-- Left: Terms & Conditions -->
+          <div style="width: 60%;">
+            ${quotation.terms ? `
+              <div class="terms-section">
+                <div style="font-weight: bold; margin-bottom: 5px;">TERMS & CONDITIONS:-</div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                  ${quotation.terms.split('\\n').map((term: string, idx: number) => {
+                    const parts = term.split(':');
+                    const label = parts[0]?.trim() || '';
+                    const value = parts.slice(1).join(':').trim() || '';
+                    return `
+                      <tr>
+                        <td style="width: 5%; vertical-align: top;">${idx + 1}</td>
+                        <td style="width: 30%; vertical-align: top;">${label}</td>
+                        <td style="width: 5%; vertical-align: top;">:</td>
+                        <td style="width: 60%; vertical-align: top;">${value}</td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </table>
               </div>
-            </div>
-            <div class="footer-center">
-              ${quotation.qrCodeImage ? `
-                <div class="qr-code-container">
-                  <img src="${quotation.qrCodeImage}" alt="QR Code" class="qr-code-image" />
-                  <div style="font-size: 10px; margin-top: 5px;">QR Code Scanner</div>
-                </div>
-              ` : `
-                <div style="border: 1px solid #333; padding: 20px; margin: 10px;">
-                  QR Code<br>
-                  Scanner
-                </div>
-              `}
-            </div>
-            <div class="footer-right">
-              <div style="margin-bottom: 10px; font-weight: bold;">For Sun Power Services</div>
-              <div class="signature-line">Authorised Signature</div>
-            </div>
+            ` : ''}
+          </div>
+
+          <!-- Right: Totals Summary -->
+          <div style="width: 35%; font-size: 12px;">
+            <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+              <tbody>
+                ${(() => {
+                  // Calculate proper totals
+                  const itemsSubtotal = (quotation.items || []).reduce((sum: number, item: any) => {
+                    const basicAmount = (item.unitPrice || 0) * (item.quantity || 0);
+                    const discountAmount = basicAmount * ((item.discount || 0) / 100);
+                    return sum + (basicAmount - discountAmount);
+                  }, 0);
+                  
+                  const itemsTax = (quotation.items || []).reduce((sum: number, item: any) => {
+                    const basicAmount = (item.unitPrice || 0) * (item.quantity || 0);
+                    const discountAmount = basicAmount * ((item.discount || 0) / 100);
+                    const finalAmount = basicAmount - discountAmount;
+                    return sum + (finalAmount * ((item.taxRate || 0) / 100));
+                  }, 0);
+
+                  const serviceSubtotal = (quotation.serviceCharges || []).reduce((sum: number, service: any) => {
+                    const basicAmount = (service.unitPrice || 0) * (service.quantity || 0);
+                    const discountAmount = basicAmount * ((service.discount || 0) / 100);
+                    return sum + (basicAmount - discountAmount);
+                  }, 0);
+                  
+                  const serviceTax = (quotation.serviceCharges || []).reduce((sum: number, service: any) => {
+                    const basicAmount = (service.unitPrice || 0) * (service.quantity || 0);
+                    const discountAmount = basicAmount * ((service.discount || 0) / 100);
+                    const finalAmount = basicAmount - discountAmount;
+                    return sum + (finalAmount * ((service.taxRate || 0) / 100));
+                  }, 0);
+
+                  const batteryAmount = quotation.batteryBuyBack && quotation.batteryBuyBack.quantity > 0 
+                    ? (quotation.batteryBuyBack.totalPrice || 0) 
+                    : 0;
+
+                  const totalSubtotal = itemsSubtotal + serviceSubtotal;
+                  const totalTax = itemsTax + serviceTax;
+                  const finalTotal = totalSubtotal + totalTax - batteryAmount;
+
+                  return `
+                    <tr>
+                      <td style="text-align: right; padding: 4px 8px;">Subtotal:</td>
+                      <td style="text-align: right; padding: 4px 8px; font-weight: bold;">
+                        ₹${totalSubtotal.toFixed(2)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="text-align: right; padding: 4px 8px;">Total Tax:</td>
+                      <td style="text-align: right; padding: 4px 8px; font-weight: bold;">
+                        ₹${totalTax.toFixed(2)}
+                      </td>
+                    </tr>
+                    ${batteryAmount > 0 ? `
+                    <tr>
+                      <td style="text-align: right; padding: 4px 8px;">Battery Buyback:</td>
+                      <td style="text-align: right; padding: 4px 8px; font-weight: bold; color: #ea580c;">
+                        -₹${batteryAmount.toFixed(2)}
+                      </td>
+                    </tr>` : ''}
+                    <tr>
+                      <td colspan="2"><hr style="margin-top: 8px; margin-bottom: 2px; border: none; border-top: 1px solid #ddd;"></td>
+                    </tr>
+                    <tr class="grand-total-row">
+                      <td style="text-align: right; padding: 6px 8px; font-size: 14px; font-weight: bold;">Grand Total:</td>
+                      <td style="text-align: right; padding: 6px 8px; font-size: 14px; font-weight: bold; color: #1d4ed8;">
+                        ₹${finalTotal.toFixed(2)}
+                      </td>
+                    </tr>
+                  `;
+                })()}
+              </tbody>
+            </table>
           </div>
         </div>
-      </body>
-      </html>
-    `;
+        
+        <div class="footer-section">
+          <div class="footer-left">
+            <div style="font-weight: bold;">Sun Power Bank Details: -</div>
+            <div class="company-details">
+              ${quotation?.company?.address || 'Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116'}<br>
+              Mobile: ${quotation?.company?.phone || '+91 9176660123'}<br>
+              PAN: ${quotation?.company?.pan || '33BLFPS9951M1ZC'}<br>
+              Mail Id: ${quotation?.company?.email || 'service@sunpowerservices.in'}
+              ${quotation?.company?.bankDetails && (
+      quotation.company.bankDetails.bankName ||
+      quotation.company.bankDetails.accountNo ||
+      quotation.company.bankDetails.ifsc ||
+      quotation.company.bankDetails.branch
+    ) ? `
+              <br><br>
+              <div style="font-weight: bold; margin-top: 10px;">Banking Details:</div>
+              ${quotation?.company?.bankDetails?.bankName ? `<div>Bank: ${quotation.company.bankDetails.bankName}</div>` : ''}
+              ${quotation?.company?.bankDetails?.accountNo ? `<div>A/C No: ${quotation.company.bankDetails.accountNo}</div>` : ''}
+              ${quotation?.company?.bankDetails?.ifsc ? `<div>IFSC: ${quotation.company.bankDetails.ifsc}</div>` : ''}
+              ${quotation?.company?.bankDetails?.branch ? `<div>Branch: ${quotation.company.bankDetails.branch}</div>` : ''}
+              ` : ''}
+            </div>
+          </div>
+          <div class="footer-center">
+            ${quotation.qrCodeImage ? `
+              <div class="qr-code-container">
+                <img src="${quotation.qrCodeImage}" alt="QR Code" class="qr-code-image" />
+                <div style="font-size: 10px; margin-top: 5px;">QR Code Scanner</div>
+              </div>
+            ` : `
+              <div style="border: 1px solid #333; padding: 20px; margin: 10px;">
+                QR Code<br>
+                Scanner
+              </div>
+            `}
+          </div>
+          <div class="footer-right">
+            <div style="margin-bottom: 10px; font-weight: bold;">For Sun Power Services</div>
+            <div class="signature-line">Authorised Signature</div>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
 
-    if (printWindow) {
-      printWindow.document.write(printContent);
-      printWindow.document.close();
+  if (printWindow) {
+    printWindow.document.write(printContent);
+    printWindow.document.close();
 
-      // Wait for content to load, then print
-      printWindow.onload = () => {
-        setTimeout(() => {
-          printWindow.print();
-        }, 500);
-      };
+    // Wait for content to load, then print
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.print();
+      }, 500);
     };
-  };
+  }
+};
 
 
 
@@ -6218,7 +6253,7 @@ const InvoiceManagement: React.FC = () => {
         <div className="p-4 border-b border-gray-100 relative">
           <div className="flex flex-wrap items-center gap-4">
             {/* Date Range Filter */}
-            {(invoiceType === 'quotation' || invoiceType === 'sale' || invoiceType === 'purchase') && (
+            {(invoiceType === 'quotation' || invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'challan') && (
               <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
                 <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-gray-500" />
@@ -6231,7 +6266,8 @@ const InvoiceManagement: React.FC = () => {
                     value={
                       invoiceType === 'quotation' ? fromDate :
                         invoiceType === 'sale' ? fromDateSale :
-                          fromDatePurchase
+                          invoiceType === 'purchase' ? fromDatePurchase :
+                            fromDateChallan
                     }
                     onChange={(e) => {
                       const newFromDate = e.target.value;
@@ -6255,7 +6291,7 @@ const InvoiceManagement: React.FC = () => {
                           setToDateSale(endDate.toISOString().split('T')[0]);
                         }
                         validateDateRange(newFromDate, toDateSale);
-                      } else {
+                      } else if (invoiceType === 'purchase') {
                         setFromDatePurchase(newFromDate);
                         // Auto-adjust toDatePurchase if it's earlier than the new fromDatePurchase
                         if (toDatePurchase && newFromDate && new Date(newFromDate) >= new Date(toDatePurchase)) {
@@ -6265,6 +6301,16 @@ const InvoiceManagement: React.FC = () => {
                           setToDatePurchase(endDate.toISOString().split('T')[0]);
                         }
                         validateDateRange(newFromDate, toDatePurchase);
+                      } else if (invoiceType === 'challan') {
+                        setFromDateChallan(newFromDate);
+                        // Auto-adjust toDateChallan if it's earlier than the new fromDateChallan
+                        if (toDateChallan && newFromDate && new Date(newFromDate) >= new Date(toDateChallan)) {
+                          const startDate = new Date(newFromDate);
+                          const endDate = new Date(startDate);
+                          endDate.setFullYear(endDate.getFullYear() + 1);
+                          setToDateChallan(endDate.toISOString().split('T')[0]);
+                        }
+                        validateDateRange(newFromDate, toDateChallan);
                       }
                     }}
                     className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
@@ -6276,12 +6322,14 @@ const InvoiceManagement: React.FC = () => {
                     min={
                       invoiceType === 'quotation' ? fromDate :
                         invoiceType === 'sale' ? fromDateSale :
-                          fromDatePurchase
+                          invoiceType === 'purchase' ? fromDatePurchase :
+                            fromDateChallan
                     }
                     value={
                       invoiceType === 'quotation' ? toDate :
                         invoiceType === 'sale' ? toDateSale :
-                          toDatePurchase
+                          invoiceType === 'purchase' ? toDatePurchase :
+                            toDateChallan
                     }
                     onChange={(e) => {
                       const newToDate = e.target.value;
@@ -6291,9 +6339,12 @@ const InvoiceManagement: React.FC = () => {
                       } else if (invoiceType === 'sale') {
                         setToDateSale(newToDate);
                         validateDateRange(fromDateSale, newToDate);
-                      } else {
+                      } else if (invoiceType === 'purchase') {
                         setToDatePurchase(newToDate);
                         validateDateRange(fromDatePurchase, newToDate);
+                      } else if (invoiceType === 'challan') {
+                        setToDateChallan(newToDate);
+                        validateDateRange(fromDateChallan, newToDate);
                       }
                     }}
                     className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
@@ -6307,7 +6358,8 @@ const InvoiceManagement: React.FC = () => {
                   {(
                     (invoiceType === 'quotation' && (fromDate || toDate)) ||
                     (invoiceType === 'sale' && (fromDateSale || toDateSale)) ||
-                    (invoiceType === 'purchase' && (fromDatePurchase || toDatePurchase))
+                    (invoiceType === 'purchase' && (fromDatePurchase || toDatePurchase)) ||
+                    (invoiceType === 'challan' && (fromDateChallan || toDateChallan))
                   ) && (
                       <button
                         onClick={() => {
@@ -6317,9 +6369,12 @@ const InvoiceManagement: React.FC = () => {
                           } else if (invoiceType === 'sale') {
                             setFromDateSale('');
                             setToDateSale('');
-                          } else {
+                          } else if (invoiceType === 'purchase') {
                             setFromDatePurchase('');
                             setToDatePurchase('');
+                          } else if (invoiceType === 'challan') {
+                            setFromDateChallan('');
+                            setToDateChallan('');
                           }
                           setDateRangeError(''); // Clear date range error
                         }}
@@ -6575,36 +6630,41 @@ const InvoiceManagement: React.FC = () => {
                     <td className="px-4 py-3">
                       <div className="flex flex-col items-start space-y-1">
                         <div className="flex items-center space-x-2">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${quotation.status === 'draft'
-                              ? 'bg-yellow-100 text-yellow-800'
-                              : quotation.status === 'sent'
-                                ? 'bg-blue-100 text-blue-800'
-                                : quotation.status === 'accepted'
-                                  ? 'bg-green-100 text-green-800'
-                                  : quotation.status === 'rejected'
-                                    ? 'bg-red-100 text-red-800'
-                                    : 'bg-gray-100 text-gray-800'
-                            }`}>
-                            {quotation.status?.charAt(0).toUpperCase() + quotation.status?.slice(1) || 'Draft'}
-                          </span>
-
-                          {/* Custom Dropdown */}
+                          {/* Status Select Dropdown */}
                           <div className="relative status-dropdown-container" onClick={(e) => e.stopPropagation()}>
                             <Tooltip content="Update quotation status" position="top">
                               <button
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  console.log('Change button clicked!');
-                                  console.log('Current open dropdown:', openStatusDropdown);
-                                  console.log('This quotation ID:', quotation._id);
                                   setOpenStatusDropdown(openStatusDropdown === quotation._id ? null : quotation._id);
                                 }}
                                 disabled={quotation.status === 'accepted' || quotation.status === 'rejected' || updatingQuotationStatus === quotation._id}
-                                className="flex items-center space-x-1 text-xs border border-gray-300 rounded px-2 py-1 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                className={`flex items-center space-x-2 text-xs border border-gray-300 rounded px-3 py-2 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed w-[120px] justify-between ${quotation.status === 'draft'
+                                  ? 'border-yellow-300 bg-yellow-50'
+                                  : quotation.status === 'sent'
+                                    ? 'border-blue-300 bg-blue-50'
+                                    : quotation.status === 'accepted'
+                                      ? 'border-green-300 bg-green-50'
+                                      : quotation.status === 'rejected'
+                                        ? 'border-red-300 bg-red-50'
+                                        : 'border-gray-300 bg-gray-50'
+                                }`}
                                 type="button"
                               >
-                                <span>Change</span>
+                                <span className={`w-2 h-2 rounded-full ${quotation.status === 'draft'
+                                    ? 'bg-yellow-500'
+                                    : quotation.status === 'sent'
+                                      ? 'bg-blue-500'
+                                      : quotation.status === 'accepted'
+                                        ? 'bg-green-500'
+                                        : quotation.status === 'rejected'
+                                          ? 'bg-red-500'
+                                          : 'bg-gray-500'
+                                  }`}></span>
+                                <span className="font-medium">
+                                  {quotation.status?.charAt(0).toUpperCase() + quotation.status?.slice(1) || 'Draft'}
+                                </span>
                                 <svg className={`w-3 h-3 transition-transform ${openStatusDropdown === quotation._id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                 </svg>
@@ -6613,7 +6673,7 @@ const InvoiceManagement: React.FC = () => {
 
                             {/* Dropdown Menu */}
                             {openStatusDropdown === quotation._id && (
-                              <div className="absolute right-0 mt-1 w-32 bg-white border border-gray-200 rounded-md shadow-lg z-[9999] opacity-100 transform transition-all duration-200 ease-in-out">
+                              <div className="absolute right-0 mt-1 w-[120px] bg-white border border-gray-200 rounded-md shadow-lg z-[9999] opacity-100 transform transition-all duration-200 ease-in-out">
                                 <div className="py-1">
                                   {getStatusOptions(quotation.status || 'draft').map((option) => (
                                     <button
@@ -6621,10 +6681,6 @@ const InvoiceManagement: React.FC = () => {
                                       onClick={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
-                                        console.log('Dropdown option clicked!');
-                                        console.log('Quotation object:', quotation);
-                                        console.log('Quotation ID:', quotation._id);
-                                        console.log('Selected status:', option.value);
                                         handleUpdateQuotationStatus(quotation._id, option.value);
                                       }}
                                       onMouseDown={(e) => {
@@ -6958,781 +7014,60 @@ const InvoiceManagement: React.FC = () => {
 
 
       {/* View Invoice Modal */}
-      {showViewModal && selectedInvoice && (
+      <DocumentViewModal
+        isOpen={showViewModal}
+        onClose={() => {
+          setShowViewModal(false);
+          setEditMode(false);
+          setOriginalInvoiceData(null);
+        }}
+        document={selectedInvoice}
+        documentType="invoice"
+        onPrint={printInvoice}
+        onCreateChallan={(invoice) => {
+          setShowViewModal(false);
+          navigate('/billing/challan/create', {
+            state: {
+              invoiceId: invoice._id,
+              customer: invoice.customer,
+              items: invoice.items,
+              billToAddress: invoice.billToAddress,
+              shipToAddress: invoice.shipToAddress,
+              // Invoice details for reference
+              invoiceDetails: {
+                invoiceNumber: invoice.invoiceNumber,
+                invoiceDate: invoice.issueDate,
+                totalAmount: invoice.totalAmount,
+                customerName: invoice.customer?.name || '',
+                items: invoice.items.map((item: any) => ({
+                  description: item.description,
+                  quantity: item.quantity,
+                  unitPrice: item.unitPrice
+                }))
+              },
+              sourceInvoice: invoice._id,
+              invoiceNumber: invoice.invoiceNumber,
+              invoiceDate: invoice.issueDate
+            },
+          });
+        }}
+        onSaveChanges={handleSaveChanges}
+        paymentHistory={invoicePaymentHistory}
+        onRefreshPayments={() => fetchInvoicePaymentHistory(selectedInvoice?._id)}
+        loadingPayments={loadingInvoicePayments}
+        renderPaymentHistory={renderInvoicePaymentHistory}
+        getStatusColor={getStatusColor}
+        getPaymentStatusColor={getPaymentStatusColor}
+        getPrimaryAddressEmail={getPrimaryAddressEmail}
+        numberToWords={numberToWords}
+        navigate={navigate}
+        onItemEdit={handleItemEdit}
+        onRecalculateItem={recalculateItem}
+        onAutoAdjustTaxRates={autoAdjustTaxRates}
+        onAutoAdjustUnitPrice={autoAdjustUnitPrice}
+      />
 
-
-        // Updated Modal Component with Print Options
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Invoice - {selectedInvoice.invoiceNumber ?? ''}</h2>
-              <div className="flex items-center space-x-2">
-                {/* Print Options */}
-                {/* <button
-                  onClick={generatePDF}
-                  className="flex items-center px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                >
-                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  Download PDF
-                </button> */}
-                <button
-                  onClick={printInvoice}
-                  className="flex items-center px-3 py-1 text-sm bg-green-600 text-white rounded-md hover:bg-green-700"
-                >
-                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                  </svg>
-                  Print
-                </button>
-                {/* Create Challan Button - Only for sales invoices */}
-                {selectedInvoice.invoiceType === 'sale' && (
-                  <button
-                    onClick={() => {
-                      setShowViewModal(false);
-                      navigate('/billing/challan/create', {
-                        state: {
-                          invoiceId: selectedInvoice._id,
-                          customer: selectedInvoice.customer,
-                          items: selectedInvoice.items,
-                          billToAddress: selectedInvoice.billToAddress,
-                          shipToAddress: selectedInvoice.shipToAddress,
-                        },
-                      });
-                    }}
-                    className="flex items-center px-3 py-1 text-sm bg-orange-600 text-white rounded-md hover:bg-orange-700"
-                    title="Create Delivery Challan from this Invoice"
-                  >
-                    <Package className="w-4 h-4 mr-1" />
-                    Create Challan
-                  </button>
-                )}
-                <button
-                  onClick={() => {
-                    setShowViewModal(false);
-                    setEditMode(false);
-                    setOriginalInvoiceData(null); // Clear backup data
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Invoice Header */}
-              <div className="border-b border-gray-200 pb-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-900">
-                      Invoice #{selectedInvoice.invoiceNumber ?? ''}
-                    </h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Issue Date: {selectedInvoice.issueDate ? new Date(selectedInvoice.issueDate).toLocaleDateString() : ''}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      Due Date: {selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : ''}
-                    </p>
-                    {selectedInvoice.invoiceType === 'purchase' && selectedInvoice.poNumber && <p className="text-sm text-gray-600 mt-1">
-                      PO Number: {selectedInvoice.poNumber}
-                    </p>}
-                  </div>
-                  <div className="text-right">
-                    <div className="flex space-x-2 mb-2">
-                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(selectedInvoice.status ?? '')}`}>
-                        {(selectedInvoice.status ?? '').charAt(0).toUpperCase() + (selectedInvoice.status ?? '').slice(1)}
-                      </span>
-                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getPaymentStatusColor(selectedInvoice.paymentStatus ?? '')}`}>
-                        {(selectedInvoice.paymentStatus ?? '').charAt(0).toUpperCase() + (selectedInvoice.paymentStatus ?? '').slice(1)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Quick Reference Summary - Essential Info Only */}
-              {(selectedInvoice.sourceQuotation || selectedInvoice.poFromCustomer) && (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 print:bg-white print:border-gray-400">
-                  <h4 className="font-medium text-gray-900 mb-3 print:text-black">Reference Information</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Quotation Info */}
-                    {selectedInvoice.quotationNumber && (
-                      <div className="bg-white border border-blue-200 rounded-lg p-3 print:border-gray-300">
-                        <div className="flex items-center mb-2">
-                          <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center mr-2 print:bg-gray-100">
-                            <FileText className="w-3 h-3 text-blue-600 print:text-gray-600" />
-                          </div>
-                          <span className="text-sm font-medium text-blue-900 print:text-black">Quotation</span>
-                        </div>
-                        <div className="text-sm">
-                          <div className="font-mono text-blue-700 print:text-black">
-                            Quotation Number: {selectedInvoice.sourceQuotation?.quotationNumber}
-                          </div>
-                          {selectedInvoice.sourceQuotation?.issueDate && (
-                            <div className="text-gray-600 print:text-black mt-1">
-                              Issue Date: {new Date(selectedInvoice.sourceQuotation.issueDate).toLocaleDateString()}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* PO Info */}
-                    {selectedInvoice.poFromCustomer?.poNumber && (
-                      <div className="bg-white border border-green-200 rounded-lg p-3 print:border-gray-300">
-                        <div className="flex items-center mb-2">
-                          <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center mr-2 print:bg-gray-100">
-                            <FileText className="w-3 h-3 text-green-600 print:text-gray-600" />
-                          </div>
-                          <span className="text-sm font-medium text-green-900 print:text-black">PO From Customer</span>
-                        </div>
-                        <div className="text-sm">
-                          <div className="font-mono text-green-700 print:text-black">
-                            Po Number: {selectedInvoice.poFromCustomer.poNumber}
-                          </div>
-                          {selectedInvoice.poFromCustomer.orderDate && (
-                            <div className="text-gray-600 print:text-black mt-1">
-                              Order Date: {new Date(selectedInvoice.poFromCustomer.orderDate).toLocaleDateString()}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* New Quotation Fields - Display with proper styling */}
-              {(selectedInvoice.subject || selectedInvoice.engineSerialNumber || selectedInvoice.kva || selectedInvoice.hourMeterReading || selectedInvoice.serviceRequestDate || selectedInvoice.qrCodeImage) && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                  <h4 className="font-medium text-blue-900 mb-3 flex items-center">
-                    <FileText className="w-4 h-4 mr-2" />
-                    Quotation Details
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {selectedInvoice.subject && (
-                      <div>
-                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">Subject</label>
-                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
-                          {selectedInvoice.subject}
-                        </p>
-                      </div>
-                    )}
-                    {selectedInvoice.engineSerialNumber && (
-                      <div>
-                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">Engine Serial Number</label>
-                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
-                          {selectedInvoice.engineSerialNumber}
-                        </p>
-                      </div>
-                    )}
-                    {selectedInvoice.kva && (
-                      <div>
-                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">KVA Rating</label>
-                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
-                          {selectedInvoice.kva}
-                        </p>
-                      </div>
-                    )}
-                    {selectedInvoice.hourMeterReading && (
-                      <div>
-                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">Hour Meter Reading</label>
-                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
-                          {selectedInvoice.hourMeterReading}
-                        </p>
-                      </div>
-                    )}
-                    {selectedInvoice.serviceRequestDate && (
-                      <div>
-                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">Service Request Date</label>
-                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
-                          {new Date(selectedInvoice.serviceRequestDate).toLocaleDateString()}
-                        </p>
-                      </div>
-                    )}
-                    {selectedInvoice.qrCodeImage && (
-                      <div className="md:col-span-2">
-                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">QR Code Image</label>
-                        <div className="bg-white p-3 rounded border border-blue-200">
-                          <img
-                            src={selectedInvoice.qrCodeImage}
-                            alt="QR Code"
-                            className="max-w-xs max-h-48 rounded border border-gray-200 shadow-sm"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-
-
-              {/* Company Information */}
-              <div className={`grid grid-cols-1 gap-6 ${selectedInvoice?.assignedEngineer ? 'md:grid-cols-4' : selectedInvoice?.invoiceType === 'purchase' ? 'md:grid-cols-2' : 'md:grid-cols-3'}`}>
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">From:</h4>
-                  {selectedInvoice?.invoiceType === 'purchase' ? (
-                    // For purchase invoices: Show supplier
-                    <div className="text-sm text-gray-600">
-                      <p className="font-medium">{selectedInvoice?.supplier?.name || 'N/A'}</p>
-                      {(selectedInvoice?.supplierEmail || selectedInvoice?.supplier?.email) && <p>Email: {selectedInvoice?.supplierEmail || selectedInvoice?.supplier?.email}</p>}
-                      {selectedInvoice?.supplierAddress && (
-                        <>
-                          <p className="mt-2 font-medium text-gray-700">Address:</p>
-                          {selectedInvoice?.supplierAddress?.address && <p>{selectedInvoice?.supplierAddress?.address}</p>}
-                          {selectedInvoice?.supplierAddress?.district && selectedInvoice?.supplierAddress?.pincode && (
-                            <p>{selectedInvoice?.supplierAddress?.district}, {selectedInvoice?.supplierAddress?.pincode}</p>
-                          )}
-                          {selectedInvoice?.supplierAddress?.state && <p>{selectedInvoice?.supplierAddress?.state}</p>}
-                          {selectedInvoice?.supplierAddress?.gstNumber && (
-                            <p className="text-sm text-gray-600">GST: {selectedInvoice?.supplierAddress?.gstNumber}</p>
-                          )}
-                          {selectedInvoice?.supplierAddress?.isPrimary && (
-                            <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 mt-1">
-                              Primary Address
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  ) : (
-                    // For regular invoices: Show company
-                    <div className="text-sm text-gray-600">
-                      <p className="font-medium">{selectedInvoice?.company?.name || 'Sun Power Services'}</p>
-                      {selectedInvoice?.company?.phone && <p>Phone: {selectedInvoice?.company?.phone}</p>}
-                      {selectedInvoice?.company?.email && <p>Email: {selectedInvoice?.company?.email}</p>}
-                      {selectedInvoice?.company?.pan && <p>PAN: {selectedInvoice?.company?.pan}</p>}
-                      {selectedInvoice?.location && (
-                        <>
-                          <p className="mt-2 font-medium text-gray-700">Address:</p>
-                          {selectedInvoice?.location?.name && <p>{selectedInvoice?.location?.name}</p>}
-                          {selectedInvoice?.location?.address && <p>{selectedInvoice?.location?.address}</p>}
-                        </>
-                      )}
-
-                      {/* Bank Details */}
-                      {selectedInvoice?.company?.bankDetails && (
-                        selectedInvoice.company.bankDetails.bankName ||
-                        selectedInvoice.company.bankDetails.accountNo ||
-                        selectedInvoice.company.bankDetails.ifsc ||
-                        selectedInvoice.company.bankDetails.branch
-                      ) && (
-                          <>
-                            <p className="mt-3 font-medium text-gray-700">Bank Details:</p>
-                            {selectedInvoice?.company?.bankDetails?.bankName && (
-                              <p className="text-sm text-gray-600">Bank: {selectedInvoice.company.bankDetails.bankName}</p>
-                            )}
-                            {selectedInvoice?.company?.bankDetails?.accountNo && (
-                              <p className="text-sm text-gray-600">A/C: {selectedInvoice.company.bankDetails.accountNo}</p>
-                            )}
-                            {selectedInvoice?.company?.bankDetails?.ifsc && (
-                              <p className="text-sm text-gray-600">IFSC: {selectedInvoice.company.bankDetails.ifsc}</p>
-                            )}
-                            {selectedInvoice?.company?.bankDetails?.branch && (
-                              <p className="text-sm text-gray-600">Branch: {selectedInvoice.company.bankDetails.branch}</p>
-                            )}
-                          </>
-                        )}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  {selectedInvoice?.invoiceType === 'purchase' ? (
-                    // For purchase invoices: Show company
-                    <div className="text-sm text-gray-600">
-                      <h4 className="font-medium text-gray-900 mb-2">To:</h4>
-                      <p className="font-medium">{selectedInvoice?.company?.name || 'Sun Power Services'}</p>
-                      {selectedInvoice?.company?.phone && <p>Phone: {selectedInvoice?.company?.phone}</p>}
-                      {selectedInvoice?.company?.email && <p>Email: {selectedInvoice?.company?.email}</p>}
-                      {selectedInvoice?.company?.pan && <p>PAN: {selectedInvoice?.company?.pan}</p>}
-                      {selectedInvoice?.location && (
-                        <>
-                          <p className="mt-2 font-medium text-gray-700">Address:</p>
-                          {selectedInvoice?.location?.name && <p>{selectedInvoice?.location?.name}</p>}
-                          {selectedInvoice?.location?.address && <p>{selectedInvoice?.location?.address}</p>}
-                          {selectedInvoice?.location?.gstNumber && (
-                            <p className="text-sm text-gray-600">GST: {selectedInvoice?.location?.gstNumber}</p>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  ) : (
-                    // For regular invoices: Show customer
-                    <div className="text-sm text-gray-600">
-                      <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
-                      <p className="font-medium">{selectedInvoice?.customer?.name || 'N/A'}</p>
-                      {(getPrimaryAddressEmail(selectedInvoice?.customer) || selectedInvoice?.customer?.email) && (
-                        <p>Email: {getPrimaryAddressEmail(selectedInvoice?.customer) || selectedInvoice?.customer?.email}</p>
-                      )}
-                      {selectedInvoice?.customer?.phone && <p>Phone: {selectedInvoice?.customer?.phone}</p>}
-                      {selectedInvoice?.billToAddress && (
-                        <>
-                          <p className="mt-2 font-medium text-gray-700">Address:</p>
-                          {selectedInvoice?.billToAddress?.address && <p>{selectedInvoice?.billToAddress?.address}</p>}
-                          {selectedInvoice?.billToAddress?.district && selectedInvoice?.billToAddress?.pincode && (
-                            <p>{selectedInvoice?.billToAddress?.district}, {selectedInvoice?.billToAddress?.pincode}</p>
-                          )}
-                          {selectedInvoice?.billToAddress?.state && <p>{selectedInvoice?.billToAddress?.state}</p>}
-                          {selectedInvoice?.billToAddress?.gstNumber && (
-                            <p className="text-sm text-gray-600">GST: {selectedInvoice?.billToAddress?.gstNumber}</p>
-                          )}
-                          {selectedInvoice?.billToAddress?.isPrimary && (
-                            <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 mt-1">
-                              Primary Address
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  {selectedInvoice?.invoiceType === 'purchase' ? (
-                    <></>
-                    // For purchase invoices: Show company
-                    // <div className="text-sm text-gray-600">
-                    //   <h4 className="font-medium text-gray-900 mb-2">To:</h4>
-                    //   <p className="font-medium">{selectedInvoice?.company?.name || 'Sun Power Services'}</p>
-                    //   {selectedInvoice?.location && (
-                    //     <>
-                    //       <p className="mt-2 font-medium text-gray-700">Address:</p>
-                    //       {selectedInvoice?.location?.name && <p>{selectedInvoice?.location?.name}</p>}
-                    //       {selectedInvoice?.location?.address && <p>{selectedInvoice?.location?.address}</p>}
-                    //     </>
-                    //   )}
-                    // </div>
-                  ) : (
-                    // For regular invoices: Show customer
-                    <div className="text-sm text-gray-600">
-                      <h4 className="font-medium text-gray-900 mb-2">Ship To:</h4>
-                      <p className="font-medium">{selectedInvoice?.customer?.name || 'N/A'}</p>
-                      {selectedInvoice?.shipToAddress && (
-                        <>
-                          <p className="mt-2 font-medium text-gray-700">Address:</p>
-                          {selectedInvoice?.shipToAddress?.address && <p>{selectedInvoice?.shipToAddress?.address}</p>}
-                          {selectedInvoice?.shipToAddress?.district && selectedInvoice?.shipToAddress?.pincode && (
-                            <p>{selectedInvoice?.shipToAddress?.district}, {selectedInvoice?.shipToAddress?.pincode}</p>
-                          )}
-                          {selectedInvoice?.shipToAddress?.state && <p>{selectedInvoice?.shipToAddress?.state}</p>}
-                          {selectedInvoice?.shipToAddress?.gstNumber && (
-                            <p className="text-sm text-gray-600">GST: {selectedInvoice?.shipToAddress?.gstNumber}</p>
-                          )}
-                          {selectedInvoice?.shipToAddress?.isPrimary && (
-                            <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 mt-1">
-                              Primary Address
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {selectedInvoice?.assignedEngineer && <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Assigned Engineer:</h4>
-                  <div className="text-sm text-gray-600">
-                    {selectedInvoice?.assignedEngineer ? (
-                      <>
-                        <p className="font-medium">{selectedInvoice.assignedEngineer?.firstName} {selectedInvoice.assignedEngineer?.lastName}</p>
-                        {selectedInvoice.assignedEngineer?.email && <p>Email: {selectedInvoice.assignedEngineer?.email}</p>}
-                        {selectedInvoice.assignedEngineer?.phone && <p>Phone: {selectedInvoice.assignedEngineer?.phone}</p>}
-                        <div className="mt-1">
-                          <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
-                            Field Engineer
-                          </span>
-                        </div>
-                      </>
-                    ) : (
-                      <p className="text-gray-500 italic">No engineer assigned</p>
-                    )}
-                  </div>
-                </div>}
-              </div>
-
-              {/* Total Amount Mismatch Warning */}
-              {hasAmountMismatch(selectedInvoice) && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <div className="flex items-center">
-                    <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
-                    <div className="flex-1">
-                      <h4 className="text-sm font-medium text-yellow-800">Amount Mismatch Detected</h4>
-                      <p className="text-sm text-yellow-700 mt-1">
-                        Calculated Total: ₹{(selectedInvoice?.totalAmount ?? 0).toFixed(2)} |
-                        External Total: ₹{(selectedInvoice?.externalInvoiceTotal ?? 0).toFixed(2)}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => {
-                        // Only allow edit if there's a real amount mismatch
-                        if (hasAmountMismatch(selectedInvoice)) {
-                          // Create a backup of current state when entering edit mode
-                          if (selectedInvoice && !originalInvoiceData) {
-                            setOriginalInvoiceData(JSON.parse(JSON.stringify(selectedInvoice)));
-                          }
-                          setEditMode(true);
-                        }
-                      }}
-                      className={`ml-3 px-3 py-1 rounded-md text-sm transition-colors ${hasAmountMismatch(selectedInvoice)
-                        ? 'bg-yellow-600 text-white hover:bg-yellow-700'
-                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        }`}
-                      disabled={!hasAmountMismatch(selectedInvoice)}
-                    >
-                      Edit Items
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Invoice Items */}
-              <div>
-                <h4 className="font-medium text-gray-900 mb-3">Items:</h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full border border-gray-200 rounded-lg">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part No</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">HSN Number</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">UOM</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
-                        {(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) && (
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
-                        )}
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax Rate</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                        {editMode && hasAmountMismatch(selectedInvoice) && (
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {(selectedInvoice.items || []).map((item: any, index: number) => (
-                        <tr key={index}>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.partNo || item?.product?.partNo || 'N/A'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.hsnNumber || item?.product?.hsnNumber || 'N/A'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.uom || 'N/A'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">
-                            {editMode && hasAmountMismatch(selectedInvoice) ? (
-                              <input
-                                type="number"
-                                placeholder="₹0.00"
-                                value={item.unitPrice === null || item.unitPrice === 0 ? '' : item.unitPrice}
-                                onChange={(e) => handleItemEdit(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                onBlur={() => recalculateItem(index)}
-                                className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                step="1"
-                              />
-                            ) : (
-                              `₹${(item.unitPrice ?? 0).toFixed(2)}`
-                            )}
-                          </td>
-                          {(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) && (
-                            <td className="px-4 py-2 text-sm text-gray-900">{item.discount || 0}%</td>
-                          )}
-                          <td className="px-4 py-2 text-sm text-gray-900">
-                            {editMode && hasAmountMismatch(selectedInvoice) ? (
-                              <input
-                                type="number"
-                                value={item.taxRate === null || item.taxRate === 0 ? '' : item.taxRate}
-                                placeholder="0 - 100%"
-                                onChange={(e) => {
-                                  const value = e.target.value;
-                                  const num = parseFloat(value);
-                                  if (value === '') {
-                                    handleItemEdit(index, 'taxRate', null); // Allow clearing
-                                  } else if (!isNaN(num) && num >= 0 && num <= 100) {
-                                    handleItemEdit(index, 'taxRate', num);
-                                  }
-                                }}
-                                className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              />
-                            ) : (
-                              `${(item.taxRate || 0).toFixed(2)}%`
-                            )}
-                          </td>
-                          <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{(item.unitPrice * item.quantity * (1 - (item.discount || 0) / 100) * (1 + (item.taxRate || 0) / 100)).toFixed(2)}</td>
-                          {editMode && hasAmountMismatch(selectedInvoice) && item.quantity !== 0 && (
-                            <td className="px-4 py-2 flex text-sm">
-                              <button
-                                onClick={autoAdjustTaxRates}
-                                className="ml-3 bg-indigo-600 text-white px-3 py-1 rounded-md text-sm hover:bg-indigo-700"
-                              >
-                                Auto Adjust Tax
-                              </button>
-                              <button
-                                onClick={autoAdjustUnitPrice}
-                                className="ml-3 bg-indigo-600 text-white px-3 py-1 rounded-md text-sm hover:bg-indigo-700"
-                              >
-                                Auto Adjust Price</button>
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Service Charges Section */}
-              {selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h4 className="font-medium text-green-900 mb-3 flex items-center">
-                    <Package className="w-4 h-4 mr-2" />
-                    Service Charges
-                  </h4>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border border-green-200 rounded-lg">
-                      <thead className="bg-green-100">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Description</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">HSN</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Quantity</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Unit Price</th>
-                          {(selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) && (
-                            <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Discount</th>
-                          )}
-                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Tax Rate</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-green-200">
-                        {selectedInvoice.serviceCharges.map((service: any, index: number) => (
-                          <tr key={index} className="bg-white">
-                            <td className="px-4 py-2 text-sm text-gray-900">{service.description}</td>
-                            <td className="px-4 py-2 text-sm text-gray-900">{service.hsnNumber || '-'}</td>
-                            <td className="px-4 py-2 text-sm text-gray-900">{service.quantity}</td>
-                            <td className="px-4 py-2 text-sm text-gray-900">₹{service.unitPrice?.toFixed(2) || '0.00'}</td>
-                            {(selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) && (
-                              <td className="px-4 py-2 text-sm text-gray-900">{service.discount || 0}%</td>
-                            )}
-                            <td className="px-4 py-2 text-sm text-gray-900">{service.taxRate || 0}%</td>
-                            <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{service.totalPrice?.toFixed(2) || '0.00'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Battery Buyback Charges Section */}
-              {selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.quantity > 0 && (
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                  <h4 className="font-medium text-orange-900 mb-3 flex items-center">
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    Battery Buyback Charges
-                  </h4>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border border-orange-200 rounded-lg">
-                      <thead className="bg-orange-100">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Description</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">HSN</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Quantity</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Unit Price</th>
-                          {(selectedInvoice.batteryBuyBack?.discount || 0) > 0 && (
-                            <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Discount</th>
-                          )}
-                          {(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 && (
-                            <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Tax Rate</th>
-                          )}
-                          {(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 && (
-                            <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Tax Amount</th>
-                          )}
-                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-orange-200">
-                        <tr className="bg-white">
-                          <td className="px-4 py-2 text-sm text-gray-900">{selectedInvoice.batteryBuyBack.description}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{selectedInvoice.batteryBuyBack.hsnNumber || '-'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{selectedInvoice.batteryBuyBack.quantity}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">₹{selectedInvoice.batteryBuyBack.unitPrice?.toFixed(2) || '0.00'}</td>
-                          {(selectedInvoice.batteryBuyBack?.discount || 0) > 0 && (
-                            <td className="px-4 py-2 text-sm text-gray-900">{selectedInvoice.batteryBuyBack.discount || 0}%</td>
-                          )}
-                          {(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 && (
-                            <td className="px-4 py-2 text-sm text-gray-900">{selectedInvoice.batteryBuyBack.taxRate || 0}%</td>
-                          )}
-                          {(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 && (
-                            <td className="px-4 py-2 text-sm text-gray-900">₹{selectedInvoice.batteryBuyBack.taxAmount?.toFixed(2) || '0.00'}</td>
-                          )}
-                          <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{selectedInvoice.batteryBuyBack.totalPrice?.toFixed(2) || '0.00'}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Notes and Terms Section */}
-              {(selectedInvoice.notes || selectedInvoice.terms) && (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                  <h4 className="font-medium text-gray-900 mb-3 flex items-center">
-                    <FileText className="w-4 h-4 mr-2" />
-                    Additional Information
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {selectedInvoice.notes && (
-                      <div>
-                        <h5 className="text-sm font-medium text-gray-700 mb-2">Notes:</h5>
-                        <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200">
-                          {selectedInvoice.notes}
-                        </div>
-                      </div>
-                    )}
-                    {selectedInvoice.terms && (
-                      <div>
-                        <h5 className="text-sm font-medium text-gray-700 mb-2">Terms & Conditions:</h5>
-                        <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200">
-                          {selectedInvoice.terms}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Edit Mode Actions */}
-              {editMode && (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-600">
-                      <p>Make adjustments to unit prices and tax rates.</p>
-                      {hasAmountMismatch(selectedInvoice) && (
-                        <p className="font-medium mt-1">Target Total: ₹{(selectedInvoice?.externalInvoiceTotal ?? 0).toFixed(2)}</p>
-                      )}
-                    </div>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => {
-                          // Restore original values when canceling
-                          if (originalInvoiceData) {
-                            setSelectedInvoice(JSON.parse(JSON.stringify(originalInvoiceData)));
-                          }
-                          setEditMode(false);
-                        }}
-                        className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={async () => {
-                          const success = await handleSaveChanges();
-                          if (success) {
-                            // Update the original data after successful save
-                            if (selectedInvoice) {
-                              setOriginalInvoiceData(JSON.parse(JSON.stringify(selectedInvoice)));
-                            }
-                            setEditMode(false);
-                          }
-                        }}
-                        disabled={savingChanges}
-                        className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {savingChanges ? (
-                          <div className="flex items-center">
-                            <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin mr-1"></div>
-                            Saving...
-                          </div>
-                        ) : (
-                          'Save Changes'
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Payment History */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">Payment History</h3>
-                  <button
-                    onClick={() => fetchInvoicePaymentHistory(selectedInvoice._id)}
-                    className="text-sm text-blue-600 hover:text-blue-800 flex items-center space-x-1"
-                    disabled={loadingInvoicePayments}
-                  >
-                    <RefreshCw className={`w-4 h-4 ${loadingInvoicePayments ? 'animate-spin' : ''}`} />
-                    <span>Refresh</span>
-                  </button>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  {renderInvoicePaymentHistory()}
-                </div>
-              </div>
-
-              {/* Invoice Summary */}
-              <div className="border-t border-gray-200 pt-4">
-                <div className="flex justify-end">
-                  <div className="w-80 space-y-3 text-right">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-medium">₹{(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0)), 0).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Total Tax:</span>
-                      <span className="font-medium">₹{(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate ?? 0) / 100), 0).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Total Discount:</span>
-                      <span className="font-medium text-green-600">-₹{(selectedInvoice.discountAmount || 0).toFixed(2)}</span>
-                    </div>
-                    {/* <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Overall Discount:</span>
-                      <span className="font-medium text-green-600">-{selectedInvoice.overallDiscount || 0}% (-₹{selectedInvoice.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
-                    </div> */}
-
-                    {/* Service Charges Total */}
-                    {selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Service Charges:</span>
-                        <span className="font-medium text-green-600">+₹{(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2)}</span>
-                      </div>
-                    )}
-
-                    {/* Battery Buyback Charges Total */}
-                    {selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.quantity > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Battery Buyback Charges:</span>
-                        <span className="font-medium text-orange-600">+₹{(selectedInvoice.batteryBuyBack?.totalPrice || 0).toFixed(2)}</span>
-                      </div>
-                    )}
-
-                    <div className="flex justify-between font-bold text-lg border-t pt-3">
-                      <span>Grand Total:</span>
-                      <span className={hasAmountMismatch(selectedInvoice) ? 'text-red-600' : 'text-blue-600'}>
-                        ₹{safeToFixed(selectedInvoice?.totalAmount)}
-                      </span>
-                    </div>
-                    {hasAmountMismatch(selectedInvoice) && (
-                      <div className="flex justify-between text-sm text-gray-600">
-                        <span>External Total:</span>
-                        <span>₹{safeToFixed(selectedInvoice?.externalInvoiceTotal)}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between text-xs pt-2 border-t">
-                      <span className="text-gray-600">Amount in Words:</span>
-                      <span className="font-medium text-gray-700 max-w-xs text-right">{selectedInvoice?.totalAmount ? numberToWords(selectedInvoice.totalAmount) : 'Zero Rupees Only'}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      
 
       {/* Status Update Modal */}
       {showStatusModal && selectedInvoice && (
@@ -9258,495 +8593,26 @@ const InvoiceManagement: React.FC = () => {
 
 
       {/* Quotation View Modal */}
-      {showQuotationViewModal && selectedQuotation && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Quotation - {selectedQuotation.quotationNumber}</h2>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => printQuotation(selectedQuotation)}
-                  className="flex items-center px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                >
-                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                  </svg>
-                  Print
-                </button>
-                <button
-                  onClick={() => setShowQuotationViewModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-            </div>
+      <DocumentViewModal
+        isOpen={showQuotationViewModal}
+        onClose={() => setShowQuotationViewModal(false)}
+        document={selectedQuotation}
+        documentType="quotation"
+        onPrint={printQuotation}
+        onCreateInvoice={handleCreateInvoiceFromQuotation}
+        onSendEmail={handleSendQuotationEmail}
+        paymentHistory={quotationPaymentHistory}
+        onRefreshPayments={() => fetchQuotationPaymentHistory(selectedQuotation?._id)}
+        loadingPayments={loadingQuotationPayments}
+        renderPaymentHistory={renderQuotationPaymentHistory}
+        getStatusColor={getStatusColor}
+        getPaymentStatusColor={getPaymentStatusColor}
+        getPrimaryAddressEmail={getPrimaryAddressEmail}
+        numberToWords={numberToWords}
+        navigate={navigate}
+      />
 
-            <div className="p-6 space-y-6">
-              {/* Quotation Header */}
-              <div className="border-b border-gray-200 pb-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-900">
-                      Quotation #{selectedQuotation.quotationNumber}
-                    </h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Issue Date: {selectedQuotation.issueDate ? new Date(selectedQuotation.issueDate).toLocaleDateString() : ''}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      Valid Until: {selectedQuotation.validUntil ? new Date(selectedQuotation.validUntil).toLocaleDateString() : ''}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      Validity Period: {selectedQuotation.validityPeriod || 30} days
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <div className="flex space-x-2 mb-2">
-                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${selectedQuotation.status === 'draft'
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : selectedQuotation.status === 'sent'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                        {selectedQuotation.status === 'draft' ? 'Draft' :
-                          selectedQuotation.status === 'sent' ? 'Sent' :
-                            selectedQuotation.status}
-                      </span>
-                    </div>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => handleCreateInvoiceFromQuotation(selectedQuotation)}
-                        className="flex items-center px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                      >
-                        Create Invoice
-                      </button>
-                      <button
-                        onClick={() => handleSendQuotationEmail(selectedQuotation)}
-                        disabled={!getPrimaryAddressEmail(selectedQuotation.customer)}
-                        className={`flex items-center px-3 py-1 text-sm rounded-md ${getPrimaryAddressEmail(selectedQuotation.customer)
-                            ? 'bg-green-600 text-white hover:bg-green-700'
-                            : 'bg-gray-400 text-white cursor-not-allowed'
-                          }`}
-                        title={getPrimaryAddressEmail(selectedQuotation.customer) ? 'Send quotation to customer primary address email (will update status to sent)' : 'Customer primary address email not available'}
-                      >
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                        Send Email
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* New Quotation Fields - Display with proper styling */}
-              {(selectedQuotation.subject || selectedQuotation.engineSerialNumber || selectedQuotation.kva || selectedQuotation.hourMeterReading || selectedQuotation.serviceRequestDate || selectedQuotation.qrCodeImage) && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                  <h4 className="font-medium text-blue-900 mb-3 flex items-center">
-                    <FileText className="w-4 h-4 mr-2" />
-                    Quotation Details
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {selectedQuotation.subject && (
-                      <div>
-                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">Subject</label>
-                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
-                          {selectedQuotation.subject}
-                        </p>
-                      </div>
-                    )}
-                    {selectedQuotation.engineSerialNumber && (
-                      <div>
-                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">Engine Serial Number</label>
-                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
-                          {selectedQuotation.engineSerialNumber}
-                        </p>
-                      </div>
-                    )}
-                    {selectedQuotation.kva && (
-                      <div>
-                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">KVA Rating</label>
-                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
-                          {selectedQuotation.kva}
-                        </p>
-                      </div>
-                    )}
-                    {selectedQuotation.hourMeterReading && (
-                      <div>
-                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">Hour Meter Reading</label>
-                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
-                          {selectedQuotation.hourMeterReading}
-                        </p>
-                      </div>
-                    )}
-                    {selectedQuotation.serviceRequestDate && (
-                      <div>
-                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">Service Request Date</label>
-                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
-                          {new Date(selectedQuotation.serviceRequestDate).toLocaleDateString()}
-                        </p>
-                      </div>
-                    )}
-                    {selectedQuotation.qrCodeImage && (
-                      <div className="md:col-span-2">
-                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">QR Code Image</label>
-                        <div className="bg-white p-3 rounded border border-blue-200">
-                          <img
-                            src={selectedQuotation.qrCodeImage}
-                            alt="QR Code"
-                            className="max-w-xs max-h-48 rounded border border-gray-200 shadow-sm"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Company Information */}
-              <div className={`grid grid-cols-1 gap-6 ${selectedQuotation?.assignedEngineer ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
-                <div>
-                  <h4 className="font-medium text-gray-900 mb-2">From:</h4>
-                  <div className="text-sm text-gray-600">
-                    <p className="font-medium">{selectedQuotation?.company?.name || 'Sun Power Services'}</p>
-                    {selectedQuotation?.company?.phone && <p>Phone: {selectedQuotation?.company?.phone}</p>}
-                    {selectedQuotation?.company?.email && <p>Email: {selectedQuotation?.company?.email}</p>}
-                    {selectedQuotation?.company?.pan && <p>PAN: {selectedQuotation?.company?.pan}</p>}
-                    {selectedQuotation?.location && (
-                      <>
-                        <p className="mt-2 font-medium text-gray-700">Address:</p>
-                        {selectedQuotation?.location?.name && <p>{selectedQuotation?.location?.name}</p>}
-                        {selectedQuotation?.location?.address && <p>{selectedQuotation?.location?.address}</p>}
-                        {selectedQuotation?.location?.gstNumber && (
-                          <p className="text-sm text-gray-600">GST: {selectedQuotation?.location?.gstNumber}</p>
-                        )}
-                      </>
-                    )}
-
-                    {/* Bank Details */}
-                    {selectedQuotation?.company?.bankDetails && (
-                      selectedQuotation.company.bankDetails.bankName ||
-                      selectedQuotation.company.bankDetails.accountNo ||
-                      selectedQuotation.company.bankDetails.ifsc ||
-                      selectedQuotation.company.bankDetails.branch
-                    ) && (
-                        <>
-                          <p className="mt-3 font-medium text-gray-700">Bank Details:</p>
-                          {selectedQuotation?.company?.bankDetails?.bankName && (
-                            <p className="text-sm text-gray-600">Bank: {selectedQuotation.company.bankDetails.bankName}</p>
-                          )}
-                          {selectedQuotation?.company?.bankDetails?.accountNo && (
-                            <p className="text-sm text-gray-600">A/C: {selectedQuotation.company.bankDetails.accountNo}</p>
-                          )}
-                          {selectedQuotation?.company?.bankDetails?.ifsc && (
-                            <p className="text-sm text-gray-600">IFSC: {selectedQuotation.company.bankDetails.ifsc}</p>
-                          )}
-                          {selectedQuotation?.company?.bankDetails?.branch && (
-                            <p className="text-sm text-gray-600">Branch: {selectedQuotation.company.bankDetails.branch}</p>
-                          )}
-                        </>
-                      )}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-sm text-gray-600">
-                    <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
-                    <p className="font-medium">{selectedQuotation?.customer?.name || 'N/A'}</p>
-                    {(getPrimaryAddressEmail(selectedQuotation?.customer) || selectedQuotation?.customer?.email) && (
-                      <p>Email: {getPrimaryAddressEmail(selectedQuotation?.customer) || selectedQuotation?.customer?.email}</p>
-                    )}
-                    {selectedQuotation?.customer?.phone && <p>Phone: {selectedQuotation?.customer?.phone}</p>}
-                    {selectedQuotation?.billToAddress && (
-                      <>
-                        <p className="mt-2 font-medium text-gray-700">Address:</p>
-                        {selectedQuotation?.billToAddress?.address && <p>{selectedQuotation?.billToAddress?.address}</p>}
-                        {selectedQuotation?.billToAddress?.district && selectedQuotation?.billToAddress?.pincode && (
-                          <p>{selectedQuotation?.billToAddress?.district}, {selectedQuotation?.billToAddress?.pincode}</p>
-                        )}
-                        {selectedQuotation?.billToAddress?.state && <p>{selectedQuotation?.billToAddress?.state}</p>}
-                        {selectedQuotation?.billToAddress?.gstNumber && (
-                          <p className="text-sm text-gray-600">GST: {selectedQuotation?.billToAddress?.gstNumber}</p>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-sm text-gray-600">
-                    <h4 className="font-medium text-gray-900 mb-2">Ship To:</h4>
-                    <p className="font-medium">{selectedQuotation?.customer?.name || 'N/A'}</p>
-                    {selectedQuotation?.shipToAddress && (
-                      <>
-                        <p className="mt-2 font-medium text-gray-700">Address:</p>
-                        {selectedQuotation?.shipToAddress?.address && <p>{selectedQuotation?.shipToAddress?.address}</p>}
-                        {selectedQuotation?.shipToAddress?.district && selectedQuotation?.shipToAddress?.pincode && (
-                          <p>{selectedQuotation?.shipToAddress?.district}, {selectedQuotation?.shipToAddress?.pincode}</p>
-                        )}
-                        {selectedQuotation?.shipToAddress?.state && <p>{selectedQuotation?.shipToAddress?.state}</p>}
-                        {selectedQuotation?.shipToAddress?.gstNumber && (
-                          <p className="text-sm text-gray-600">GST: {selectedQuotation?.shipToAddress?.gstNumber}</p>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {selectedQuotation?.assignedEngineer && <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Assigned Engineer:</h4>
-                  <div className="text-sm text-gray-600">
-                    {selectedQuotation?.assignedEngineer ? (
-                      <>
-                        <p className="font-medium">{selectedQuotation.assignedEngineer?.firstName} {selectedQuotation.assignedEngineer?.lastName}</p>
-                        {selectedQuotation.assignedEngineer?.email && <p>Email: {selectedQuotation.assignedEngineer?.email}</p>}
-                        {selectedQuotation.assignedEngineer?.phone && <p>Phone: {selectedQuotation.assignedEngineer?.phone}</p>}
-                        <div className="mt-1">
-                          <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
-                            Field Engineer
-                          </span>
-                        </div>
-                      </>
-                    ) : (
-                      <p className="text-gray-500 italic">No engineer assigned</p>
-                    )}
-                  </div>
-                </div>}
-              </div>
-
-              {/* Quotation Items */}
-              {selectedQuotation.items && selectedQuotation.items.length > 0 && <div>
-                <h4 className="font-medium text-gray-900 mb-3">Items:</h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full border border-gray-200 rounded-lg">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">HSN Number</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">UOM</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part No</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
-                        {(selectedQuotation.items || []).some((item: any) => (item.discount || 0) > 0) && (
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
-                        )}
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax Rate</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {(selectedQuotation.items || []).map((item: any, index: number) => (
-                        <tr key={index}>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.hsnNumber || 'N/A'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.uom}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.partNo || 'N/A'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">₹{item.unitPrice?.toLocaleString()}</td>
-                          {(selectedQuotation.items || []).some((item: any) => (item.discount || 0) > 0) && (
-                            <td className="px-4 py-2 text-sm text-gray-900">{item.discount || 0}%</td>
-                          )}
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.taxRate || 0}%</td>
-                          <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{(item.unitPrice * item.quantity * (1 - item.discount / 100) * (1 + item.taxRate / 100)).toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>}
-
-              {/* Service Charges Section */}
-              {selectedQuotation.serviceCharges && selectedQuotation.serviceCharges.length > 0 && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h4 className="font-medium text-green-900 mb-3 flex items-center">
-                    <Package className="w-4 h-4 mr-2" />
-                    Service Charges
-                  </h4>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border border-green-200 rounded-lg">
-                      <thead className="bg-green-100">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Description</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">HSN</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Quantity</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Unit Price</th>
-                          {(selectedQuotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) && (
-                            <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Discount</th>
-                          )}
-                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Tax Rate</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-green-200">
-                        {selectedQuotation.serviceCharges.map((service: any, index: number) => (
-                          <tr key={index} className="bg-white">
-                            <td className="px-4 py-2 text-sm text-gray-900">{service.description}</td>
-                            <td className="px-4 py-2 text-sm text-gray-900">{service.hsnNumber || '-'}</td>
-                            <td className="px-4 py-2 text-sm text-gray-900">{service.quantity}</td>
-                            <td className="px-4 py-2 text-sm text-gray-900">₹{service.unitPrice?.toFixed(2) || '0.00'}</td>
-                            {(selectedQuotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) && (
-                              <td className="px-4 py-2 text-sm text-gray-900">{service.discount || 0}%</td>
-                            )}
-                            <td className="px-4 py-2 text-sm text-gray-900">{service.taxRate || 0}%</td>
-                            <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{service.totalPrice?.toFixed(2) || '0.00'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Battery Buyback Charges Section */}
-              {selectedQuotation.batteryBuyBack && selectedQuotation.batteryBuyBack.quantity > 0 && (
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                  <h4 className="font-medium text-orange-900 mb-3 flex items-center">
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    Battery Buyback Charges
-                  </h4>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border border-orange-200 rounded-lg">
-                      <thead className="bg-orange-100">
-                        <tr>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Description</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">HSN</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Quantity</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Unit Price</th>
-                          {(selectedQuotation.batteryBuyBack?.discount || 0) > 0 && (
-                            <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Discount</th>
-                          )}
-                          {(selectedQuotation.batteryBuyBack?.taxRate || 0) > 0 && (
-                            <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Tax Rate</th>
-                          )}
-                          {(selectedQuotation.batteryBuyBack?.taxRate || 0) > 0 && (
-                            <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Tax Amount</th>
-                          )}
-                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-orange-200">
-                        <tr className="bg-white">
-                          <td className="px-4 py-2 text-sm text-gray-900">{selectedQuotation.batteryBuyBack.description}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{selectedQuotation.batteryBuyBack.hsnNumber || '-'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{selectedQuotation.batteryBuyBack.quantity}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">₹{selectedQuotation.batteryBuyBack.unitPrice?.toFixed(2) || '0.00'}</td>
-                          {(selectedQuotation.batteryBuyBack?.discount || 0) > 0 && (
-                            <td className="px-4 py-2 text-sm text-gray-900">{selectedQuotation.batteryBuyBack.discount || 0}%</td>
-                          )}
-                          {(selectedQuotation.batteryBuyBack?.taxRate || 0) > 0 && (
-                            <td className="px-4 py-2 text-sm text-gray-900">{selectedQuotation.batteryBuyBack.taxRate || 0}%</td>
-                          )}
-                          {(selectedQuotation.batteryBuyBack?.taxRate || 0) > 0 && (
-                            <td className="px-4 py-2 text-sm text-gray-900">₹{selectedQuotation.batteryBuyBack.taxAmount?.toFixed(2) || '0.00'}</td>
-                          )}
-                          <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{selectedQuotation.batteryBuyBack.totalPrice?.toFixed(2) || '0.00'}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Notes and Terms Section */}
-              {(selectedQuotation.notes || selectedQuotation.terms) && (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                  <h4 className="font-medium text-gray-900 mb-3 flex items-center">
-                    <FileText className="w-4 h-4 mr-2" />
-                    Additional Information
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {selectedQuotation.notes && (
-                      <div>
-                        <h5 className="text-sm font-medium text-gray-700 mb-2">Notes:</h5>
-                        <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200">
-                          {selectedQuotation.notes}
-                        </div>
-                      </div>
-                    )}
-                    {selectedQuotation.terms && (
-                      <div>
-                        <h5 className="text-sm font-medium text-gray-700 mb-2">Terms & Conditions:</h5>
-                        <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200">
-                          {selectedQuotation.terms}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Quotation Summary */}
-              <div className="border-t border-gray-200 pt-4">
-                <div className="flex justify-end">
-                  <div className="w-80 space-y-3 text-right">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-medium">₹{(selectedQuotation.subtotal).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Total Tax:</span>
-                      <span className="font-medium">₹{(selectedQuotation.totalTax).toFixed(2)}</span>
-                    </div>
-                    {selectedQuotation.totalDiscount > 0 && <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Total Discount:</span>
-                      <span className="font-medium text-green-600">-₹{(selectedQuotation.totalDiscount || 0).toFixed(2)}</span>
-                    </div>}
-                    {/* <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Overall Discount:</span>
-                      <span className="font-medium text-green-600">-{selectedQuotation.overallDiscount || 0}% (-₹{selectedQuotation.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
-                    </div> */}
-
-                    {/* Service Charges Total */}
-                    {selectedQuotation.serviceCharges && selectedQuotation.serviceCharges.length > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Service Charges:</span>
-                        <span className="font-medium text-green-600">+₹{(selectedQuotation.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2)}</span>
-                      </div>
-                    )}
-
-                    {/* Battery Buyback Charges Total */}
-                    {selectedQuotation.batteryBuyBack && selectedQuotation.batteryBuyBack.quantity > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Battery Buyback:</span>
-                        <span className="font-medium text-orange-600">-₹{(selectedQuotation.batteryBuyBack?.totalPrice || 0).toFixed(2)}</span>
-                      </div>
-                    )}
-
-                    <div className="flex justify-between font-bold text-lg border-t pt-3">
-                      <span>Grand Total:</span>
-                      <span className="text-blue-600">₹{selectedQuotation.grandTotal?.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs pt-2 border-t">
-                      <span className="text-gray-600">Amount in Words:</span>
-                      <span className="font-medium text-gray-700 max-w-xs text-right">{selectedQuotation?.grandTotal ? numberToWords(selectedQuotation.grandTotal) : 'Zero Rupees Only'}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Payment History */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">Payment History</h3>
-                  <button
-                    onClick={() => fetchQuotationPaymentHistory(selectedQuotation._id)}
-                    className="text-sm text-blue-600 hover:text-blue-800 flex items-center space-x-1"
-                    disabled={loadingQuotationPayments}
-                  >
-                    <RefreshCw className={`w-4 h-4 ${loadingQuotationPayments ? 'animate-spin' : ''}`} />
-                    <span>Refresh</span>
-                  </button>
-                </div>
-                <div className="bg-gray-50 rounded-lg p-4">
-                  {renderQuotationPaymentHistory()}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      
 
       {/* Confirmation Modal */}
       {showConfirmationModal && confirmationData && (
@@ -9912,6 +8778,87 @@ const InvoiceManagement: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Invoice Reference Information */}
+              {viewDeliveryChallan.invoiceDetails && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <FileText className="w-5 h-5 text-blue-600 mr-2" />
+                    Reference Invoice Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium text-gray-700">Invoice Number:</span>
+                        <span className="text-gray-900 font-mono">{viewDeliveryChallan.invoiceDetails.invoiceNumber}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium text-gray-700">Invoice Date:</span>
+                        <span className="text-gray-900">{new Date(viewDeliveryChallan.invoiceDetails.invoiceDate).toLocaleDateString()}</span>
+                      </div>
+                      {/* <div className="flex items-center space-x-2">
+                        <span className="font-medium text-gray-700">Total Amount:</span>
+                        <span className="text-gray-900 font-semibold">₹{viewDeliveryChallan.invoiceDetails.totalAmount.toLocaleString()}</span>
+                      </div> */}
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium text-gray-700">Customer:</span>
+                        <span className="text-gray-900">{viewDeliveryChallan.invoiceDetails.customerName}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="font-medium text-gray-700">Items:</span>
+                        <span className="text-gray-900">{viewDeliveryChallan.invoiceDetails.items.length} item(s)</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Invoice Items Details */}
+                  {/* {viewDeliveryChallan.invoiceDetails.items.length > 0 && (
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-md font-medium text-gray-900">Invoice Items:</h4>
+                        {viewDeliveryChallan.sourceInvoice && (
+                          <button
+                            onClick={() => {
+                              setShowDeliveryChallanViewModal(false);
+                              // Find the invoice in the current data and open it
+                              const invoice = quotations.find((q: any) => q._id === viewDeliveryChallan.sourceInvoice) ||
+                                            invoices.find((i: any) => i._id === viewDeliveryChallan.sourceInvoice);
+                              if (invoice) {
+                                setSelectedInvoice(invoice);
+                                setShowViewModal(true);
+                              } else {
+                                toast.error('Original invoice not found in current data');
+                              }
+                            }}
+                            className="px-3 py-1 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center space-x-1"
+                          >
+                            <Eye className="w-3 h-3" />
+                            <span>View Original Invoice</span>
+                          </button>
+                        )}
+                      </div>
+                      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                        <div className="grid grid-cols-4 gap-4 p-3 bg-gray-100 border-b border-gray-200 font-medium text-sm text-gray-700">
+                          <div>Description</div>
+                          <div className="text-right">Quantity</div>
+                          <div className="text-right">Unit Price</div>
+                          <div className="text-right">Total</div>
+                        </div>
+                        {viewDeliveryChallan.invoiceDetails.items.map((item: any, index: number) => (
+                          <div key={index} className="grid grid-cols-4 gap-4 p-3 border-b border-gray-100 last:border-b-0">
+                            <div className="text-sm text-gray-900">{item.description}</div>
+                            <div className="text-sm text-gray-900 text-right">{item.quantity}</div>
+                            <div className="text-sm text-gray-900 text-right">₹{item.unitPrice.toLocaleString()}</div>
+                            <div className="text-sm text-gray-900 text-right font-medium">₹{(item.quantity * item.unitPrice).toLocaleString()}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )} */}
+                </div>
+              )}
 
               {/* Delivery Details */}
               <div className="bg-white border border-gray-200 rounded-lg p-4">

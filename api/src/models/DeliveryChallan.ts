@@ -39,6 +39,21 @@ export interface IDeliveryChallan extends Document {
   services: IDeliveryChallanItem[];
   status: 'draft' | 'sent' | 'delivered' | 'cancelled';
   notes?: string;
+  // Invoice reference fields
+  sourceInvoice?: mongoose.Types.ObjectId; // Reference to Invoice model
+  invoiceNumber?: string; // Invoice number for display
+  invoiceDate?: Date; // Invoice date for display
+  invoiceDetails?: {
+    invoiceNumber: string;
+    invoiceDate: Date;
+    totalAmount: number;
+    customerName: string;
+    items: Array<{
+      description: string;
+      quantity: number;
+      unitPrice: number;
+    }>;
+  };
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -190,6 +205,53 @@ const deliveryChallanSchema = new Schema<IDeliveryChallan>({
   notes: {
     type: String,
     trim: true
+  },
+  // Invoice reference fields
+  sourceInvoice: {
+    type: Schema.Types.ObjectId,
+    ref: 'Invoice'
+  },
+  invoiceNumber: {
+    type: String,
+    trim: true
+  },
+  invoiceDate: {
+    type: Date
+  },
+  invoiceDetails: {
+    type: {
+      invoiceNumber: {
+        type: String,
+        required: true
+      },
+      invoiceDate: {
+        type: Date,
+        required: true
+      },
+      totalAmount: {
+        type: Number,
+        required: true
+      },
+      customerName: {
+        type: String,
+        required: true
+      },
+      items: [{
+        description: {
+          type: String,
+          required: true
+        },
+        quantity: {
+          type: Number,
+          required: true
+        },
+        unitPrice: {
+          type: Number,
+          required: true
+        }
+      }]
+    },
+    required: false
   },
   createdBy: {
     type: Schema.Types.ObjectId,

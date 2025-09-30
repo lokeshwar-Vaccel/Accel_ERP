@@ -321,9 +321,7 @@ export const createInvoice = async (
       totalTaxAmount: totalTaxAmount.toFixed(2)
     });
 
-    function roundTo2(n: number) {
-      return Math.round(n * 100) / 100;
-    }
+    const roundTo2 = (n: number) => Math.round(n * 100) / 100;
 
     // Create invoice with ALL required schema fields
     let ans = roundTo2(totalTaxAmount)
@@ -447,8 +445,34 @@ export const createInvoice = async (
       ...(hourMeterReading && { hourMeterReading }),
       ...(serviceRequestDate && { serviceRequestDate: new Date(serviceRequestDate) }),
       ...(qrCodeImage && { qrCodeImage }),
-      ...(serviceCharges && serviceCharges.length > 0 && { serviceCharges }),
-      ...(batteryBuyBack && batteryBuyBack.description && { batteryBuyBack }),
+      // Sanitize service charges with hsnNumber
+      ...(serviceCharges && serviceCharges.length > 0 && { 
+        serviceCharges: serviceCharges.map((service: any) => ({
+          description: String(service.description || '').trim(),
+          hsnNumber: String(service.hsnNumber || '').trim(),
+          quantity: Number(service.quantity) || 1,
+          unitPrice: Number(service.unitPrice) || 0,
+          discount: Number(service.discount) || 0,
+          discountedAmount: Number(service.discountedAmount) || 0,
+          taxRate: Number(service.taxRate) || 18,
+          taxAmount: Number(service.taxAmount) || 0,
+          totalPrice: Number(service.totalPrice) || 0
+        }))
+      }),
+      // Sanitize battery buy back with hsnNumber
+      ...(batteryBuyBack && batteryBuyBack.description && { 
+        batteryBuyBack: {
+          description: String(batteryBuyBack.description || 'Battery Buy Back').trim(),
+          hsnNumber: String(batteryBuyBack.hsnNumber || '').trim(),
+          quantity: Number(batteryBuyBack.quantity) || 1,
+          unitPrice: Number(batteryBuyBack.unitPrice) || 0,
+          discount: Number(batteryBuyBack.discount) || 0,
+          discountedAmount: Number(batteryBuyBack.discountedAmount) || 0,
+          taxRate: Number(batteryBuyBack.taxRate) || 0,
+          taxAmount: Number(batteryBuyBack.taxAmount) || 0,
+          totalPrice: Number(batteryBuyBack.totalPrice) || 0
+        }
+      }),
     });
 
     await invoice.save();

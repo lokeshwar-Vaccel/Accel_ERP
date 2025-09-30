@@ -35,6 +35,10 @@ const stockLocationSchema = new Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  isPrimary: {
+    type: Boolean,
+    default: false
   }
 }, { timestamps: true });
 

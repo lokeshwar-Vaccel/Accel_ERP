@@ -115,16 +115,16 @@ interface AMCQuotation {
     addresses?: Array<{
       id: number;
       address: string;
-      state?: string;
-      district?: string;
-      pincode?: string;
+      state: string;
+      district: string;
+      pincode: string;
       isPrimary: boolean;
       gstNumber?: string;
-      contactPersonName?: string;
-      designation?: string;
       email?: string;
       phone?: string;
-      registrationStatus: 'registered' | 'non_registered';
+      contactPersonName?: string;
+      designation?: string;
+      registrationStatus?: string;
     }>;
   };
   company?: {
@@ -170,10 +170,10 @@ interface AMCQuotation {
   offerItems: Array<{
     make: string;
     engineSlNo: string;
-    dgRatingKVA: number;
-    typeOfVisits: string;
-    qty: number;
-    amcCostPerDG: number;
+    dgRatingKVA?: number;
+    typeOfVisits?: number;
+    qty?: number;
+    amcCostPerDG?: number;
     totalAMCAmountPerDG: number;
     gst18: number;
     totalAMCCost: number;
@@ -201,6 +201,7 @@ interface AMCQuotation {
   amcPeriodFrom: string;
   amcPeriodTo: string;
   gstIncluded: boolean;
+  selectedAddressId?: string;
   
   // Standard quotation fields
   items: Array<{
@@ -290,6 +291,9 @@ const AMCQuotationManagement: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
+  console.log("quotations123:",quotations);
+  
+
   // Payment related states
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedQuotationForPayment, setSelectedQuotationForPayment] = useState<AMCQuotation | null>(null);
@@ -302,6 +306,8 @@ const AMCQuotationManagement: React.FC = () => {
     status: '',
     notes: ''
   });
+  const [openStatusDropdown, setOpenStatusDropdown] = useState<string | null>(null);
+  const [updatingQuotationStatus, setUpdatingQuotationStatus] = useState<string | null>(null);
 
   // Payment history states
   const [amcQuotationPaymentHistory, setAmcQuotationPaymentHistory] = useState<any[]>([]);
@@ -369,6 +375,21 @@ const AMCQuotationManagement: React.FC = () => {
     fetchQuotations();
     fetchStats();
   }, [currentPage, searchTerm, statusFilter, amcTypeFilter, paymentStatusFilter, dateRange]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.status-dropdown-container')) {
+        setOpenStatusDropdown(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // Handle search
   const handleSearch = (value: string) => {
@@ -550,80 +571,51 @@ const AMCQuotationManagement: React.FC = () => {
   };
 
   // Email functionality
-  const getPrimaryAddressEmail = (customer: any): string | null => {
-    console.log('Getting email for customer:', {
-      customerId: customer._id,
-      customerName: customer.name,
-      customerEmail: customer.email,
-      addresses: customer.addresses,
-      addressesLength: customer.addresses?.length || 0
-    });
+  const getCustomerEmails = (customer: any): string[] => {
+    const emails: string[] = [];
+    console.log("emails01:",emails);
+    console.log("customer:",customer);
 
-    // First try to get primary address email
+    // Get primary address email
     if (customer.addresses && customer.addresses.length > 0) {
       const primaryAddress = customer.addresses.find((addr: any) => addr.isPrimary);
-      console.log('Primary address found:', primaryAddress);
       if (primaryAddress && primaryAddress.email) {
-        console.log('Using primary address email:', primaryAddress.email);
-        return primaryAddress.email;
+        emails.push(primaryAddress.email);
       }
     }
 
-    // If no primary address email, try customer's main email
-    if (customer.email) {
-      console.log('Using customer main email:', customer.email);
-      return customer.email;
+    // Get customer's main email (if different from primary address email)
+    if (customer.email && !emails.includes(customer.email)) {
+      emails.push(customer.email);
     }
 
-    // If still no email, try to find any address with email
-    if (customer.addresses && customer.addresses.length > 0) {
-      const addressWithEmail = customer.addresses.find((addr: any) => addr.email);
-      if (addressWithEmail && addressWithEmail.email) {
-        console.log('Using first available address email:', addressWithEmail.email);
-        return addressWithEmail.email;
-      }
-    }
-
-    console.log('No email found for customer');
-    return null;
+    return emails;
   };
 
   const handleSendAMCQuotationEmail = async (quotation: AMCQuotation) => {
     try {
-      // Get primary address email
-      const primaryEmail = getPrimaryAddressEmail(quotation.customer);
+      // Get all customer emails
+      const customerEmails = getCustomerEmails(quotation.customer);
 
-      // Check if customer has email
-      if (!primaryEmail) {
-        // Show detailed error with customer data
-        const customerData = {
-          id: quotation.customer._id,
-          name: quotation.customer.name,
-          email: quotation.customer.email,
-          hasAddresses: quotation.customer.addresses && quotation.customer.addresses.length > 0,
-          addressesCount: quotation.customer.addresses?.length || 0,
-          addresses: quotation.customer.addresses
-        };
-        
-        console.error('Customer email not found:', customerData);
-        toast.error(`Customer email not available. Customer: ${quotation.customer.name}, Main Email: ${quotation.customer.email || 'None'}, Addresses: ${quotation.customer.addresses?.length || 0}`);
+      // Check if customer has any email
+      if (customerEmails.length === 0) {
+        toast.error('Customer email not available for this AMC quotation');
         return;
       }
 
-      console.log('Sending AMC quotation email to:', primaryEmail);
       const response = await apiClient.amcQuotations.sendEmail(quotation._id);
 
       if (response.success) {
-        toast.success(`AMC quotation email sent successfully to ${primaryEmail}`);
+        const emailsList = customerEmails.join(', ');
+        toast.success(`AMC quotation email sent successfully to ${emailsList}`);
         // Refresh the quotations list to update the status
         await fetchQuotations();
       } else {
         throw new Error(response.message || 'Failed to send AMC quotation email');
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error sending AMC quotation email:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to send AMC quotation email. Please try again.';
-      toast.error(errorMessage);
+      toast.error('Failed to send AMC quotation email. Please try again.');
     }
   };
 
@@ -662,13 +654,38 @@ const AMCQuotationManagement: React.FC = () => {
 
   const getStatusOptions = (currentStatus: string) => {
     const allOptions = [
-      { value: 'draft', label: 'Draft' },
-      { value: 'sent', label: 'Sent' },
-      { value: 'accepted', label: 'Accepted' },
-      { value: 'rejected', label: 'Rejected' }
+      { value: 'draft', label: 'Draft', color: 'bg-yellow-500' },
+      { value: 'sent', label: 'Sent', color: 'bg-blue-500' },
+      { value: 'accepted', label: 'Accepted', color: 'bg-green-500' },
+      { value: 'rejected', label: 'Rejected', color: 'bg-red-500' }
     ];
 
     return allOptions.filter(option => option.value !== currentStatus);
+  };
+
+  const handleUpdateQuotationStatus = async (quotationId: string, newStatus: string) => {
+    setUpdatingQuotationStatus(quotationId);
+    setOpenStatusDropdown(null);
+
+    try {
+      const response = await apiClient.amcQuotations.updateStatus(quotationId, {
+        status: newStatus,
+        notes: ''
+      });
+
+      if (response.success) {
+        await fetchQuotations();
+        await fetchStats();
+        toast.success('AMC quotation status updated successfully!');
+      } else {
+        throw new Error(response.message || 'Failed to update status');
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast.error('Failed to update AMC quotation status. Please try again.');
+    } finally {
+      setUpdatingQuotationStatus(null);
+    }
   };
 
   // Fetch AMC quotation payment history
@@ -966,8 +983,8 @@ const AMCQuotationManagement: React.FC = () => {
       </PageHeader>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="flex items-center">
             <div className="p-2 bg-blue-100 rounded-lg">
               <FileText className="w-6 h-6 text-blue-600" />
@@ -979,7 +996,7 @@ const AMCQuotationManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="flex items-center">
             <div className="p-2 bg-orange-100 rounded-lg">
               <Send className="w-6 h-6 text-orange-600" />
@@ -991,7 +1008,7 @@ const AMCQuotationManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="flex items-center">
             <div className="p-2 bg-green-100 rounded-lg">
               <CheckCircle className="w-6 h-6 text-green-600" />
@@ -1003,7 +1020,7 @@ const AMCQuotationManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg border border-gray-200">
+        <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="flex items-center">
             <div className="p-2 bg-purple-100 rounded-lg">
               <IndianRupee className="w-6 h-6 text-purple-600" />
@@ -1240,24 +1257,93 @@ const AMCQuotationManagement: React.FC = () => {
 
                   {/* STATUS */}
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="space-y-1">
+                    <div className="flex flex-col items-start space-y-1">
                       <div className="flex items-center space-x-2">
-                        <Badge className={getStatusBadgeColor(quotation.status)}>
-                          {quotation.status.charAt(0).toUpperCase() + quotation.status.slice(1)}
-                        </Badge>
-                        <Button
-                          onClick={() => handleUpdateStatus(quotation)}
-                          variant="outline"
-                          size="sm"
-                          className="text-xs px-2 py-1"
-                        >
-                          Change
-                        </Button>
+                        {/* Status Select Dropdown */}
+                        <div className="relative status-dropdown-container" onClick={(e) => e.stopPropagation()}>
+                          <Tooltip content="Update AMC quotation status" position="top">
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setOpenStatusDropdown(openStatusDropdown === quotation._id ? null : quotation._id);
+                              }}
+                              disabled={quotation.status === 'accepted' || quotation.status === 'rejected' || updatingQuotationStatus === quotation._id}
+                              className={`flex items-center space-x-2 text-xs border border-gray-300 rounded px-3 py-2 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed w-[120px] justify-between ${quotation.status === 'draft'
+                                ? 'border-yellow-300 bg-yellow-50'
+                                : quotation.status === 'sent'
+                                  ? 'border-blue-300 bg-blue-50'
+                                  : quotation.status === 'accepted'
+                                    ? 'border-green-300 bg-green-50'
+                                    : quotation.status === 'rejected'
+                                      ? 'border-red-300 bg-red-50'
+                                      : 'border-gray-300 bg-gray-50'
+                              }`}
+                              type="button"
+                            >
+                              <span className={`w-2 h-2 rounded-full ${quotation.status === 'draft'
+                                  ? 'bg-yellow-500'
+                                  : quotation.status === 'sent'
+                                    ? 'bg-blue-500'
+                                    : quotation.status === 'accepted'
+                                      ? 'bg-green-500'
+                                      : quotation.status === 'rejected'
+                                        ? 'bg-red-500'
+                                        : 'bg-gray-500'
+                                }`}></span>
+                              <span className="font-medium">
+                                {quotation.status?.charAt(0).toUpperCase() + quotation.status?.slice(1) || 'Draft'}
+                              </span>
+                              <svg className={`w-3 h-3 transition-transform ${openStatusDropdown === quotation._id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+                          </Tooltip>
+
+                          {/* Dropdown Menu */}
+                          {openStatusDropdown === quotation._id && (
+                            <div className="absolute right-0 mt-1 w-[120px] bg-white border border-gray-200 rounded-md shadow-lg z-[9999] opacity-100 transform transition-all duration-200 ease-in-out">
+                              <div className="py-1">
+                                {getStatusOptions(quotation.status || 'draft').map((option) => (
+                                  <button
+                                    key={option.value}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleUpdateQuotationStatus(quotation._id, option.value);
+                                    }}
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                    }}
+                                    className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center space-x-2 cursor-pointer transition-colors ${updatingQuotationStatus === quotation._id ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50'
+                                      }`}
+                                    disabled={updatingQuotationStatus === quotation._id}
+                                    type="button"
+                                  >
+                                    <span className={`w-2 h-2 rounded-full ${option.color.split(' ')[0].replace('bg-', 'bg-')}`}></span>
+                                    <span>{option.label}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {updatingQuotationStatus === quotation._id && (
+                          <div className="w-3 h-3 border border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                        )}
                       </div>
-                      <div className="text-xs text-gray-500">
-                        {quotation.status === 'accepted' ? 'Status is final' : 
-                         quotation.status === 'draft' ? 'Send email to enable payments' : ''}
-                      </div>
+                      {quotation.status === 'draft' && (
+                        <span className="text-xs text-gray-500">
+                          Send email to enable payments
+                        </span>
+                      )}
+                      {(quotation.status === 'accepted' || quotation.status === 'rejected') && (
+                        <span className="text-xs text-gray-500">
+                          Status is final
+                        </span>
+                      )}
                     </div>
                   </td>
 
@@ -1315,19 +1401,15 @@ const AMCQuotationManagement: React.FC = () => {
                           <IndianRupee className="w-4 h-4" />
                         </button>
                       </Tooltip>
-                      <Tooltip content={
-                        !getPrimaryAddressEmail(quotation.customer) 
-                          ? "No email available for this customer" 
-                          : `Send email to ${getPrimaryAddressEmail(quotation.customer)}`
-                      }>
+                      <Tooltip content="Send Email">
                         <button
                           onClick={() => handleSendAMCQuotationEmail(quotation)}
                           className={`p-1 transition-colors ${
-                            !getPrimaryAddressEmail(quotation.customer)
+                            getCustomerEmails(quotation.customer).length === 0
                               ? 'text-gray-400 cursor-not-allowed'
                               : 'text-blue-600 hover:text-blue-700'
                           }`}
-                          disabled={!getPrimaryAddressEmail(quotation.customer)}
+                          disabled={getCustomerEmails(quotation.customer).length === 0}
                         >
                           <Send className="w-4 h-4" />
                         </button>

@@ -81,6 +81,7 @@ interface StockLocationData {
     contactPerson?: string;
     phone?: string;
     isActive: boolean;
+    isPrimary: boolean;
 }
 
 
@@ -722,16 +723,27 @@ const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true
 
             setLocations(locationsData);
 
-            // Set "Main Office" as default if not already selected
+            // Set primary location as default if not already selected
             if (!isEditMode) {
-                const mainOffice = locationsData.find(loc => loc.name === "Main Office");
-                if (mainOffice) {
-                    setFormData(prev => ({ ...prev, location: mainOffice._id }));
+                const primaryLocation = locationsData.find(loc => loc.isPrimary === true);
+                if (primaryLocation) {
+                    setFormData(prev => ({ ...prev, location: primaryLocation._id }));
 
                     // 🚀 LOAD STOCK DATA FOR DEFAULT LOCATION
                     setTimeout(() => {
                         loadAllStockForLocation();
                     }, 100);
+                } else {
+                    // Fallback to "Main Office" if no primary location is set
+                    const mainOffice = locationsData.find(loc => loc.name === "Main Office");
+                    if (mainOffice) {
+                        setFormData(prev => ({ ...prev, location: mainOffice._id }));
+
+                        // 🚀 LOAD STOCK DATA FOR DEFAULT LOCATION
+                        setTimeout(() => {
+                            loadAllStockForLocation();
+                        }, 100);
+                    }
                 }
             }
         } catch (error) {
@@ -2436,17 +2448,26 @@ const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true
                                     onFocus={() => {
                                         setShowLocationDropdown(true);
 
-                                        // Auto-select Main Office if no location is selected
+                                        // Auto-select primary location if no location is selected
                                         if (!formData.location) {
-                                            const mainOffice = locations.find(loc =>
-                                                loc.name.toLowerCase().includes('main office') ||
-                                                loc.name.toLowerCase() === 'main office'
-                                            );
-                                            if (mainOffice) {
-                                                setFormData({ ...formData, location: mainOffice._id });
+                                            const primaryLocation = locations.find(loc => loc.isPrimary === true);
+                                            if (primaryLocation) {
+                                                setFormData({ ...formData, location: primaryLocation._id });
                                                 // Clear stock cache when location changes
                                                 setProductStockCache({});
                                                 setStockValidation({});
+                                            } else {
+                                                // Fallback to Main Office if no primary location is set
+                                                const mainOffice = locations.find(loc =>
+                                                    loc.name.toLowerCase().includes('main office') ||
+                                                    loc.name.toLowerCase() === 'main office'
+                                                );
+                                                if (mainOffice) {
+                                                    setFormData({ ...formData, location: mainOffice._id });
+                                                    // Clear stock cache when location changes
+                                                    setProductStockCache({});
+                                                    setStockValidation({});
+                                                }
                                             }
                                         }
 

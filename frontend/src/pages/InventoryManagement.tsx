@@ -75,6 +75,7 @@ interface StockLocationData {
   contactPerson?: string;
   phone?: string;
   isActive: boolean;
+  isPrimary: boolean;
   createdAt?: string;
 }
 
@@ -108,6 +109,7 @@ interface LocationFormData {
   type: string;
   contactPerson: string;
   phone: string;
+  isPrimary: boolean;
 }
 
 interface StockAdjustmentFormData {
@@ -334,7 +336,8 @@ const InventoryManagement: React.FC = () => {
     address: '',
     type: 'warehouse',
     contactPerson: '',
-    phone: ''
+    phone: '',
+    isPrimary: false
   });
   const [roomFormData, setRoomFormData] = useState({
     name: '',
@@ -1003,7 +1006,8 @@ const InventoryManagement: React.FC = () => {
       address: '',
       type: 'warehouse',
       contactPerson: '',
-      phone: ''
+      phone: '',
+      isPrimary: false
     });
     setIsEditingLocation(false);
     setEditingLocationId(null);
@@ -1020,7 +1024,8 @@ const InventoryManagement: React.FC = () => {
       address: location.address,
       type: location.type,
       contactPerson: location.contactPerson || '',
-      phone: location.phone || ''
+      phone: location.phone || '',
+      isPrimary: location.isPrimary || false
     });
     setIsEditingLocation(true);
     setEditingLocationId(location._id);
@@ -1102,6 +1107,14 @@ const InventoryManagement: React.FC = () => {
     //   errors.type = 'Location type is required';
     // }
 
+    // Check if trying to set as primary when another location is already primary
+    if (locationFormData.isPrimary && !isEditingLocation) {
+      const existingPrimary = locations.find(loc => loc.isPrimary);
+      if (existingPrimary) {
+        errors.isPrimary = 'Another location is already set as primary. Please uncheck the primary status of the existing primary location first.';
+      }
+    }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -1141,7 +1154,8 @@ const InventoryManagement: React.FC = () => {
         address: '',
         type: 'warehouse',
         contactPerson: '',
-        phone: ''
+        phone: '',
+        isPrimary: false
       });
       setIsEditingLocation(false);
       setEditingLocationId(null);
@@ -2600,8 +2614,8 @@ const InventoryManagement: React.FC = () => {
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">Product Name</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Part No</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Category</th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Brand</th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Department</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Brand</th>
+                {/* <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Department</th> */}
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Current Qty</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Reserved Qty</th>
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Available Qty</th>
@@ -2655,9 +2669,9 @@ const InventoryManagement: React.FC = () => {
                       </td>
 
                       {/* Department */}
-                      <td className="px-3 py-3 text-xs text-gray-700 uppercase">
+                      {/* <td className="px-3 py-3 text-xs text-gray-700 uppercase">
                         {item.product?.dept || 'N/A'}
-                      </td>
+                      </td> */}
 
                       {/* Current Quantity */}
                       <td className="px-3 py-3 text-sm font-bold text-gray-900 text-center">
@@ -2780,8 +2794,9 @@ const InventoryManagement: React.FC = () => {
       {/* Add Location Modal */}
       {showLocationModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-[1200px] h-[600px] m-4 overflow-y-auto flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="bg-white rounded-xl shadow-xl w-[1200px] h-[600px] m-4 flex flex-col">
+            {/* Fixed Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 flex-shrink-0">
               <h2 className="text-xl font-semibold text-gray-900">
                 {isEditingLocation ? 'Edit Location' : 'Manage Stock Locations'}
               </h2>
@@ -2799,311 +2814,344 @@ const InventoryManagement: React.FC = () => {
               </button>
             </div>
 
-            <div className="flex flex-1">
+            {/* Scrollable Content Area */}
+            <div className="flex flex-1 overflow-hidden">
               {/* Left side - Location Form */}
-
               <div className="w-1/2 border-r border-gray-200 flex flex-col">
-                {activeTab === 'locations' && <div className="p-4 overflow-y-auto flex-1">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">
-                    {isEditingLocation ? 'Edit Location' : 'Add New Location'}
-                  </h3>
-
-                  <form onSubmit={(e) => { e.preventDefault(); handleSubmitLocation(); }} className="space-y-3">
-                    {formErrors.general && (
-                      <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                        <p className="text-red-600 text-sm">{formErrors.general}</p>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Location Name *
-                        </label>
-                        <input
-                          type="text"
-                          name="name"
-                          value={locationFormData.name}
-                          onChange={(e) => setLocationFormData({ ...locationFormData, name: e.target.value })}
-                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
-                            }`}
-                          placeholder="Enter location name"
-                        />
-                        {formErrors.name && (
-                          <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
+                {activeTab === 'locations' && (
+                  <div className="flex flex-col h-full">
+                    {/* Form Header */}
+                    <div className="p-4 border-b border-gray-200 flex-shrink-0">
+                      <h3 className="text-lg font-medium text-gray-900">
+                        {isEditingLocation ? 'Edit Location' : 'Add New Location'}
+                      </h3>
+                    </div>
+                    
+                    {/* Scrollable Form Content */}
+                    <div className="flex-1 overflow-y-auto p-4">
+                      <form onSubmit={(e) => { e.preventDefault(); handleSubmitLocation(); }} className="space-y-3">
+                        {formErrors.general && (
+                          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                            <p className="text-red-600 text-sm">{formErrors.general}</p>
+                          </div>
                         )}
-                      </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Location Type *
-                        </label>
-                        <div className="relative dropdown-container">
-                          <button
-                            type="button"
-                            onClick={() => setShowLocationTypeDropdown(!showLocationTypeDropdown)}
-                            className={`flex items-center justify-between w-full px-2.5 py-1.5 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.type ? 'border-red-500' : 'border-gray-300'
-                              } hover:border-gray-400`}
-                          >
-                            <span className="text-gray-700 truncate mr-1">{getLocationTypeLabel(locationFormData.type)}</span>
-                            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showLocationTypeDropdown ? 'rotate-180' : ''}`} />
-                          </button>
-                          {showLocationTypeDropdown && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                              {locationTypeOptions.map((option) => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  onClick={() => {
-                                    setLocationFormData({ ...locationFormData, type: option.value });
-                                    setShowLocationTypeDropdown(false);
-                                  }}
-                                  className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${locationFormData.type === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                    }`}
-                                >
-                                  {option.label}
-                                </button>
-                              ))}
+                        <div className="grid grid-cols-1 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Location Name *
+                            </label>
+                            <input
+                              type="text"
+                              name="name"
+                              value={locationFormData.name}
+                              onChange={(e) => setLocationFormData({ ...locationFormData, name: e.target.value })}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
+                                }`}
+                              placeholder="Enter location name"
+                            />
+                            {formErrors.name && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Location Type *
+                            </label>
+                            <div className="relative dropdown-container">
+                              <button
+                                type="button"
+                                onClick={() => setShowLocationTypeDropdown(!showLocationTypeDropdown)}
+                                className={`flex items-center justify-between w-full px-2.5 py-1.5 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.type ? 'border-red-500' : 'border-gray-300'
+                                  } hover:border-gray-400`}
+                              >
+                                <span className="text-gray-700 truncate mr-1">{getLocationTypeLabel(locationFormData.type)}</span>
+                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showLocationTypeDropdown ? 'rotate-180' : ''}`} />
+                              </button>
+                              {showLocationTypeDropdown && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                                  {locationTypeOptions.map((option) => (
+                                    <button
+                                      key={option.value}
+                                      type="button"
+                                      onClick={() => {
+                                        setLocationFormData({ ...locationFormData, type: option.value });
+                                        setShowLocationTypeDropdown(false);
+                                      }}
+                                      className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${locationFormData.type === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                        }`}
+                                    >
+                                      {option.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                        {formErrors.type && (
-                          <p className="text-red-500 text-xs mt-1">{formErrors.type}</p>
-                        )}
-                      </div>
+                            {formErrors.type && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.type}</p>
+                            )}
+                          </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Address *
-                        </label>
-                        <textarea
-                          name="address"
-                          value={locationFormData.address}
-                          onChange={(e) => setLocationFormData({ ...locationFormData, address: e.target.value })}
-                          rows={4}
-                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none ${formErrors.address ? 'border-red-500' : 'border-gray-300'
-                            }`}
-                          placeholder="Enter complete address"
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Address *
+                            </label>
+                            <textarea
+                              name="address"
+                              value={locationFormData.address}
+                              onChange={(e) => setLocationFormData({ ...locationFormData, address: e.target.value })}
+                              rows={4}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none ${formErrors.address ? 'border-red-500' : 'border-gray-300'
+                                }`}
+                              placeholder="Enter complete address"
+                            />
+                            {formErrors.address && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Contact Person
+                              </label>
+                              <input
+                                type="text"
+                                name="contactPerson"
+                                value={locationFormData.contactPerson}
+                                onChange={(e) => setLocationFormData({ ...locationFormData, contactPerson: e.target.value })}
+                                className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="Enter contact person name"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Contact Phone
+                              </label>
+                              <input
+                                type="tel"
+                                name="phone"
+                                value={locationFormData.phone}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  // Allow only "+" at the start and digits
+                                  if (/^$|^\+?[0-9]*$/.test(value)) {
+                                    setLocationFormData({ ...locationFormData, phone: value });
+                                  }
+                                }}
+                                maxLength={15}
+                                className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="e.g. +1234567890"
+                              />
+
+                            </div>
+                          </div>
+
+                          <div>
+                            <div className="flex items-center">
+                              <input
+                                type="checkbox"
+                                id="isPrimary"
+                                checked={locationFormData.isPrimary}
+                                onChange={(e) => setLocationFormData({ ...locationFormData, isPrimary: e.target.checked })}
+                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                              />
+                              <label htmlFor="isPrimary" className="ml-2 block text-sm text-gray-900">
+                                Set as Primary Location
+                              </label>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Only one location can be marked as primary. Setting this will remove primary status from other locations.
+                            </p>
+                            {formErrors.isPrimary && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.isPrimary}</p>
+                            )}
+                          </div>
+                        </div>
+                      </form>
+                    </div>
+                    
+                    {/* Fixed Footer Buttons */}
+                    <div className="p-4 border-t border-gray-200 flex-shrink-0">
+                      <div className="flex space-x-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isEditingLocation) {
+                              setIsEditingLocation(false);
+                              setEditingLocationId(null);
+                              setLocationFormData({
+                                name: '',
+                                address: '',
+                                type: 'warehouse',
+                                contactPerson: '',
+                                phone: '',
+                                isPrimary: false
+                              });
+                              setFormErrors({});
+                              setShowLocationTypeDropdown(false);
+                            } else {
+                              setShowLocationModal(false);
+                              setRecentLocations([]);
+                              setRecentRooms([]);
+                              setRecentRacks([]);
+                            }
+                          }}
+                          className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          {isEditingLocation ? 'Cancel Edit' : 'Cancel'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSubmitLocation}
+                          disabled={submitting}
+                          className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                        >
+                          {submitting ? (isEditingLocation ? 'Updating...' : 'Creating...') : (isEditingLocation ? 'Update Location' : 'Create Location')}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'rooms' && (
+                  <div className="flex flex-col h-full">
+                    {/* Form Header */}
+                    <div className="p-4 border-b border-gray-200 flex-shrink-0">
+                      <h3 className="text-lg font-medium text-gray-900">
+                        {isEditingLocation ? 'Edit Room' : 'Add New Room'}
+                      </h3>
+                    </div>
+                    
+                    {/* Scrollable Form Content */}
+                    <div className="flex-1 overflow-y-auto p-4">
+                      <form onSubmit={handleRoomSubmit} className="space-y-4">
+                        <Select
+                          label="Location *"
+                          options={locationOptions}
+                          value={roomFormData.location}
+                          onChange={(e) => setRoomFormData(prev => ({ ...prev, location: e.target.value }))}
+                          error={roomErrors.location}
+                          required
                         />
-                        {formErrors.address && (
-                          <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
+
+                        <Input
+                          label="Room Name *"
+                          value={roomFormData.name}
+                          onChange={(e) => setRoomFormData(prev => ({ ...prev, name: e.target.value }))}
+                          error={roomErrors.name}
+                          placeholder="e.g., ROOM 1, GODOWN, STORAGE AREA"
+                          required
+                        />
+
+                        <Input
+                          label="Description (Optional)"
+                          value={roomFormData.description}
+                          onChange={(e) => setRoomFormData(prev => ({ ...prev, description: e.target.value }))}
+                          placeholder="Brief description of the room"
+                        />
+
+                        {roomErrors.submit && (
+                          <div className="text-red-600 text-sm">{roomErrors.submit}</div>
                         )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Contact Person
-                          </label>
-                          <input
-                            type="text"
-                            name="contactPerson"
-                            value={locationFormData.contactPerson}
-                            onChange={(e) => setLocationFormData({ ...locationFormData, contactPerson: e.target.value })}
-                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="Enter contact person name"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Contact Phone
-                          </label>
-                          <input
-                            type="tel"
-                            name="phone"
-                            value={locationFormData.phone}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              // Allow only "+" at the start and digits
-                              if (/^$|^\+?[0-9]*$/.test(value)) {
-                                setLocationFormData({ ...locationFormData, phone: value });
-                              }
-                            }}
-                            maxLength={15}
-                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="e.g. +1234567890"
-                          />
-
-                        </div>
+                      </form>
+                    </div>
+                    
+                    {/* Fixed Footer Buttons */}
+                    <div className="p-4 border-t border-gray-200 flex-shrink-0">
+                      <div className="flex justify-end space-x-3">
+                        <Button type="button" variant="outline" onClick={handleRoomModalClose}>
+                          Cancel
+                        </Button>
+                        <Button type="button" onClick={handleRoomSubmit} isLoading={loading}>
+                          {selectedRoom ? 'Update' : 'Create'} Room
+                        </Button>
                       </div>
                     </div>
+                  </div>
+                )}
 
-                    <div className="flex space-x-3 pt-4">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (isEditingLocation) {
-                            setIsEditingLocation(false);
-                            setEditingLocationId(null);
-                            setLocationFormData({
-                              name: '',
-                              address: '',
-                              type: 'warehouse',
-                              contactPerson: '',
-                              phone: ''
-                            });
-                            setFormErrors({});
-                            setShowLocationTypeDropdown(false);
-                          } else {
-                            setShowLocationModal(false);
-                            setRecentLocations([]);
-                            setRecentRooms([]);
-                            setRecentRacks([]);
-                          }
-                        }}
-                        className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                      >
-                        {isEditingLocation ? 'Cancel Edit' : 'Cancel'}
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={submitting}
-                        className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                      >
-                        {submitting ? (isEditingLocation ? 'Updating...' : 'Creating...') : (isEditingLocation ? 'Update Location' : 'Create Location')}
-                      </button>
+                {activeTab === 'racks' && (
+                  <div className="flex flex-col h-full">
+                    {/* Form Header */}
+                    <div className="p-4 border-b border-gray-200 flex-shrink-0">
+                      <h3 className="text-lg font-medium text-gray-900">
+                        {isEditingLocation ? 'Edit Rack' : 'Add New Rack'}
+                      </h3>
                     </div>
-                  </form>
-                </div>}
+                    
+                    {/* Scrollable Form Content */}
+                    <div className="flex-1 overflow-y-auto p-4">
+                      <form onSubmit={handleRackSubmit} className="space-y-4">
+                        <Select
+                          label="Location *"
+                          options={locationOptions}
+                          value={rackFormData.location}
+                          onChange={(e) => setRackFormData(prev => ({ ...prev, location: e.target.value }))}
+                          error={rackErrors.location}
+                          required
+                        />
 
-                {activeTab === 'rooms' && <div className="p-4 overflow-y-auto flex-1">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">
-                    {isEditingLocation ? 'Edit Room' : 'Add New Room'}
-                  </h3>
-                  <form onSubmit={handleRoomSubmit} className="space-y-4">
-                    <Select
-                      label="Location"
-                      options={locationOptions}
-                      value={roomFormData.location}
-                      onChange={(e) => setRoomFormData(prev => ({ ...prev, location: e.target.value }))}
-                      error={roomErrors.location}
-                      required
-                    />
+                        <Select
+                          label="Room *"
+                          options={roomOptions}
+                          value={rackFormData.room}
+                          onChange={(e) => setRackFormData(prev => ({ ...prev, room: e.target.value }))}
+                          error={rackErrors.room}
+                          disabled={!rackFormData.location}
+                          required
+                        />
 
-                    <Input
-                      label="Room Name"
-                      value={roomFormData.name}
-                      onChange={(e) => setRoomFormData(prev => ({ ...prev, name: e.target.value }))}
-                      error={roomErrors.name}
-                      placeholder="e.g., ROOM 1, GODOWN, STORAGE AREA"
-                      required
-                    />
+                        <Input
+                          label="Rack Name *"
+                          value={rackFormData.name}
+                          onChange={(e) => setRackFormData(prev => ({ ...prev, name: e.target.value }))}
+                          error={rackErrors.name}
+                          placeholder="e.g., A1, E2, GD, P2"
+                          required
+                        />
 
-                    <Input
-                      label="Description (Optional)"
-                      value={roomFormData.description}
-                      onChange={(e) => setRoomFormData(prev => ({ ...prev, description: e.target.value }))}
-                      placeholder="Brief description of the room"
-                    />
+                        <Input
+                          label="Description (Optional)"
+                          value={rackFormData.description}
+                          onChange={(e) => setRackFormData(prev => ({ ...prev, description: e.target.value }))}
+                          placeholder="Brief description of the rack"
+                        />
 
-                    {/* <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id="isActive"
-                        checked={roomFormData.isActive}
-                        onChange={(e) => setRoomFormData(prev => ({ ...prev, isActive: e.target.checked }))}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">
-                        Active
-                      </label>
-                    </div> */}
-
-                    {roomErrors.submit && (
-                      <div className="text-red-600 text-sm">{roomErrors.submit}</div>
-                    )}
-
-                    <div className="flex justify-end space-x-3 pt-4">
-                      <Button type="button" variant="outline" onClick={handleRoomModalClose}>
-                        Cancel
-                      </Button>
-                      <Button type="submit" isLoading={loading}>
-                        {selectedRoom ? 'Update' : 'Create'} Room
-                      </Button>
+                        {rackErrors.submit && (
+                          <div className="text-red-600 text-sm">{rackErrors.submit}</div>
+                        )}
+                      </form>
                     </div>
-                  </form>
-                </div>}
-
-                {activeTab === 'racks' && <div className="p-4 overflow-y-auto flex-1">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4">
-                    {isEditingLocation ? 'Edit Location' : 'Add New Location'}
-                  </h3>
-                  <form onSubmit={handleRackSubmit} className="space-y-4">
-                    <Select
-                      label="Location"
-                      options={locationOptions}
-                      value={rackFormData.location}
-                      onChange={(e) => setRackFormData(prev => ({ ...prev, location: e.target.value }))}
-                      error={rackErrors.location}
-                      required
-                    />
-
-                    <Select
-                      label="Room"
-                      options={roomOptions}
-                      value={rackFormData.room}
-                      onChange={(e) => setRackFormData(prev => ({ ...prev, room: e.target.value }))}
-                      error={rackErrors.room}
-                      disabled={!rackFormData.location}
-                      required
-                    />
-
-                    <Input
-                      label="Rack Name"
-                      value={rackFormData.name}
-                      onChange={(e) => setRackFormData(prev => ({ ...prev, name: e.target.value }))}
-                      error={rackErrors.name}
-                      placeholder="e.g., A1, E2, GD, P2"
-                      required
-                    />
-
-                    <Input
-                      label="Description (Optional)"
-                      value={rackFormData.description}
-                      onChange={(e) => setRackFormData(prev => ({ ...prev, description: e.target.value }))}
-                      placeholder="Brief description of the rack"
-                    />
-
-                    {/* <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id="isActive"
-                        checked={rackFormData.isActive}
-                        onChange={(e) => setRackFormData(prev => ({ ...prev, isActive: e.target.checked }))}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">
-                        Active
-                      </label>
-                    </div> */}
-
-                    {rackErrors.submit && (
-                      <div className="text-red-600 text-sm">{rackErrors.submit}</div>
-                    )}
-
-                    <div className="flex justify-end space-x-3 pt-4">
-                      <Button type="button" variant="outline" onClick={handleRackModalClose}>
-                        Cancel
-                      </Button>
-                      <Button type="submit" isLoading={loading}>
-                        {selectedRack ? 'Update' : 'Create'} Rack
-                      </Button>
+                    
+                    {/* Fixed Footer Buttons */}
+                    <div className="p-4 border-t border-gray-200 flex-shrink-0">
+                      <div className="flex justify-end space-x-3">
+                        <Button type="button" variant="outline" onClick={handleRackModalClose}>
+                          Cancel
+                        </Button>
+                        <Button type="button" onClick={handleRackSubmit} isLoading={loading}>
+                          {selectedRack ? 'Update' : 'Create'} Rack
+                        </Button>
+                      </div>
                     </div>
-                  </form>
-                </div>}
+                  </div>
+                )}
 
               </div>
 
               {/* Right side - Existing Locations */}
-              <div className="w-1/2 p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">Existing Locations</h3>
-                  <span className="text-sm text-gray-500">{activeTab === 'locations' ? locations.length : activeTab === 'rooms' ? rooms.length : racks.length + recentRacks.length} {activeTab === 'locations' ? 'locations' : activeTab === 'rooms' ? 'rooms' : 'racks'}</span>
-                </div>
-
-                <div className="space-y-6">
+              <div className="w-1/2 flex flex-col">
+                {/* Fixed Header */}
+                <div className="p-4 border-b border-gray-200 flex-shrink-0">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-medium text-gray-900">Existing Locations</h3>
+                    <span className="text-sm text-gray-500">{activeTab === 'locations' ? locations.length : activeTab === 'rooms' ? rooms.length : racks.length + recentRacks.length} {activeTab === 'locations' ? 'locations' : activeTab === 'rooms' ? 'rooms' : 'racks'}</span>
+                  </div>
+                  
                   {/* Tab Navigation */}
-                  <div className="border-b border-gray-200">
+                  <div className="mt-4">
                     <nav className="-mb-px flex space-x-8">
                       <button
                         onClick={() => setActiveTab('locations')}
@@ -3141,10 +3189,15 @@ const InventoryManagement: React.FC = () => {
                       </button>
                     </nav>
                   </div>
+                </div>
+
+                {/* Scrollable Content */}
+                <div className="flex-1 overflow-y-auto p-4">
+                  <div className="space-y-6">
 
                   {/* Locations Tab */}
                   {activeTab === 'locations' && (
-                    <div className="space-y-4 max-h-80 overflow-y-auto [&::-webkit-scrollbar]:hidden">
+                    <div className="space-y-4">
                       <div className="flex justify-between items-center">
                         <h3 className="text-lg font-medium text-gray-900">Manage Locations</h3>
                       </div>
@@ -3163,6 +3216,11 @@ const InventoryManagement: React.FC = () => {
                                     }`}>
                                     {location.isActive ? 'Active' : 'Inactive'}
                                   </span>
+                                  {location.isPrimary && (
+                                    <span className="px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-200 text-blue-800">
+                                      Primary
+                                    </span>
+                                  )}
                                 </div>
                                 <p className="text-sm text-gray-600 mt-1">{location.address}</p>
                                 <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
@@ -3211,6 +3269,11 @@ const InventoryManagement: React.FC = () => {
                                       }`}>
                                       {location.isActive ? 'Active' : 'Inactive'}
                                     </span>
+                                    {location.isPrimary && (
+                                      <span className="px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-200 text-blue-800">
+                                        Primary
+                                      </span>
+                                    )}
                                   </div>
                                   <p className="text-sm text-gray-600 mt-1">{location.address}</p>
                                   <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
@@ -3248,7 +3311,7 @@ const InventoryManagement: React.FC = () => {
 
                   {/* Rooms Tab */}
                   {activeTab === 'rooms' && (
-                    <div className="space-y-4 max-h-80 overflow-y-auto [&::-webkit-scrollbar]:hidden">
+                    <div className="space-y-4">
                       <div className="flex justify-between items-center">
                         <h3 className="text-lg font-medium text-gray-900">Manage Rooms</h3>
                       </div>
@@ -3350,7 +3413,7 @@ const InventoryManagement: React.FC = () => {
 
                   {/* Racks Tab */}
                   {activeTab === 'racks' && (
-                    <div className="space-y-4 max-h-80 overflow-y-auto [&::-webkit-scrollbar]:hidden">
+                    <div className="space-y-4">
                       <div className="flex justify-between items-center">
                         <h3 className="text-lg font-medium text-gray-900">Manage Racks</h3>
                       </div>
@@ -3435,78 +3498,20 @@ const InventoryManagement: React.FC = () => {
                       </div>
                     </div>
                   )}
+                  </div>
                 </div>
 
-                {/* <div 
-                  className="space-y-3 max-h-80 overflow-y-auto [&::-webkit-scrollbar]:hidden" 
-                  style={{ 
-                    scrollbarWidth: 'none', 
-                    msOverflowStyle: 'none'
-                  }}
-                >
-                  {locations.length === 0 ? (
-                    <div className="text-center py-8 text-gray-500">
-                      <MapPin className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                      <p>No locations found</p>
-                      <p className="text-xs">Create your first location using the form on the left</p>
+                {/* Fixed Footer */}
+                <div className="p-4 border-t border-gray-200 flex-shrink-0">
+                  {locations.length > 0 && (
+                    <div className="p-3 bg-blue-50 rounded-lg">
+                      <p className="text-xs text-blue-700">
+                        💡 <strong>Tip:</strong> You can edit any location by clicking the edit icon.
+                        Locations with active stock cannot be deleted.
+                      </p>
                     </div>
-                  ) : (
-                    locations.map((location) => (
-                      <div key={location._id} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center space-x-2">
-                              <h4 className="font-medium text-gray-900">{location.name}</h4>
-                                            <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
-                location.isActive 
-                  ? 'bg-green-100 text-green-800' 
-                                  : 'bg-red-100 text-red-800'
-                              }`}>
-                                {location.isActive ? 'Active' : 'Inactive'}
-                              </span>
-                            </div>
-                            <p className="text-sm text-gray-600 mt-1">{location.address}</p>
-                            <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
-                              <span className="capitalize">{location.type.replace('_', ' ')}</span>
-                              {location.contactPerson && (
-                                <span>👤 {location.contactPerson}</span>
-                              )}
-                              {location.phone && (
-                                <span>📞 {location.phone}</span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-1 ml-2">
-                            <button
-                              onClick={() => handleEditLocation(location)}
-                              className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Edit Location"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteLocation(location._id)}
-                              className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Delete Location"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    ))
                   )}
-                </div> */}
-
-                {locations.length > 0 && (
-                  <div className="mt-2 p-3 bg-blue-50 rounded-lg">
-                    <p className="text-xs text-blue-700">
-                      💡 <strong>Tip:</strong> You can edit any location by clicking the edit icon.
-                      Locations with active stock cannot be deleted.
-                    </p>
-                  </div>
-                )}
-
+                </div>
               </div>
             </div>
           </div>

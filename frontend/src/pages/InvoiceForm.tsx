@@ -776,17 +776,29 @@ const InvoiceFormPage: React.FC = () => {
 
       setLocations(locationsData);
 
-      // Set "Main Office" as default if not already selected
+      // Set primary location as default if not already selected
       if (!isEditMode) {
-        const mainOffice = locationsData.find(loc => loc.name === "Main Office");
-        if (mainOffice) {
-          setFormData(prev => ({ ...prev, location: mainOffice._id }));
+        const primaryLocation = locationsData.find(loc => loc.isPrimary === true);
+        if (primaryLocation) {
+          setFormData(prev => ({ ...prev, location: primaryLocation._id }));
           
           // Auto-load stock for the default location after a short delay
           setTimeout(() => {
-            console.log('InvoiceForm: Auto-loading stock for default location:', mainOffice._id);
-            loadAllStockForLocation(mainOffice._id);
+            console.log('InvoiceForm: Auto-loading stock for default location:', primaryLocation._id);
+            loadAllStockForLocation(primaryLocation._id);
           }, 500);
+        } else {
+          // Fallback to "Main Office" if no primary location is set
+          const mainOffice = locationsData.find(loc => loc.name === "Main Office");
+          if (mainOffice) {
+            setFormData(prev => ({ ...prev, location: mainOffice._id }));
+            
+            // Auto-load stock for the default location after a short delay
+            setTimeout(() => {
+              console.log('InvoiceForm: Auto-loading stock for default location:', mainOffice._id);
+              loadAllStockForLocation(mainOffice._id);
+            }, 500);
+          }
         }
       }
     } catch (error) {
