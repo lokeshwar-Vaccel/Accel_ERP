@@ -4,6 +4,7 @@ import ItemsTable from './ItemsTable';
 import ServiceChargesTable from './ServiceChargesTable';
 import BatteryBuybackTable from './BatteryBuybackTable';
 import DocumentSummary from './DocumentSummary';
+import InvoiceDetails from './InvoiceDetails';
 
 interface DocumentViewModalProps {
   isOpen: boolean;
@@ -323,6 +324,11 @@ const DocumentViewModal: React.FC<DocumentViewModalProps> = ({
                 )}
               </div>
             </div>
+          )}
+
+          {/* Invoice Details Section - Only for Sale Invoices */}
+          {isInvoice && document.invoiceType === 'sale' && (
+            <InvoiceDetails invoice={document} />
           )}
 
           {/* Amount Mismatch Warning - Only for Invoices */}

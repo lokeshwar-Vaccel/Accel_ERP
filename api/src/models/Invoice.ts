@@ -143,7 +143,22 @@ export interface IInvoice extends mongoose.Document {
   };
   assignedEngineer?: mongoose.Types.ObjectId; // Reference to User with Field Engineer role
   referenceNo?: string;
-  referenceDate?: string;
+  referenceDate?: Date;
+  // Additional invoice fields for tax invoice compliance
+  irn?: string; // Invoice Reference Number
+  ackNumber?: string; // Acknowledgement Number
+  ackDate?: Date; // Acknowledgement Date
+  deliveryNote?: string; // Delivery Note
+  buyersOrderNumber?: string; // Buyer's Order Number
+  buyersOrderDate?: Date; // Buyer's Order Date
+  dispatchDocNo?: string; // Dispatch Document Number
+  dispatchDocDate?: Date; // Dispatch Document Date
+  dispatchedThrough?: string; // Dispatched through
+  termsOfPayment?: string; // Terms of Payment
+  otherReferences?: string; // Other References
+  deliveryNoteDate?: Date; // Delivery Note Date
+  destination?: string; // Destination
+  termsOfDelivery?: string; // Terms of Delivery
 }
 
 // Invoice Item Schema
@@ -627,8 +642,75 @@ const invoiceSchema = new Schema<IInvoice>({
     trim: true
   },
   referenceDate: {
+    type: Date,
+    required: false
+  },
+  // Additional invoice fields for tax invoice compliance
+  irn: {
     type: String,
-    trim: true
+    trim: true,
+    required: false
+  },
+  ackNumber: {
+    type: String,
+    trim: true,
+    required: false
+  },
+  ackDate: {
+    type: Date,
+    required: false
+  },
+  deliveryNote: {
+    type: String,
+    trim: true,
+    required: false
+  },
+  buyersOrderNumber: {
+    type: String,
+    trim: true,
+    required: false
+  },
+  buyersOrderDate: {
+    type: Date,
+    required: false
+  },
+  dispatchDocNo: {
+    type: String,
+    trim: true,
+    required: false
+  },
+  dispatchDocDate: {
+    type: Date,
+    required: false
+  },
+  dispatchedThrough: {
+    type: String,
+    trim: true,
+    required: false
+  },
+  termsOfPayment: {
+    type: String,
+    trim: true,
+    required: false
+  },
+  otherReferences: {
+    type: String,
+    trim: true,
+    required: false
+  },
+  deliveryNoteDate: {
+    type: Date,
+    required: false
+  },
+  destination: {
+    type: String,
+    trim: true,
+    required: false
+  },
+  termsOfDelivery: {
+    type: String,
+    trim: true,
+    required: false
   },
   assignedEngineer: {
     type: Schema.Types.ObjectId,

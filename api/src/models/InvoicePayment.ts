@@ -22,11 +22,11 @@ export interface IPaymentMethodDetails {
   
   // Bank Transfer
   bankTransfer?: {
-    bankName: string;
+    bankName?: string;
     branchName?: string;
-    accountNumber: string;
-    ifscCode: string;
-    transactionId: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    transactionId?: string;
     transferDate: Date;
     accountHolderName?: string;
     referenceNumber?: string;
@@ -34,8 +34,8 @@ export interface IPaymentMethodDetails {
   
   // UPI Payment
   upi?: {
-    upiId: string;
-    transactionId: string;
+    upiId?: string;
+    transactionId?: string;
     transactionReference?: string;
     payerName?: string;
     payerPhone?: string;
@@ -43,10 +43,10 @@ export interface IPaymentMethodDetails {
   
   // Card Payment
   card?: {
-    cardType: 'credit' | 'debit' | 'prepaid';
-    cardNetwork: 'visa' | 'mastercard' | 'amex' | 'rupay' | 'other';
-    lastFourDigits: string;
-    transactionId: string;
+    cardType?: 'credit' | 'debit' | 'prepaid';
+    cardNetwork?: 'visa' | 'mastercard' | 'amex' | 'rupay' | 'other';
+    lastFourDigits?: string;
+    transactionId?: string;
     authorizationCode?: string;
     cardHolderName?: string;
   };

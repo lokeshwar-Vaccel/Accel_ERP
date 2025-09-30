@@ -31,32 +31,17 @@ const validatePaymentMethodDetails = (paymentMethod: string, paymentMethodDetail
         return 'Bank transfer details are required';
       }
       const bankTransferDetails = paymentMethodDetails.bankTransfer;
-      if (!bankTransferDetails.bankName || !bankTransferDetails.accountNumber || 
-          !bankTransferDetails.ifscCode || !bankTransferDetails.transactionId || 
-          !bankTransferDetails.transferDate) {
-        return 'Bank name, account number, IFSC code, transaction ID, and transfer date are required for bank transfers';
+      if (!bankTransferDetails.transferDate) {
+        return 'Transfer date is required for bank transfers';
       }
       break;
 
     case 'upi':
-      if (!paymentMethodDetails.upi) {
-        return 'UPI payment details are required';
-      }
-      const upiDetails = paymentMethodDetails.upi;
-      if (!upiDetails.upiId || !upiDetails.transactionId) {
-        return 'UPI ID and transaction ID are required for UPI payments';
-      }
+      // No required fields for UPI - transaction ID is optional
       break;
 
     case 'card':
-      if (!paymentMethodDetails.card) {
-        return 'Card payment details are required';
-      }
-      const cardDetails = paymentMethodDetails.card;
-      if (!cardDetails.cardType || !cardDetails.cardNetwork || 
-          !cardDetails.lastFourDigits || !cardDetails.transactionId) {
-        return 'Card type, network, last four digits, and transaction ID are required for card payments';
-      }
+      // No required fields for card - transaction ID is optional
       break;
 
     case 'other':

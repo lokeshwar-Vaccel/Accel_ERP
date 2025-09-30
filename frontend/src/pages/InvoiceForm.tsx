@@ -1743,6 +1743,24 @@ const InvoiceFormPage: React.FC = () => {
         // Include company information with bank details
         ...(sanitizedData.company && { company: sanitizedData.company }),
         ...(sanitizedData.assignedEngineer && sanitizedData.assignedEngineer.trim() !== '' && { assignedEngineer: sanitizedData.assignedEngineer }),
+        // Additional invoice fields for tax invoice compliance
+        invoiceNumber: sanitizedData.invoiceNumber || '',
+        irn: sanitizedData.irn || '',
+        ackNumber: sanitizedData.ackNumber || '',
+        ackDate: sanitizedData.ackDate ? new Date(sanitizedData.ackDate).toISOString() : undefined,
+        deliveryNote: sanitizedData.deliveryNote || '',
+        buyersOrderNumber: sanitizedData.buyersOrderNumber || '',
+        buyersOrderDate: sanitizedData.buyersOrderDate ? new Date(sanitizedData.buyersOrderDate).toISOString() : undefined,
+        dispatchDocNo: sanitizedData.dispatchDocNo || '',
+        dispatchDocDate: sanitizedData.dispatchDocDate ? new Date(sanitizedData.dispatchDocDate).toISOString() : undefined,
+        dispatchedThrough: sanitizedData.dispatchedThrough || '',
+        termsOfPayment: sanitizedData.termsOfPayment || '',
+        otherReferences: sanitizedData.otherReferences || '',
+        deliveryNoteDate: sanitizedData.deliveryNoteDate ? new Date(sanitizedData.deliveryNoteDate).toISOString() : undefined,
+        destination: sanitizedData.destination || '',
+        termsOfDelivery: sanitizedData.termsOfDelivery || '',
+        referenceNo: sanitizedData.referenceNo || '',
+        referenceDate: sanitizedData.referenceDate ? new Date(sanitizedData.referenceDate).toISOString() : undefined,
         overallDiscount: sanitizedData.overallDiscount || 0,
         overallDiscountAmount: sanitizedData.overallDiscountAmount || 0,
         reduceStock: reduceStock,
@@ -3230,7 +3248,267 @@ const InvoiceFormPage: React.FC = () => {
               />
             </div>
 
-            {/* Referred By - Only for Sales Invoices */}
+            {/* Invoice Details Section - Additional Fields */}
+            <div className="col-span-3">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b border-gray-200 pb-2">
+                Invoice Details
+              </h3>
+            </div>
+
+            {/* Row 1: Invoice No, Invoice Date, Delivery Note, Terms of Payment */}
+            <div className="col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Invoice No
+                </label>
+                <input
+                  type="text"
+                  value={formData.invoiceNumber || ''}
+                  onChange={(e) => setFormData({ ...formData, invoiceNumber: e.target.value })}
+                  placeholder="Enter invoice number"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Invoice Date
+                </label>
+                <input
+                  type="date"
+                  value={formatDateForInput(formData.issueDate)}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setFormData({ ...formData, issueDate: new Date(e.target.value) });
+                    } else {
+                      setFormData({ ...formData, issueDate: undefined });
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Delivery Note
+                </label>
+                <input
+                  type="text"
+                  value={formData.deliveryNote || ''}
+                  onChange={(e) => setFormData({ ...formData, deliveryNote: e.target.value })}
+                  placeholder="Enter delivery note"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Terms of Payment
+                </label>
+                <input
+                  type="text"
+                  value={formData.termsOfPayment || ''}
+                  onChange={(e) => setFormData({ ...formData, termsOfPayment: e.target.value })}
+                  placeholder="Enter terms of payment"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* Row 2: Reference No, Reference Date, Other References */}
+            <div className="col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Reference No
+                </label>
+                <input
+                  type="text"
+                  value={formData.referenceNo || ''}
+                  onChange={(e) => setFormData({ ...formData, referenceNo: e.target.value })}
+                  placeholder="Enter reference number"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Reference Date
+                </label>
+                <input
+                  type="date"
+                  value={formatDateForInput(formData.referenceDate)}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setFormData({ ...formData, referenceDate: new Date(e.target.value) });
+                    } else {
+                      setFormData({ ...formData, referenceDate: undefined });
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Other References
+                </label>
+                <input
+                  type="text"
+                  value={formData.otherReferences || ''}
+                  onChange={(e) => setFormData({ ...formData, otherReferences: e.target.value })}
+                  placeholder="Enter other references"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* Row 3: Buyer's Order No, Buyer's Order Date */}
+            <div className="col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Buyer's Order No
+                </label>
+                <input
+                  type="text"
+                  value={formData.buyersOrderNumber || ''}
+                  onChange={(e) => setFormData({ ...formData, buyersOrderNumber: e.target.value })}
+                  placeholder="Enter buyer's order number"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Buyer's Order Date
+                </label>
+                <input
+                  type="date"
+                  value={formatDateForInput(formData.buyersOrderDate)}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setFormData({ ...formData, buyersOrderDate: new Date(e.target.value) });
+                    } else {
+                      setFormData({ ...formData, buyersOrderDate: undefined });
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* Row 4: Dispatch Doc No, Delivery Note Date */}
+            <div className="col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Dispatch Doc No
+                </label>
+                <input
+                  type="text"
+                  value={formData.dispatchDocNo || ''}
+                  onChange={(e) => setFormData({ ...formData, dispatchDocNo: e.target.value })}
+                  placeholder="Enter dispatch document number"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Delivery Note Date
+                </label>
+                <input
+                  type="date"
+                  value={formatDateForInput(formData.deliveryNoteDate)}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setFormData({ ...formData, deliveryNoteDate: new Date(e.target.value) });
+                    } else {
+                      setFormData({ ...formData, deliveryNoteDate: undefined });
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* Row 5: Dispatched through, Destination */}
+            <div className="col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Dispatched through
+                </label>
+                <input
+                  type="text"
+                  value={formData.dispatchedThrough || ''}
+                  onChange={(e) => setFormData({ ...formData, dispatchedThrough: e.target.value })}
+                  placeholder="Enter dispatch method"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Destination
+                </label>
+                <input
+                  type="text"
+                  value={formData.destination || ''}
+                  onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
+                  placeholder="Enter destination"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            {/* Row 6: Terms of Delivery */}
+            <div className="col-span-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Terms of Delivery
+              </label>
+              <textarea
+                value={formData.termsOfDelivery || ''}
+                onChange={(e) => setFormData({ ...formData, termsOfDelivery: e.target.value })}
+                placeholder="Enter terms of delivery"
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+
+            {/* Row 7: IRN, Ack No, Ack Date */}
+            <div className="col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  IRN (Invoice Reference Number)
+                </label>
+                <input
+                  type="text"
+                  value={formData.irn || ''}
+                  onChange={(e) => setFormData({ ...formData, irn: e.target.value })}
+                  placeholder="Enter IRN"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ack No (Acknowledgement Number)
+                </label>
+                <input
+                  type="text"
+                  value={formData.ackNumber || ''}
+                  onChange={(e) => setFormData({ ...formData, ackNumber: e.target.value })}
+                  placeholder="Enter acknowledgement number"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ack Date (Acknowledgement Date)
+                </label>
+                <input
+                  type="date"
+                  value={formatDateForInput(formData.ackDate)}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setFormData({ ...formData, ackDate: new Date(e.target.value) });
+                    } else {
+                      setFormData({ ...formData, ackDate: undefined });
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+            </div>
             {isSalesInvoice && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

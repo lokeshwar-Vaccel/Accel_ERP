@@ -119,6 +119,24 @@ export interface QuotationData {
     gstNumber?: string;
   };
   assignedEngineer?: string; // Add assigned engineer field
+  // Additional invoice fields for tax invoice compliance
+  invoiceNumber?: string; // Invoice Number
+  irn?: string; // Invoice Reference Number
+  ackNumber?: string; // Acknowledgement Number
+  ackDate?: Date; // Acknowledgement Date
+  deliveryNote?: string; // Delivery Note
+  buyersOrderNumber?: string; // Buyer's Order Number
+  buyersOrderDate?: Date; // Buyer's Order Date
+  dispatchDocNo?: string; // Dispatch Document Number
+  dispatchDocDate?: Date; // Dispatch Document Date
+  dispatchedThrough?: string; // Dispatched through
+  termsOfPayment?: string; // Terms of Payment
+  otherReferences?: string; // Other References
+  deliveryNoteDate?: Date; // Delivery Note Date
+  destination?: string; // Destination
+  termsOfDelivery?: string; // Terms of Delivery
+  referenceNo?: string; // Reference Number
+  referenceDate?: Date; // Reference Date
   // Payment fields
   paidAmount?: number;
   remainingAmount?: number;

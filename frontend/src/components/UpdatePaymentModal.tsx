@@ -256,45 +256,15 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
           break;
         case 'bank_transfer':
           const bankTransferDetails = paymentData.paymentMethodDetails.bankTransfer;
-          if (!bankTransferDetails?.bankName) {
-            errors.bankName = 'Bank name is required';
-          }
-          if (!bankTransferDetails?.accountNumber) {
-            errors.accountNumber = 'Account number is required';
-          }
-          if (!bankTransferDetails?.ifscCode) {
-            errors.ifscCode = 'IFSC code is required';
-          }
-          if (!bankTransferDetails?.transactionId) {
-            errors.transactionId = 'Transaction ID is required';
-          }
           if (!bankTransferDetails?.transferDate) {
             errors.transferDate = 'Transfer date is required';
           }
           break;
         case 'upi':
-          const upiDetails = paymentData.paymentMethodDetails.upi;
-          if (!upiDetails?.upiId) {
-            errors.upiId = 'UPI ID is required';
-          }
-          if (!upiDetails?.transactionId) {
-            errors.transactionId = 'Transaction ID is required';
-          }
+          // No required fields for UPI - transaction ID is optional
           break;
         case 'card':
-          const cardDetails = paymentData.paymentMethodDetails.card;
-          if (!cardDetails?.cardType) {
-            errors.cardType = 'Card type is required';
-          }
-          if (!cardDetails?.cardNetwork) {
-            errors.cardNetwork = 'Card network is required';
-          }
-          if (!cardDetails?.lastFourDigits) {
-            errors.lastFourDigits = 'Last 4 digits are required';
-          }
-          if (!cardDetails?.transactionId) {
-            errors.transactionId = 'Transaction ID is required';
-          }
+          // No required fields for card - transaction ID is optional
           break;
         case 'other':
           const otherDetails = paymentData.paymentMethodDetails.other;
@@ -892,18 +862,6 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                               placeholder="Enter account holder name"
                             />
                           </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Account Number
-                            </label>
-                            <input
-                              type="text"
-                              value={paymentData.paymentMethodDetails?.cheque?.accountNumber || ''}
-                              onChange={(e) => updatePaymentMethodDetails('cheque', 'accountNumber', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                              placeholder="Enter account number"
-                            />
-                          </div>
                         </div>
                       )}
 
@@ -912,70 +870,7 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Bank Name <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              value={paymentData.paymentMethodDetails?.bankTransfer?.bankName || ''}
-                              onChange={(e) => {
-                                updatePaymentMethodDetails('bankTransfer', 'bankName', e.target.value);
-                                if (formErrors.bankName) {
-                                  setFormErrors(prev => ({ ...prev, bankName: '' }));
-                                }
-                              }}
-                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.bankName ? 'border-red-500' : 'border-gray-300'}`}
-                              placeholder="Enter bank name"
-                              required
-                            />
-                            {formErrors.bankName && (
-                              <p className="text-red-500 text-xs mt-1">{formErrors.bankName}</p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Account Number <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              value={paymentData.paymentMethodDetails?.bankTransfer?.accountNumber || ''}
-                              onChange={(e) => {
-                                updatePaymentMethodDetails('bankTransfer', 'accountNumber', e.target.value);
-                                if (formErrors.accountNumber) {
-                                  setFormErrors(prev => ({ ...prev, accountNumber: '' }));
-                                }
-                              }}
-                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.accountNumber ? 'border-red-500' : 'border-gray-300'}`}
-                              placeholder="Enter account number"
-                              required
-                            />
-                            {formErrors.accountNumber && (
-                              <p className="text-red-500 text-xs mt-1">{formErrors.accountNumber}</p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              IFSC Code <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              value={paymentData.paymentMethodDetails?.bankTransfer?.ifscCode || ''}
-                              onChange={(e) => {
-                                updatePaymentMethodDetails('bankTransfer', 'ifscCode', e.target.value);
-                                if (formErrors.ifscCode) {
-                                  setFormErrors(prev => ({ ...prev, ifscCode: '' }));
-                                }
-                              }}
-                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.ifscCode ? 'border-red-500' : 'border-gray-300'}`}
-                              placeholder="Enter IFSC code"
-                              required
-                            />
-                            {formErrors.ifscCode && (
-                              <p className="text-red-500 text-xs mt-1">{formErrors.ifscCode}</p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Transaction ID <span className="text-red-500">*</span>
+                              Transaction ID
                             </label>
                             <input
                               type="text"
@@ -988,7 +883,6 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                               }}
                               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.transactionId ? 'border-red-500' : 'border-gray-300'}`}
                               placeholder="Enter transaction ID"
-                              required
                             />
                             {formErrors.transactionId && (
                               <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
@@ -1034,28 +928,7 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                              UPI ID <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              value={paymentData.paymentMethodDetails?.upi?.upiId || ''}
-                              onChange={(e) => {
-                                updatePaymentMethodDetails('upi', 'upiId', e.target.value);
-                                if (formErrors.upiId) {
-                                  setFormErrors(prev => ({ ...prev, upiId: '' }));
-                                }
-                              }}
-                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.upiId ? 'border-red-500' : 'border-gray-300'}`}
-                              placeholder="Enter UPI ID"
-                              required
-                            />
-                            {formErrors.upiId && (
-                              <p className="text-red-500 text-xs mt-1">{formErrors.upiId}</p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Transaction ID <span className="text-red-500">*</span>
+                              Transaction ID
                             </label>
                             <input
                               type="text"
@@ -1068,7 +941,6 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                               }}
                               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.transactionId ? 'border-red-500' : 'border-gray-300'}`}
                               placeholder="Enter transaction ID"
-                              required
                             />
                             {formErrors.transactionId && (
                               <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
@@ -1086,18 +958,6 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                               placeholder="Enter payer name"
                             />
                           </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Payer Phone
-                            </label>
-                            <input
-                              type="text"
-                              value={paymentData.paymentMethodDetails?.upi?.payerPhone || ''}
-                              onChange={(e) => updatePaymentMethodDetails('upi', 'payerPhone', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                              placeholder="Enter payer phone"
-                            />
-                          </div>
                         </div>
                       )}
 
@@ -1106,79 +966,7 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Card Type <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                              value={paymentData.paymentMethodDetails?.card?.cardType || ''}
-                              onChange={(e) => {
-                                updatePaymentMethodDetails('card', 'cardType', e.target.value);
-                                if (formErrors.cardType) {
-                                  setFormErrors(prev => ({ ...prev, cardType: '' }));
-                                }
-                              }}
-                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.cardType ? 'border-red-500' : 'border-gray-300'}`}
-                              required
-                            >
-                              <option value="">Select card type</option>
-                              <option value="credit">Credit Card</option>
-                              <option value="debit">Debit Card</option>
-                              <option value="prepaid">Prepaid Card</option>
-                            </select>
-                            {formErrors.cardType && (
-                              <p className="text-red-500 text-xs mt-1">{formErrors.cardType}</p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Card Network <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                              value={paymentData.paymentMethodDetails?.card?.cardNetwork || ''}
-                              onChange={(e) => {
-                                updatePaymentMethodDetails('card', 'cardNetwork', e.target.value);
-                                if (formErrors.cardNetwork) {
-                                  setFormErrors(prev => ({ ...prev, cardNetwork: '' }));
-                                }
-                              }}
-                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.cardNetwork ? 'border-red-500' : 'border-gray-300'}`}
-                              required
-                            >
-                              <option value="">Select card network</option>
-                              <option value="visa">Visa</option>
-                              <option value="mastercard">Mastercard</option>
-                              <option value="amex">American Express</option>
-                              <option value="rupay">RuPay</option>
-                              <option value="other">Other</option>
-                            </select>
-                            {formErrors.cardNetwork && (
-                              <p className="text-red-500 text-xs mt-1">{formErrors.cardNetwork}</p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Last 4 Digits <span className="text-red-500">*</span>
-                            </label>
-                            <input
-                              type="text"
-                              maxLength={4}
-                              value={paymentData.paymentMethodDetails?.card?.lastFourDigits || ''}
-                              onChange={(e) => {
-                                updatePaymentMethodDetails('card', 'lastFourDigits', e.target.value);
-                                if (formErrors.lastFourDigits) {
-                                  setFormErrors(prev => ({ ...prev, lastFourDigits: '' }));
-                                }
-                              }}
-                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.lastFourDigits ? 'border-red-500' : 'border-gray-300'}`}
-                              placeholder="Last 4 digits"
-                              required
-                            />
-                            {formErrors.lastFourDigits && (
-                              <p className="text-red-500 text-xs mt-1">{formErrors.lastFourDigits}</p>
-                            )}
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Transaction ID <span className="text-red-500">*</span>
+                              Transaction ID
                             </label>
                             <input
                               type="text"
@@ -1191,7 +979,6 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                               }}
                               className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.transactionId ? 'border-red-500' : 'border-gray-300'}`}
                               placeholder="Enter transaction ID"
-                              required
                             />
                             {formErrors.transactionId && (
                               <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
@@ -1199,26 +986,14 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Card Holder Name
+                              Payer Name
                             </label>
                             <input
                               type="text"
                               value={paymentData.paymentMethodDetails?.card?.cardHolderName || ''}
                               onChange={(e) => updatePaymentMethodDetails('card', 'cardHolderName', e.target.value)}
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                              placeholder="Enter card holder name"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Authorization Code
-                            </label>
-                            <input
-                              type="text"
-                              value={paymentData.paymentMethodDetails?.card?.authorizationCode || ''}
-                              onChange={(e) => updatePaymentMethodDetails('card', 'authorizationCode', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                              placeholder="Enter authorization code"
+                              placeholder="Enter payer name"
                             />
                           </div>
                         </div>

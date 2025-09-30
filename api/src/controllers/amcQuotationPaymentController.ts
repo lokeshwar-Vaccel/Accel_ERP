@@ -459,23 +459,17 @@ const validatePaymentMethodDetails = (paymentMethod: string, details: any): stri
 
     case 'bank_transfer':
     case 'bankTransfer':
-      if (!details.bankTransfer?.accountNumber || !details.bankTransfer?.ifscCode || 
-          !details.bankTransfer?.transactionId || !details.bankTransfer?.transferDate) {
-        return 'Account number, IFSC code, transaction ID, and transfer date are required for bank transfer payments';
+      if (!details.bankTransfer?.transferDate) {
+        return 'Transfer date is required for bank transfer payments';
       }
       break;
 
     case 'upi':
-      if (!details.upi?.upiId || !details.upi?.transactionId) {
-        return 'UPI ID and transaction ID are required for UPI payments';
-      }
+      // No required fields for UPI - transaction ID is optional
       break;
 
     case 'card':
-      if (!details.card?.cardType || !details.card?.cardNetwork || 
-          !details.card?.lastFourDigits || !details.card?.transactionId) {
-        return 'Card type, network, last four digits, and transaction ID are required for card payments';
-      }
+      // No required fields for card - transaction ID is optional
       break;
 
     case 'other':

@@ -202,10 +202,26 @@ export const createInvoice = async (
       qrCodeImage,
       serviceCharges,
       batteryBuyBack,
+      // Additional invoice fields for tax invoice compliance
+      invoiceNumber: providedInvoiceNumber,
+      irn,
+      ackNumber,
+      ackDate,
+      deliveryNote,
+      buyersOrderNumber,
+      buyersOrderDate,
+      dispatchDocNo,
+      dispatchDocDate,
+      dispatchedThrough,
+      termsOfPayment,
+      otherReferences,
+      deliveryNoteDate,
+      destination,
+      termsOfDelivery,
     } = req.body;
 
-    // Generate invoice number
-    const invoiceNumber = await generateReferenceId('invoice');
+    // Use provided invoice number or generate one
+    const invoiceNumber = providedInvoiceNumber || await generateReferenceId('invoice');
 
     // Debug quotation and PO From Customer data
     console.log('Quotation and PO From Customer data received:', {
@@ -445,6 +461,21 @@ export const createInvoice = async (
       ...(hourMeterReading && { hourMeterReading }),
       ...(serviceRequestDate && { serviceRequestDate: new Date(serviceRequestDate) }),
       ...(qrCodeImage && { qrCodeImage }),
+      // Additional invoice fields for tax invoice compliance
+      ...(irn && { irn }),
+      ...(ackNumber && { ackNumber }),
+      ...(ackDate && { ackDate: new Date(ackDate) }),
+      ...(deliveryNote && { deliveryNote }),
+      ...(buyersOrderNumber && { buyersOrderNumber }),
+      ...(buyersOrderDate && { buyersOrderDate: new Date(buyersOrderDate) }),
+      ...(dispatchDocNo && { dispatchDocNo }),
+      ...(dispatchDocDate && { dispatchDocDate: new Date(dispatchDocDate) }),
+      ...(dispatchedThrough && { dispatchedThrough }),
+      ...(termsOfPayment && { termsOfPayment }),
+      ...(otherReferences && { otherReferences }),
+      ...(deliveryNoteDate && { deliveryNoteDate: new Date(deliveryNoteDate) }),
+      ...(destination && { destination }),
+      ...(termsOfDelivery && { termsOfDelivery }),
       // Sanitize service charges with hsnNumber
       ...(serviceCharges && serviceCharges.length > 0 && { 
         serviceCharges: serviceCharges.map((service: any) => ({

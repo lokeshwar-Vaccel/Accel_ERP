@@ -20,23 +20,13 @@ const validatePaymentMethodDetails = (paymentMethod: string, paymentMethodDetail
       break;
     case 'bank_transfer':
       const bankTransferDetails = paymentMethodDetails.bankTransfer || paymentMethodDetails;
-      if (!bankTransferDetails.bankName) return 'Bank name is required';
-      if (!bankTransferDetails.accountNumber) return 'Account number is required';
-      if (!bankTransferDetails.ifscCode) return 'IFSC code is required';
-      if (!bankTransferDetails.transactionId) return 'Transaction ID is required';
       if (!bankTransferDetails.transferDate) return 'Transfer date is required';
       break;
     case 'upi':
-      const upiDetails = paymentMethodDetails.upi || paymentMethodDetails;
-      if (!upiDetails.upiId) return 'UPI ID is required';
-      if (!upiDetails.transactionId) return 'Transaction ID is required';
+      // No required fields for UPI - transaction ID is optional
       break;
     case 'card':
-      const cardDetails = paymentMethodDetails.card || paymentMethodDetails;
-      if (!cardDetails.cardType) return 'Card type is required';
-      if (!cardDetails.cardNetwork) return 'Card network is required';
-      if (!cardDetails.lastFourDigits) return 'Last 4 digits are required';
-      if (!cardDetails.transactionId) return 'Transaction ID is required';
+      // No required fields for card - transaction ID is optional
       break;
     case 'other':
       const otherDetails = paymentMethodDetails.other || paymentMethodDetails;

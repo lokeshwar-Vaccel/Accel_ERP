@@ -335,24 +335,17 @@ const validatePaymentMethodDetails = (paymentMethod: string, details: IPaymentMe
       return null;
 
     case 'bank_transfer':
-      if (!details.bankTransfer?.bankName || !details.bankTransfer?.accountNumber || 
-          !details.bankTransfer?.ifscCode || !details.bankTransfer?.transactionId || 
-          !details.bankTransfer?.transferDate) {
-        return 'Bank transfer requires bank name, account number, IFSC code, transaction ID, and transfer date';
+      if (!details.bankTransfer?.transferDate) {
+        return 'Bank transfer requires transfer date';
       }
       return null;
 
     case 'upi':
-      if (!details.upi?.upiId || !details.upi?.transactionId) {
-        return 'UPI payment requires UPI ID and transaction ID';
-      }
+      // No required fields for UPI - transaction ID is optional
       return null;
 
     case 'card':
-      if (!details.card?.cardType || !details.card?.cardNetwork || 
-          !details.card?.lastFourDigits || !details.card?.transactionId) {
-        return 'Card payment requires card type, network, last 4 digits, and transaction ID';
-      }
+      // No required fields for card - transaction ID is optional
       return null;
 
     case 'other':

@@ -837,9 +837,9 @@ interface PaymentUpdate {
   paymentMethodDetails?: {
     cash?: { receivedBy?: string; receiptNumber?: string };
     cheque?: { chequeNumber: string; bankName: string; branchName?: string; issueDate: Date; clearanceDate?: Date; accountHolderName?: string; accountNumber?: string; ifscCode?: string };
-    bankTransfer?: { bankName: string; branchName?: string; accountNumber: string; ifscCode: string; transactionId: string; transferDate: Date; accountHolderName?: string; referenceNumber?: string };
-    upi?: { upiId: string; transactionId: string; transactionReference?: string; payerName?: string; payerPhone?: string };
-    card?: { cardType: 'credit' | 'debit' | 'prepaid'; cardNetwork: 'visa' | 'mastercard' | 'amex' | 'rupay' | 'other'; lastFourDigits: string; transactionId: string; authorizationCode?: string; cardHolderName?: string };
+    bankTransfer?: { bankName?: string; branchName?: string; accountNumber?: string; ifscCode?: string; transactionId?: string; transferDate: Date; accountHolderName?: string; referenceNumber?: string };
+    upi?: { upiId?: string; transactionId?: string; transactionReference?: string; payerName?: string; payerPhone?: string };
+    card?: { cardType?: 'credit' | 'debit' | 'prepaid'; cardNetwork?: 'visa' | 'mastercard' | 'amex' | 'rupay' | 'other'; lastFourDigits?: string; transactionId?: string; authorizationCode?: string; cardHolderName?: string };
     other?: { methodName: string; referenceNumber?: string; additionalDetails?: Record<string, any> };
   };
 }
@@ -965,6 +965,8 @@ const InvoiceManagement: React.FC = () => {
   const [viewDeliveryChallan, setViewDeliveryChallan] = useState<any>(null);
   const [showDeliveryChallanViewModal, setShowDeliveryChallanViewModal] = useState(false);
 
+  console.log("viewDeliveryChallan:",viewDeliveryChallan);
+  
   const [currentPage, setCurrentPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
@@ -3002,45 +3004,17 @@ const InvoiceManagement: React.FC = () => {
         break;
 
       case 'bank_transfer':
-        if (!methodDetails?.bankTransfer?.bankName?.trim()) {
-          errors.bankName = 'Bank name is required';
-        }
-        if (!methodDetails?.bankTransfer?.accountNumber?.trim()) {
-          errors.accountNumber = 'Account number is required';
-        }
-        if (!methodDetails?.bankTransfer?.ifscCode?.trim()) {
-          errors.ifscCode = 'IFSC code is required';
-        }
-        if (!methodDetails?.bankTransfer?.transactionId?.trim()) {
-          errors.transactionId = 'Transaction ID is required';
-        }
         if (!methodDetails?.bankTransfer?.transferDate) {
           errors.transferDate = 'Transfer date is required';
         }
         break;
 
       case 'upi':
-        if (!methodDetails?.upi?.upiId?.trim()) {
-          errors.upiId = 'UPI ID is required';
-        }
-        if (!methodDetails?.upi?.transactionId?.trim()) {
-          errors.transactionId = 'Transaction ID is required';
-        }
+        // No required fields for UPI - transaction ID is optional
         break;
 
       case 'card':
-        if (!methodDetails?.card?.cardType?.trim()) {
-          errors.cardType = 'Card type is required';
-        }
-        if (!methodDetails?.card?.cardNetwork?.trim()) {
-          errors.cardNetwork = 'Card network is required';
-        }
-        if (!methodDetails?.card?.lastFourDigits?.trim()) {
-          errors.lastFourDigits = 'Last 4 digits are required';
-        }
-        if (!methodDetails?.card?.transactionId?.trim()) {
-          errors.transactionId = 'Transaction ID is required';
-        }
+        // No required fields for card - transaction ID is optional
         break;
 
       case 'other':
@@ -7762,96 +7736,27 @@ const printQuotation = (quotation: any) => {
                                   />
                                 </div>
                               </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Account Holder Name</label>
-                                  <input
-                                    type="text"
-                                    value={paymentUpdate.paymentMethodDetails?.cheque?.accountHolderName || ''}
-                                    onChange={(e) => setPaymentUpdate({
-                                      ...paymentUpdate,
-                                      paymentMethodDetails: {
-                                        ...paymentUpdate.paymentMethodDetails,
-                                        cheque: {
-                                          ...paymentUpdate.paymentMethodDetails?.cheque,
-                                          accountHolderName: e.target.value,
-                                          chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
-                                          bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
-                                          issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
-                                        }
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Account Holder Name</label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.cheque?.accountHolderName || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      cheque: {
+                                        ...paymentUpdate.paymentMethodDetails?.cheque,
+                                        accountHolderName: e.target.value,
+                                        chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
+                                        bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
+                                        issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
                                       }
-                                    })}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="Enter account holder name"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Account Number</label>
-                                  <input
-                                    type="text"
-                                    value={paymentUpdate.paymentMethodDetails?.cheque?.accountNumber || ''}
-                                    onChange={(e) => setPaymentUpdate({
-                                      ...paymentUpdate,
-                                      paymentMethodDetails: {
-                                        ...paymentUpdate.paymentMethodDetails,
-                                        cheque: {
-                                          ...paymentUpdate.paymentMethodDetails?.cheque,
-                                          accountNumber: e.target.value,
-                                          chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
-                                          bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
-                                          issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
-                                        }
-                                      }
-                                    })}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="Enter account number"
-                                  />
-                                </div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">IFSC Code</label>
-                                  <input
-                                    type="text"
-                                    value={paymentUpdate.paymentMethodDetails?.cheque?.ifscCode || ''}
-                                    onChange={(e) => setPaymentUpdate({
-                                      ...paymentUpdate,
-                                      paymentMethodDetails: {
-                                        ...paymentUpdate.paymentMethodDetails,
-                                        cheque: {
-                                          ...paymentUpdate.paymentMethodDetails?.cheque,
-                                          ifscCode: e.target.value,
-                                          chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
-                                          bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
-                                          issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
-                                        }
-                                      }
-                                    })}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="Enter IFSC code"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Clearance Date</label>
-                                  <input
-                                    type="date"
-                                    value={paymentUpdate.paymentMethodDetails?.cheque?.clearanceDate ? new Date(paymentUpdate.paymentMethodDetails.cheque.clearanceDate).toISOString().split('T')[0] : ''}
-                                    onChange={(e) => setPaymentUpdate({
-                                      ...paymentUpdate,
-                                      paymentMethodDetails: {
-                                        ...paymentUpdate.paymentMethodDetails,
-                                        cheque: {
-                                          ...paymentUpdate.paymentMethodDetails?.cheque,
-                                          clearanceDate: new Date(e.target.value),
-                                          chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
-                                          bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
-                                          issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
-                                        }
-                                      }
-                                    })}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                  />
-                                </div>
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="Enter account holder name"
+                                />
                               </div>
                             </div>
                           )}
@@ -7860,102 +7765,7 @@ const printQuotation = (quotation: any) => {
                             <div className="space-y-3">
                               <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Bank Name *</label>
-                                  <input
-                                    type="text"
-                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || ''}
-                                    onChange={(e) => {
-                                      setPaymentUpdate({
-                                        ...paymentUpdate,
-                                        paymentMethodDetails: {
-                                          ...paymentUpdate.paymentMethodDetails,
-                                          bankTransfer: {
-                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer,
-                                            bankName: e.target.value,
-                                            accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
-                                            ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
-                                            transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
-                                            transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date()
-                                          }
-                                        }
-                                      });
-                                      if (formErrors.bankName) {
-                                        setFormErrors(prev => ({ ...prev, bankName: '' }));
-                                      }
-                                    }}
-                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.bankName ? 'border-red-500' : 'border-gray-300'}`}
-                                    placeholder="Enter bank name"
-                                  />
-                                  {formErrors.bankName && (
-                                    <p className="text-red-500 text-xs mt-1">{formErrors.bankName}</p>
-                                  )}
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Account Number *</label>
-                                  <input
-                                    type="text"
-                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || ''}
-                                    onChange={(e) => {
-                                      setPaymentUpdate({
-                                        ...paymentUpdate,
-                                        paymentMethodDetails: {
-                                          ...paymentUpdate.paymentMethodDetails,
-                                          bankTransfer: {
-                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer,
-                                            accountNumber: e.target.value,
-                                            bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
-                                            ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
-                                            transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
-                                            transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date()
-                                          }
-                                        }
-                                      });
-                                      if (formErrors.accountNumber) {
-                                        setFormErrors(prev => ({ ...prev, accountNumber: '' }));
-                                      }
-                                    }}
-                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.accountNumber ? 'border-red-500' : 'border-gray-300'}`}
-                                    placeholder="Enter account number"
-                                  />
-                                  {formErrors.accountNumber && (
-                                    <p className="text-red-500 text-xs mt-1">{formErrors.accountNumber}</p>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">IFSC Code *</label>
-                                  <input
-                                    type="text"
-                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || ''}
-                                    onChange={(e) => {
-                                      setPaymentUpdate({
-                                        ...paymentUpdate,
-                                        paymentMethodDetails: {
-                                          ...paymentUpdate.paymentMethodDetails,
-                                          bankTransfer: {
-                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer,
-                                            ifscCode: e.target.value,
-                                            bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
-                                            accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
-                                            transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
-                                            transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date()
-                                          }
-                                        }
-                                      });
-                                      if (formErrors.ifscCode) {
-                                        setFormErrors(prev => ({ ...prev, ifscCode: '' }));
-                                      }
-                                    }}
-                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.ifscCode ? 'border-red-500' : 'border-gray-300'}`}
-                                    placeholder="Enter IFSC code"
-                                  />
-                                  {formErrors.ifscCode && (
-                                    <p className="text-red-500 text-xs mt-1">{formErrors.ifscCode}</p>
-                                  )}
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transaction ID *</label>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transaction ID</label>
                                   <input
                                     type="text"
                                     value={paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || ''}
@@ -7967,9 +7777,6 @@ const printQuotation = (quotation: any) => {
                                           bankTransfer: {
                                             ...paymentUpdate.paymentMethodDetails?.bankTransfer,
                                             transactionId: e.target.value,
-                                            bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
-                                            accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
-                                            ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
                                             transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date()
                                           }
                                         }
@@ -7985,8 +7792,6 @@ const printQuotation = (quotation: any) => {
                                     <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
                                   )}
                                 </div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-3">
                                 <div>
                                   <label className="block text-xs font-medium text-gray-600 mb-1">Transfer Date *</label>
                                   <input
@@ -7998,14 +7803,9 @@ const printQuotation = (quotation: any) => {
                                         paymentMethodDetails: {
                                           ...paymentUpdate.paymentMethodDetails,
                                           bankTransfer: {
-                                            bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
-                                            branchName: paymentUpdate.paymentMethodDetails?.bankTransfer?.branchName || '',
-                                            accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
-                                            ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
-                                            transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
+                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer,
                                             transferDate: new Date(e.target.value),
-                                            accountHolderName: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountHolderName || '',
-                                            referenceNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.referenceNumber || ''
+                                            transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || ''
                                           }
                                         }
                                       });
@@ -8019,83 +7819,27 @@ const printQuotation = (quotation: any) => {
                                     <p className="text-red-500 text-xs mt-1">{formErrors.transferDate}</p>
                                   )}
                                 </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Branch Name</label>
-                                  <input
-                                    type="text"
-                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.branchName || ''}
-                                    onChange={(e) => setPaymentUpdate({
-                                      ...paymentUpdate,
-                                      paymentMethodDetails: {
-                                        ...paymentUpdate.paymentMethodDetails,
-                                        bankTransfer: {
-                                          bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
-                                          branchName: e.target.value,
-                                          accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
-                                          ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
-                                          transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
-                                          transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date(),
-                                          accountHolderName: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountHolderName || '',
-                                          referenceNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.referenceNumber || ''
-                                        }
-                                      }
-                                    })}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="Enter branch name"
-                                  />
-                                </div>
                               </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Account Holder Name</label>
-                                  <input
-                                    type="text"
-                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.accountHolderName || ''}
-                                    onChange={(e) => setPaymentUpdate({
-                                      ...paymentUpdate,
-                                      paymentMethodDetails: {
-                                        ...paymentUpdate.paymentMethodDetails,
-                                        bankTransfer: {
-                                          bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
-                                          branchName: paymentUpdate.paymentMethodDetails?.bankTransfer?.branchName || '',
-                                          accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
-                                          ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
-                                          transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
-                                          transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date(),
-                                          accountHolderName: e.target.value,
-                                          referenceNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.referenceNumber || ''
-                                        }
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Reference Number</label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.bankTransfer?.referenceNumber || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      bankTransfer: {
+                                        ...paymentUpdate.paymentMethodDetails?.bankTransfer,
+                                        referenceNumber: e.target.value,
+                                        transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
+                                        transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date()
                                       }
-                                    })}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="Enter account holder name"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Reference Number</label>
-                                  <input
-                                    type="text"
-                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.referenceNumber || ''}
-                                    onChange={(e) => setPaymentUpdate({
-                                      ...paymentUpdate,
-                                      paymentMethodDetails: {
-                                        ...paymentUpdate.paymentMethodDetails,
-                                        bankTransfer: {
-                                          bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
-                                          branchName: paymentUpdate.paymentMethodDetails?.bankTransfer?.branchName || '',
-                                          accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
-                                          ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
-                                          transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
-                                          transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date(),
-                                          accountHolderName: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountHolderName || '',
-                                          referenceNumber: e.target.value
-                                        }
-                                      }
-                                    })}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="Enter reference number"
-                                  />
-                                </div>
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="Enter reference number"
+                                />
                               </div>
                             </div>
                           )}
@@ -8104,37 +7848,7 @@ const printQuotation = (quotation: any) => {
                             <div className="space-y-3">
                               <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">UPI ID *</label>
-                                  <input
-                                    type="text"
-                                    value={paymentUpdate.paymentMethodDetails?.upi?.upiId || ''}
-                                    onChange={(e) => {
-                                      setPaymentUpdate({
-                                        ...paymentUpdate,
-                                        paymentMethodDetails: {
-                                          ...paymentUpdate.paymentMethodDetails,
-                                          upi: {
-                                            upiId: e.target.value,
-                                            transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || '',
-                                            transactionReference: paymentUpdate.paymentMethodDetails?.upi?.transactionReference || '',
-                                            payerName: paymentUpdate.paymentMethodDetails?.upi?.payerName || '',
-                                            payerPhone: paymentUpdate.paymentMethodDetails?.upi?.payerPhone || ''
-                                          }
-                                        }
-                                      });
-                                      if (formErrors.upiId) {
-                                        setFormErrors(prev => ({ ...prev, upiId: '' }));
-                                      }
-                                    }}
-                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.upiId ? 'border-red-500' : 'border-gray-300'}`}
-                                    placeholder="Enter UPI ID"
-                                  />
-                                  {formErrors.upiId && (
-                                    <p className="text-red-500 text-xs mt-1">{formErrors.upiId}</p>
-                                  )}
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transaction ID *</label>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transaction ID</label>
                                   <input
                                     type="text"
                                     value={paymentUpdate.paymentMethodDetails?.upi?.transactionId || ''}
@@ -8144,11 +7858,9 @@ const printQuotation = (quotation: any) => {
                                         paymentMethodDetails: {
                                           ...paymentUpdate.paymentMethodDetails,
                                           upi: {
-                                            upiId: paymentUpdate.paymentMethodDetails?.upi?.upiId || '',
+                                            ...paymentUpdate.paymentMethodDetails?.upi,
                                             transactionId: e.target.value,
-                                            transactionReference: paymentUpdate.paymentMethodDetails?.upi?.transactionReference || '',
-                                            payerName: paymentUpdate.paymentMethodDetails?.upi?.payerName || '',
-                                            payerPhone: paymentUpdate.paymentMethodDetails?.upi?.payerPhone || ''
+                                            payerName: paymentUpdate.paymentMethodDetails?.upi?.payerName || ''
                                           }
                                         }
                                       });
@@ -8162,30 +7874,6 @@ const printQuotation = (quotation: any) => {
                                   {formErrors.transactionId && (
                                     <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
                                   )}
-                                </div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transaction Reference</label>
-                                  <input
-                                    type="text"
-                                    value={paymentUpdate.paymentMethodDetails?.upi?.transactionReference || ''}
-                                    onChange={(e) => setPaymentUpdate({
-                                      ...paymentUpdate,
-                                      paymentMethodDetails: {
-                                        ...paymentUpdate.paymentMethodDetails,
-                                        upi: {
-                                          upiId: paymentUpdate.paymentMethodDetails?.upi?.upiId || '',
-                                          transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || '',
-                                          transactionReference: e.target.value,
-                                          payerName: paymentUpdate.paymentMethodDetails?.upi?.payerName || '',
-                                          payerPhone: paymentUpdate.paymentMethodDetails?.upi?.payerPhone || ''
-                                        }
-                                      }
-                                    })}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="Enter transaction reference"
-                                  />
                                 </div>
                                 <div>
                                   <label className="block text-xs font-medium text-gray-600 mb-1">Payer Name</label>
@@ -8197,11 +7885,9 @@ const printQuotation = (quotation: any) => {
                                       paymentMethodDetails: {
                                         ...paymentUpdate.paymentMethodDetails,
                                         upi: {
-                                          upiId: paymentUpdate.paymentMethodDetails?.upi?.upiId || '',
-                                          transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || '',
-                                          transactionReference: paymentUpdate.paymentMethodDetails?.upi?.transactionReference || '',
+                                          ...paymentUpdate.paymentMethodDetails?.upi,
                                           payerName: e.target.value,
-                                          payerPhone: paymentUpdate.paymentMethodDetails?.upi?.payerPhone || ''
+                                          transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || ''
                                         }
                                       }
                                     })}
@@ -8210,28 +7896,6 @@ const printQuotation = (quotation: any) => {
                                   />
                                 </div>
                               </div>
-                              <div>
-                                <label className="block text-xs font-medium text-gray-600 mb-1">Payer Phone</label>
-                                <input
-                                  type="text"
-                                  value={paymentUpdate.paymentMethodDetails?.upi?.payerPhone || ''}
-                                  onChange={(e) => setPaymentUpdate({
-                                    ...paymentUpdate,
-                                    paymentMethodDetails: {
-                                      ...paymentUpdate.paymentMethodDetails,
-                                      upi: {
-                                        upiId: paymentUpdate.paymentMethodDetails?.upi?.upiId || '',
-                                        transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || '',
-                                        transactionReference: paymentUpdate.paymentMethodDetails?.upi?.transactionReference || '',
-                                        payerName: paymentUpdate.paymentMethodDetails?.upi?.payerName || '',
-                                        payerPhone: e.target.value
-                                      }
-                                    }
-                                  })}
-                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                  placeholder="Enter payer phone"
-                                />
-                              </div>
                             </div>
                           )}
 
@@ -8239,111 +7903,7 @@ const printQuotation = (quotation: any) => {
                             <div className="space-y-3">
                               <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Card Type *</label>
-                                  <select
-                                    value={paymentUpdate.paymentMethodDetails?.card?.cardType || ''}
-                                    onChange={(e) => {
-                                      setPaymentUpdate({
-                                        ...paymentUpdate,
-                                        paymentMethodDetails: {
-                                          ...paymentUpdate.paymentMethodDetails,
-                                          card: {
-                                            cardType: e.target.value as 'credit' | 'debit' | 'prepaid',
-                                            cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
-                                            lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
-                                            transactionId: paymentUpdate.paymentMethodDetails?.card?.transactionId || '',
-                                            authorizationCode: paymentUpdate.paymentMethodDetails?.card?.authorizationCode || '',
-                                            cardHolderName: paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''
-                                          }
-                                        }
-                                      });
-                                      if (formErrors.cardType) {
-                                        setFormErrors(prev => ({ ...prev, cardType: '' }));
-                                      }
-                                    }}
-                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.cardType ? 'border-red-500' : 'border-gray-300'}`}
-                                  >
-                                    <option value="">Select card type</option>
-                                    <option value="credit">Credit Card</option>
-                                    <option value="debit">Debit Card</option>
-                                    <option value="prepaid">Prepaid Card</option>
-                                  </select>
-                                  {formErrors.cardType && (
-                                    <p className="text-red-500 text-xs mt-1">{formErrors.cardType}</p>
-                                  )}
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Card Network *</label>
-                                  <select
-                                    value={paymentUpdate.paymentMethodDetails?.card?.cardNetwork || ''}
-                                    onChange={(e) => {
-                                      setPaymentUpdate({
-                                        ...paymentUpdate,
-                                        paymentMethodDetails: {
-                                          ...paymentUpdate.paymentMethodDetails,
-                                          card: {
-                                            cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
-                                            cardNetwork: e.target.value as 'visa' | 'mastercard' | 'amex' | 'rupay' | 'other',
-                                            lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
-                                            transactionId: paymentUpdate.paymentMethodDetails?.card?.transactionId || '',
-                                            authorizationCode: paymentUpdate.paymentMethodDetails?.card?.authorizationCode || '',
-                                            cardHolderName: paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''
-                                          }
-                                        }
-                                      });
-                                      if (formErrors.cardNetwork) {
-                                        setFormErrors(prev => ({ ...prev, cardNetwork: '' }));
-                                      }
-                                    }}
-                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.cardNetwork ? 'border-red-500' : 'border-gray-300'}`}
-                                  >
-                                    <option value="">Select network</option>
-                                    <option value="visa">Visa</option>
-                                    <option value="mastercard">Mastercard</option>
-                                    <option value="amex">American Express</option>
-                                    <option value="rupay">RuPay</option>
-                                    <option value="other">Other</option>
-                                  </select>
-                                  {formErrors.cardNetwork && (
-                                    <p className="text-red-500 text-xs mt-1">{formErrors.cardNetwork}</p>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Last 4 Digits *</label>
-                                  <input
-                                    type="text"
-                                    value={paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || ''}
-                                    onChange={(e) => {
-                                      setPaymentUpdate({
-                                        ...paymentUpdate,
-                                        paymentMethodDetails: {
-                                          ...paymentUpdate.paymentMethodDetails,
-                                          card: {
-                                            cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
-                                            cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
-                                            lastFourDigits: e.target.value,
-                                            transactionId: paymentUpdate.paymentMethodDetails?.card?.transactionId || '',
-                                            authorizationCode: paymentUpdate.paymentMethodDetails?.card?.authorizationCode || '',
-                                            cardHolderName: paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''
-                                          }
-                                        }
-                                      });
-                                      if (formErrors.lastFourDigits) {
-                                        setFormErrors(prev => ({ ...prev, lastFourDigits: '' }));
-                                      }
-                                    }}
-                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.lastFourDigits ? 'border-red-500' : 'border-gray-300'}`}
-                                    placeholder="Enter last 4 digits"
-                                    maxLength={4}
-                                  />
-                                  {formErrors.lastFourDigits && (
-                                    <p className="text-red-500 text-xs mt-1">{formErrors.lastFourDigits}</p>
-                                  )}
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transaction ID *</label>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transaction ID</label>
                                   <input
                                     type="text"
                                     value={paymentUpdate.paymentMethodDetails?.card?.transactionId || ''}
@@ -8353,11 +7913,8 @@ const printQuotation = (quotation: any) => {
                                         paymentMethodDetails: {
                                           ...paymentUpdate.paymentMethodDetails,
                                           card: {
-                                            cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
-                                            cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
-                                            lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
+                                            ...paymentUpdate.paymentMethodDetails?.card,
                                             transactionId: e.target.value,
-                                            authorizationCode: paymentUpdate.paymentMethodDetails?.card?.authorizationCode || '',
                                             cardHolderName: paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''
                                           }
                                         }
@@ -8373,10 +7930,8 @@ const printQuotation = (quotation: any) => {
                                     <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
                                   )}
                                 </div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Card Holder Name</label>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Payer Name</label>
                                   <input
                                     type="text"
                                     value={paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''}
@@ -8385,40 +7940,14 @@ const printQuotation = (quotation: any) => {
                                       paymentMethodDetails: {
                                         ...paymentUpdate.paymentMethodDetails,
                                         card: {
-                                          cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
-                                          cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
-                                          lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
-                                          transactionId: paymentUpdate.paymentMethodDetails?.card?.transactionId || '',
-                                          authorizationCode: paymentUpdate.paymentMethodDetails?.card?.authorizationCode || '',
-                                          cardHolderName: e.target.value
+                                          ...paymentUpdate.paymentMethodDetails?.card,
+                                          cardHolderName: e.target.value,
+                                          transactionId: paymentUpdate.paymentMethodDetails?.card?.transactionId || ''
                                         }
                                       }
                                     })}
                                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="Enter card holder name"
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-gray-600 mb-1">Authorization Code</label>
-                                  <input
-                                    type="text"
-                                    value={paymentUpdate.paymentMethodDetails?.card?.authorizationCode || ''}
-                                    onChange={(e) => setPaymentUpdate({
-                                      ...paymentUpdate,
-                                      paymentMethodDetails: {
-                                        ...paymentUpdate.paymentMethodDetails,
-                                        card: {
-                                          cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
-                                          cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
-                                          lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
-                                          transactionId: paymentUpdate.paymentMethodDetails?.card?.transactionId || '',
-                                          authorizationCode: e.target.value,
-                                          cardHolderName: paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''
-                                        }
-                                      }
-                                    })}
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="Enter authorization code"
+                                    placeholder="Enter payer name"
                                   />
                                 </div>
                               </div>
