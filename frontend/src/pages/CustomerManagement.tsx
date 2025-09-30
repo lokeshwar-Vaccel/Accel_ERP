@@ -258,12 +258,12 @@ const isValidGSTINFormat = (input: string): boolean => {
 
 // Customer name validation helper
 const isValidCustomerName = (input: string): boolean => {
-  // Must contain at least one alphabet and allow only 1-2 special characters
+  // Must contain at least one alphabet and allow only 1-3 special characters
   const hasAlphabet = /[A-Za-z]/.test(input);
   const specialCharCount = (input.match(/[&.,\-']/g) || []).length;
   const validChars = /^[A-Za-z0-9\s&.,\-']+$/;
   
-  return hasAlphabet && specialCharCount <= 2 && validChars.test(input);
+  return hasAlphabet && specialCharCount <= 3 && validChars.test(input);
 };
 
 const sanitizeCustomerName = (input: string): string => {
@@ -305,6 +305,55 @@ const sanitizeContactPerson = (input: string): string => {
 const sanitizeDesignation = (input: string): string => {
   // Remove special characters but keep letters, spaces, and prevent double spaces
   return input.replace(/[^A-Za-z\s]/g, '').replace(/\s+/g, ' ').trim();
+};
+
+// Bank details validation and sanitization functions
+const isValidBankName = (input: string): boolean => {
+  // Bank name should contain at least one alphabet and max 3 special characters
+  const hasAlphabet = /[A-Za-z]/.test(input);
+  const specialChars = input.match(/[&.,\-'()]/g) || [];
+  const specialCharCount = specialChars.length;
+  const validChars = /^[A-Za-z\s&.,\-'()]+$/;
+  
+  return hasAlphabet && specialCharCount <= 3 && validChars.test(input) && input.trim().length >= 2 && input.trim().length <= 100;
+};
+
+const sanitizeBankName = (input: string): string => {
+  // Keep only valid bank name characters and prevent multiple spaces
+  return input.replace(/[^A-Za-z\s&.,\-'()]/g, '').replace(/\s+/g, ' ').trim();
+};
+
+const isValidAccountNumber = (input: string): boolean => {
+  // Account number should be 9-18 digits
+  const accountRegex = /^\d{9,18}$/;
+  return accountRegex.test(input);
+};
+
+const sanitizeAccountNumber = (input: string): string => {
+  // Keep only digits
+  return input.replace(/\D/g, '');
+};
+
+const isValidIFSC = (input: string): boolean => {
+  // IFSC format: 4 letters + 7 characters (0 + 6 alphanumeric)
+  const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+  return ifscRegex.test(input);
+};
+
+const sanitizeIFSC = (input: string): string => {
+  // Convert to uppercase and keep only alphanumeric characters
+  return input.replace(/[^A-Z0-9]/g, '').toUpperCase();
+};
+
+const isValidBranchName = (input: string): boolean => {
+  // Branch name should contain letters, spaces, and common characters
+  const branchRegex = /^[A-Za-z\s&.,\-'()0-9]+$/;
+  return branchRegex.test(input) && input.trim().length >= 2 && input.trim().length <= 100;
+};
+
+const sanitizeBranchName = (input: string): string => {
+  // Keep only valid branch name characters and prevent multiple spaces
+  return input.replace(/[^A-Za-z\s&.,\-'()0-9]/g, '').replace(/\s+/g, ' ').trim();
 };
 
 const CustomerManagement: React.FC = () => {
@@ -425,7 +474,7 @@ const CustomerManagement: React.FC = () => {
   });
 
   // Form errors
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [formErrors, setFormErrors] = useState<Record<string, any>>({});
 
   // Dropdown state
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
@@ -1240,7 +1289,7 @@ const CustomerManagement: React.FC = () => {
       errors.name = `Corporate name is required`;
       missingFields.push(`Corporate Name`);
     } else if (!isValidCustomerName(customerFormData.name)) {
-      errors.name = `Corporate name must contain at least one letter and can have maximum 2 special characters (&, ., ,, -, ').`;
+      errors.name = `Corporate name must contain at least one letter and can have maximum 3 special characters (&, ., ,, -, ').`;
       missingFields.push(`Valid Corporate Name`);
     } else {
       const isDuplicateName = allCustomers.some(customer =>
@@ -1396,6 +1445,35 @@ const CustomerManagement: React.FC = () => {
       }
       if (phoneErrors.length > 0) {
         errors.phone = phoneErrors;
+      }
+    }
+
+    // Bank Details validation (only for supplier type) - Optional fields
+    if (customerTypeTab === 'supplier' && customerFormData.bankDetails) {
+      const bankErrors: Record<string, string> = {};
+      
+      // Bank Name validation (optional but if provided, must be valid)
+      if (customerFormData.bankDetails.bankName.trim() && !isValidBankName(customerFormData.bankDetails.bankName)) {
+        bankErrors.bankName = 'Bank Name must contain at least one letter and can have maximum 3 special characters (&, ., ,, -, \', parentheses). Length should be 2-100 characters.';
+      }
+      
+      // Account Number validation (optional but if provided, must be valid)
+      if (customerFormData.bankDetails.accountNo.trim() && !isValidAccountNumber(customerFormData.bankDetails.accountNo)) {
+        bankErrors.accountNo = 'Account Number must be 9-18 digits only';
+      }
+      
+      // IFSC Code validation (optional but if provided, must be valid)
+      if (customerFormData.bankDetails.ifsc.trim() && !isValidIFSC(customerFormData.bankDetails.ifsc)) {
+        bankErrors.ifsc = 'IFSC Code must be in format: 4 letters + 0 + 6 alphanumeric characters (e.g., SBIN0001234)';
+      }
+      
+      // Branch Name validation (optional but if provided, must be valid)
+      if (customerFormData.bankDetails.branch.trim() && !isValidBranchName(customerFormData.bankDetails.branch)) {
+        bankErrors.branch = 'Branch Name must contain only letters, numbers, spaces, and common characters (&, ., ,, -, \', parentheses). Length should be 2-100 characters.';
+      }
+      
+      if (Object.keys(bankErrors).length > 0) {
+        errors.bankDetails = bankErrors;
       }
     }
 
@@ -2264,13 +2342,16 @@ const CustomerManagement: React.FC = () => {
                    'Manage customer relationships, leads, and track interactions'}
       >
         <div className="flex space-x-3">
-          <button
-            onClick={() => setShowPipelineModal(true)}
-            className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
-          >
-            <TrendingUp className="w-4 h-4" />
-            <span className="text-sm">Sales Pipeline</span>
-          </button>
+          {/* Hide Sales Pipeline button for OEM and Prospective Customer tabs */}
+          {customerTypeTab !== 'oem' && customerTypeTab !== 'dg_customer' && (
+            <button
+              onClick={() => setShowPipelineModal(true)}
+              className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              <TrendingUp className="w-4 h-4" />
+              <span className="text-sm">Sales Pipeline</span>
+            </button>
+          )}
 
           {user?.role !== 'hr' && (
             <button
@@ -2470,35 +2551,37 @@ const CustomerManagement: React.FC = () => {
                   <option value="desc">Descending (Z-A)</option>
                 </select>
               </div>
-              {/* Status */}
-              <div className="space-y-2">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
-                <div className="relative dropdown-container">
-                  <button
-                    onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  >
-                    <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
-                    <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-                  {showStatusDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                      {statusOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => {
-                            setStatusFilter(option.value as any);
-                            setShowStatusDropdown(false);
-                          }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+              {/* Status - Hidden for Prospective Customers */}
+              {customerTypeTab !== 'dg_customer' && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                  <div className="relative dropdown-container">
+                    <button
+                      onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                      className="w-full flex items-center justify-between px-3 py-2 text-sm text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    >
+                      <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
+                      <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showStatusDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                        {statusOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => {
+                              setStatusFilter(option.value as any);
+                              setShowStatusDropdown(false);
+                            }}
+                            className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="flex items-end">
                 <button
                   onClick={clearAllFilters}
@@ -2531,7 +2614,7 @@ const CustomerManagement: React.FC = () => {
                   <button onClick={() => setTypeFilter('all')} className="ml-1 text-purple-500 hover:text-purple-700">×</button>
                 </span>
               )}
-              {statusFilter !== 'all' && (
+              {statusFilter !== 'all' && customerTypeTab !== 'dg_customer' && (
                 <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs flex items-center">
                   {getStatusLabel(statusFilter)}
                   <button onClick={() => setStatusFilter('all')} className="ml-1 text-blue-500 hover:text-blue-700">×</button>
@@ -3310,7 +3393,7 @@ const CustomerManagement: React.FC = () => {
                           }}
                           className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
                             }`}
-                          placeholder="Enter name (must contain letters, max 2 special chars: &, ., ,, -, ')"
+                              placeholder="Enter name (must contain letters, max 3 special chars: &, ., ,, -, ')"
                         />
                         {formErrors.name && (
                           <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
@@ -3357,40 +3440,92 @@ const CustomerManagement: React.FC = () => {
                             <input
                               type="text"
                               value={customerFormData.bankDetails?.bankName || ''}
-                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), bankName: e.target.value } })}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Enter bank name"
+                              onChange={(e) => {
+                                const sanitizedValue = sanitizeBankName(e.target.value);
+                                setCustomerFormData({ 
+                                  ...customerFormData, 
+                                  bankDetails: { 
+                                    ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), 
+                                    bankName: sanitizedValue 
+                                  } 
+                                });
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${(formErrors.bankDetails as any)?.bankName ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter bank name (must contain letters, max 3 special chars: &, ., ,, -, ', ())"
+                              maxLength={100}
                             />
+                            {(formErrors.bankDetails as any)?.bankName && (
+                              <p className="text-red-500 text-xs mt-1">{(formErrors.bankDetails as any).bankName}</p>
+                            )}
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
                             <input
                               type="text"
                               value={customerFormData.bankDetails?.accountNo || ''}
-                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), accountNo: e.target.value } })}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Enter account number"
+                              onChange={(e) => {
+                                const sanitizedValue = sanitizeAccountNumber(e.target.value);
+                                setCustomerFormData({ 
+                                  ...customerFormData, 
+                                  bankDetails: { 
+                                    ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), 
+                                    accountNo: sanitizedValue 
+                                  } 
+                                });
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${(formErrors.bankDetails as any)?.accountNo ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter account number (9-18 digits)"
+                              maxLength={18}
                             />
+                            {(formErrors.bankDetails as any)?.accountNo && (
+                              <p className="text-red-500 text-xs mt-1">{(formErrors.bankDetails as any).accountNo}</p>
+                            )}
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">IFSC Code</label>
                             <input
                               type="text"
                               value={customerFormData.bankDetails?.ifsc || ''}
-                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), ifsc: e.target.value.toUpperCase() } })}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Enter IFSC code"
+                              onChange={(e) => {
+                                const sanitizedValue = sanitizeIFSC(e.target.value);
+                                setCustomerFormData({ 
+                                  ...customerFormData, 
+                                  bankDetails: { 
+                                    ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), 
+                                    ifsc: sanitizedValue 
+                                  } 
+                                });
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${(formErrors.bankDetails as any)?.ifsc ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter IFSC code (e.g., SBIN0001234)"
+                              maxLength={11}
                             />
+                            {(formErrors.bankDetails as any)?.ifsc && (
+                              <p className="text-red-500 text-xs mt-1">{(formErrors.bankDetails as any).ifsc}</p>
+                            )}
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Branch Name</label>
                             <input
                               type="text"
                               value={customerFormData.bankDetails?.branch || ''}
-                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), branch: e.target.value } })}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              onChange={(e) => {
+                                const sanitizedValue = sanitizeBranchName(e.target.value);
+                                setCustomerFormData({ 
+                                  ...customerFormData, 
+                                  bankDetails: { 
+                                    ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), 
+                                    branch: sanitizedValue 
+                                  } 
+                                });
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${(formErrors.bankDetails as any)?.branch ? 'border-red-500' : 'border-gray-300'}`}
                               placeholder="Enter branch name"
+                              maxLength={100}
                             />
+                            {(formErrors.bankDetails as any)?.branch && (
+                              <p className="text-red-500 text-xs mt-1">{(formErrors.bankDetails as any).branch}</p>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -4102,40 +4237,92 @@ const CustomerManagement: React.FC = () => {
                             <input
                               type="text"
                               value={customerFormData.bankDetails?.bankName || ''}
-                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), bankName: e.target.value } })}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Enter bank name"
+                              onChange={(e) => {
+                                const sanitizedValue = sanitizeBankName(e.target.value);
+                                setCustomerFormData({ 
+                                  ...customerFormData, 
+                                  bankDetails: { 
+                                    ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), 
+                                    bankName: sanitizedValue 
+                                  } 
+                                });
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${(formErrors.bankDetails as any)?.bankName ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter bank name (must contain letters, max 3 special chars: &, ., ,, -, ', ())"
+                              maxLength={100}
                             />
+                            {(formErrors.bankDetails as any)?.bankName && (
+                              <p className="text-red-500 text-xs mt-1">{(formErrors.bankDetails as any).bankName}</p>
+                            )}
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
                             <input
                               type="text"
                               value={customerFormData.bankDetails?.accountNo || ''}
-                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), accountNo: e.target.value } })}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Enter account number"
+                              onChange={(e) => {
+                                const sanitizedValue = sanitizeAccountNumber(e.target.value);
+                                setCustomerFormData({ 
+                                  ...customerFormData, 
+                                  bankDetails: { 
+                                    ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), 
+                                    accountNo: sanitizedValue 
+                                  } 
+                                });
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${(formErrors.bankDetails as any)?.accountNo ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter account number (9-18 digits)"
+                              maxLength={18}
                             />
+                            {(formErrors.bankDetails as any)?.accountNo && (
+                              <p className="text-red-500 text-xs mt-1">{(formErrors.bankDetails as any).accountNo}</p>
+                            )}
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">IFSC Code</label>
                             <input
                               type="text"
                               value={customerFormData.bankDetails?.ifsc || ''}
-                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), ifsc: e.target.value.toUpperCase() } })}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Enter IFSC code"
+                              onChange={(e) => {
+                                const sanitizedValue = sanitizeIFSC(e.target.value);
+                                setCustomerFormData({ 
+                                  ...customerFormData, 
+                                  bankDetails: { 
+                                    ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), 
+                                    ifsc: sanitizedValue 
+                                  } 
+                                });
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${(formErrors.bankDetails as any)?.ifsc ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter IFSC code (e.g., SBIN0001234)"
+                              maxLength={11}
                             />
+                            {(formErrors.bankDetails as any)?.ifsc && (
+                              <p className="text-red-500 text-xs mt-1">{(formErrors.bankDetails as any).ifsc}</p>
+                            )}
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Branch Name</label>
                             <input
                               type="text"
                               value={customerFormData.bankDetails?.branch || ''}
-                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), branch: e.target.value } })}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              onChange={(e) => {
+                                const sanitizedValue = sanitizeBranchName(e.target.value);
+                                setCustomerFormData({ 
+                                  ...customerFormData, 
+                                  bankDetails: { 
+                                    ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), 
+                                    branch: sanitizedValue 
+                                  } 
+                                });
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${(formErrors.bankDetails as any)?.branch ? 'border-red-500' : 'border-gray-300'}`}
                               placeholder="Enter branch name"
+                              maxLength={100}
                             />
+                            {(formErrors.bankDetails as any)?.branch && (
+                              <p className="text-red-500 text-xs mt-1">{(formErrors.bankDetails as any).branch}</p>
+                            )}
                           </div>
                         </div>
                       </div>
