@@ -4,7 +4,10 @@ import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
 
 const makeNotificationRequest = async (endpoint: string, options: RequestInit = {}) => {
-  const token = localStorage.getItem('authToken');
+  // Check both localStorage and sessionStorage for token
+  const persistentToken = localStorage.getItem('authToken');
+  const sessionToken = sessionStorage.getItem('authToken');
+  const token = persistentToken || sessionToken;
   
   const headers: HeadersInit = {
     ...(token && { Authorization: `Bearer ${token}` }),
@@ -28,7 +31,10 @@ const makeNotificationRequest = async (endpoint: string, options: RequestInit = 
 };
 
 const makeNotificationGetRequest = async (endpoint: string, params: Record<string, any> = {}) => {
-  const token = localStorage.getItem('authToken');
+  // Check both localStorage and sessionStorage for token
+  const persistentToken = localStorage.getItem('authToken');
+  const sessionToken = sessionStorage.getItem('authToken');
+  const token = persistentToken || sessionToken;
   
   const queryString = new URLSearchParams(params).toString();
   const url = `${API_BASE_URL}${endpoint}${queryString ? `?${queryString}` : ''}`;

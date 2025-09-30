@@ -36,7 +36,10 @@ import {
   RefreshCw,
   Zap,
   Package,
-  Download
+  Download,
+  Shield,
+  XCircle,
+  Wrench
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
@@ -50,6 +53,8 @@ import toast from 'react-hot-toast';
 type CustomerType = 'retail' | 'telecom' | 'ev' | 'dg' | 'jenaral' | 'je' | 'oem';
 type CustomerMainType = 'customer' | 'supplier' | 'dg_customer' | 'oem';
 type LeadStatus = 'new' | 'qualified' | 'contacted' | 'converted' | 'lost';
+type OEMStatus = 'active' | 'inactive' | 'blacklisted';
+type FilterStatus = LeadStatus | OEMStatus | 'all';
 type ContactType = 'call' | 'meeting' | 'email' | 'whatsapp';
 
 interface ContactHistory {
@@ -251,6 +256,106 @@ const isValidGSTINFormat = (input: string): boolean => {
   return re.test(value);
 };
 
+// Customer name validation helper
+const isValidCustomerName = (input: string): boolean => {
+  // Must contain at least one alphabet and allow only 1-3 special characters
+  const hasAlphabet = /[A-Za-z]/.test(input);
+  const specialCharCount = (input.match(/[&.,\-']/g) || []).length;
+  const validChars = /^[A-Za-z0-9\s&.,\-']+$/;
+  
+  return hasAlphabet && specialCharCount <= 3 && validChars.test(input);
+};
+
+const sanitizeCustomerName = (input: string): string => {
+  // Remove any invalid characters, keeping only allowed ones
+  return input.replace(/[^A-Za-z0-9\s&.,\-']/g, '');
+};
+
+// Email validation helper
+const isValidEmail = (input: string): boolean => {
+  if (!input.trim()) return true; // Allow empty email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(input);
+};
+
+const sanitizeEmail = (input: string): string => {
+  // Remove spaces and convert to lowercase
+  return input.replace(/\s/g, '').toLowerCase();
+};
+
+// Phone validation helper
+const isValidPhone = (input: string): boolean => {
+  if (!input.trim()) return true; // Allow empty phone
+  // Allow digits, +, -, spaces, parentheses for international formats
+  const phoneRegex = /^[\d\s\-\+\(\)]+$/;
+  const digitCount = (input.match(/\d/g) || []).length;
+  return phoneRegex.test(input) && digitCount >= 10 && digitCount <= 15;
+};
+
+const sanitizePhone = (input: string): string => {
+  // Keep only digits, +, -, spaces, parentheses
+  return input.replace(/[^\d\s\-\+\(\)]/g, '');
+};
+
+const sanitizeContactPerson = (input: string): string => {
+  // Remove special characters but keep letters, spaces, and prevent double spaces
+  return input.replace(/[^A-Za-z\s]/g, '').replace(/\s+/g, ' ').trim();
+};
+
+const sanitizeDesignation = (input: string): string => {
+  // Remove special characters but keep letters, spaces, and prevent double spaces
+  return input.replace(/[^A-Za-z\s]/g, '').replace(/\s+/g, ' ').trim();
+};
+
+// Bank details validation and sanitization functions
+const isValidBankName = (input: string): boolean => {
+  // Bank name should contain at least one alphabet and max 3 special characters
+  const hasAlphabet = /[A-Za-z]/.test(input);
+  const specialChars = input.match(/[&.,\-'()]/g) || [];
+  const specialCharCount = specialChars.length;
+  const validChars = /^[A-Za-z\s&.,\-'()]+$/;
+  
+  return hasAlphabet && specialCharCount <= 3 && validChars.test(input) && input.trim().length >= 2 && input.trim().length <= 100;
+};
+
+const sanitizeBankName = (input: string): string => {
+  // Keep only valid bank name characters and prevent multiple spaces
+  return input.replace(/[^A-Za-z\s&.,\-'()]/g, '').replace(/\s+/g, ' ').trim();
+};
+
+const isValidAccountNumber = (input: string): boolean => {
+  // Account number should be 9-18 digits
+  const accountRegex = /^\d{9,18}$/;
+  return accountRegex.test(input);
+};
+
+const sanitizeAccountNumber = (input: string): string => {
+  // Keep only digits
+  return input.replace(/\D/g, '');
+};
+
+const isValidIFSC = (input: string): boolean => {
+  // IFSC format: 4 letters + 7 characters (0 + 6 alphanumeric)
+  const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+  return ifscRegex.test(input);
+};
+
+const sanitizeIFSC = (input: string): string => {
+  // Convert to uppercase and keep only alphanumeric characters
+  return input.replace(/[^A-Z0-9]/g, '').toUpperCase();
+};
+
+const isValidBranchName = (input: string): boolean => {
+  // Branch name should contain letters, spaces, and common characters
+  const branchRegex = /^[A-Za-z\s&.,\-'()0-9]+$/;
+  return branchRegex.test(input) && input.trim().length >= 2 && input.trim().length <= 100;
+};
+
+const sanitizeBranchName = (input: string): string => {
+  // Keep only valid branch name characters and prevent multiple spaces
+  return input.replace(/[^A-Za-z\s&.,\-'()0-9]/g, '').replace(/\s+/g, ' ').trim();
+};
+
 const CustomerManagement: React.FC = () => {
   const location = useLocation();
 
@@ -286,7 +391,7 @@ const CustomerManagement: React.FC = () => {
   const [totalCustomersCount, setTotalCustomersCount] = useState(0);
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
   const [typeFilter, setTypeFilter] = useState<CustomerType | 'all'>('all');
   // const [leadSourceFilter, setLeadSourceFilter] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -306,6 +411,8 @@ const CustomerManagement: React.FC = () => {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showPipelineModal, setShowPipelineModal] = useState(false);
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+  const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
 
   // Selected data
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -367,7 +474,7 @@ const CustomerManagement: React.FC = () => {
   });
 
   // Form errors
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [formErrors, setFormErrors] = useState<Record<string, any>>({});
 
   // Dropdown state
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
@@ -920,6 +1027,9 @@ const CustomerManagement: React.FC = () => {
           sort,
           search: searchTerm,
           ...(statusFilter !== 'all' && { status: statusFilter }),
+          ...(typeFilter !== 'all' && { customerType: typeFilter }),
+          ...(dateFrom && { dateFrom }),
+          ...(dateTo && { dateTo }),
           ...(assignedToParam && { assignedTo: assignedToParam }),
         };
 
@@ -940,22 +1050,29 @@ const CustomerManagement: React.FC = () => {
         console.log('OEM data to set:', oemData);
         setCustomers(oemData);
         
-        // For OEM tab, we don't have the same counts structure, so set defaults
+        // Calculate OEM-specific statistics
+        const totalOem = oemData.length;
+        
+        // For OEM, calculate stats based on their status/make
+        const activeCount = oemData.filter((customer: any) => customer.status === 'active' || !customer.status).length;
+        const inactiveCount = oemData.filter((customer: any) => customer.status === 'inactive').length;
+        const blacklistedCount = oemData.filter((customer: any) => customer.status === 'blacklisted').length;
+        
         setCounts({
-          totalCustomers: response.pagination.total,
-          newLeads: 0,
-          qualified: 0,
-          converted: response.pagination.total, // All OEM customers are considered converted
-          lost: 0,
-          contacted: 0,
+          totalCustomers: totalOem,
+          newLeads: 0, // OEM uses different entity model
+          qualified: activeCount,
+          converted: activeCount, // Active OEM customers are considered converted
+          lost: blacklistedCount,
+          contacted: 0, // Not applicable for OEM
         });
         
         setNewLeadStatusCount(0);
-        setQualifiedStatusCount(0);
-        setConvertedStatusCount(response.pagination.total);
-        setLostStatusCount(0);
+        setQualifiedStatusCount(activeCount);
+        setConvertedStatusCount(activeCount);
+        setLostStatusCount(blacklistedCount);
         setContactedStatusCount(0);
-        setTotalCustomersCount(response.pagination.total);
+        setTotalCustomersCount(totalOem);
         
       } catch (error) {
         console.error('Error fetching OEM customers:', error);
@@ -996,7 +1113,7 @@ const CustomerManagement: React.FC = () => {
     // Special handling for DG Customer tab - show only converted customers
     if (customerTypeTab === 'dg_customer') {
       params.status = 'converted';
-      params.type = 'customer'; // DG customers are still of type 'customer'
+      params.type = 'customer'; // DG users are still of type 'customer'
     }
 
     console.log('Fetching customers with type:', customerTypeTab);
@@ -1005,15 +1122,47 @@ const CustomerManagement: React.FC = () => {
       setLoading(true);
       const response = await apiClient.customers.getAll(params);
       console.log('API response data:', response);
-      setCounts(response.data.counts);
+      
+      // Handle DG Customer statistics specially
+      if (customerTypeTab === 'dg_customer') {
+        let customersData: Customer[] = [];
+        if (response && response.data) {
+          if (Array.isArray(response.data)) {
+            customersData = response.data as Customer[];
+          } else if (typeof response.data === 'object' && Array.isArray((response.data as any).customers)) {
+            customersData = (response.data as { customers: Customer[] }).customers;
+          }
+        }
+        
+        const totalDG = customersData.length;
+        const convertedDG = customersData.filter(c => c.status === 'converted').length;
+        
+        setCounts({
+          totalCustomers: totalDG,
+          newLeads: 0, // DG customers are shown only when converted
+          qualified: 0, // DG customers are shown only when converted
+          converted: convertedDG,
+          lost: 0, // Filtered out for DG customer view
+          contacted: 0,
+        });
+        
+        setNewLeadStatusCount(0);
+        setQualifiedStatusCount(0);
+        setConvertedStatusCount(convertedDG);
+        setLostStatusCount(0);
+        setContactedStatusCount(0);
+        setTotalCustomersCount(totalDG);
+      } else {
+        setCounts(response.data.counts);
 
-      // Set individual status counts
-      setNewLeadStatusCount((response.data as any).newLeadStatusCount || 0);
-      setQualifiedStatusCount((response.data as any).qualifiedStatusCount || 0);
-      setConvertedStatusCount((response.data as any).convertedStatusCount || 0);
-      setLostStatusCount((response.data as any).lostStatusCount || 0);
-      setContactedStatusCount((response.data as any).contactedStatusCount || 0);
-      setTotalCustomersCount((response.data as any).totalCustomersCount || 0);
+        // Set individual status counts
+        setNewLeadStatusCount((response.data as any).newLeadStatusCount || 0);
+        setQualifiedStatusCount((response.data as any).qualifiedStatusCount || 0);
+        setConvertedStatusCount((response.data as any).convertedStatusCount || 0);
+        setLostStatusCount((response.data as any).lostStatusCount || 0);
+        setContactedStatusCount((response.data as any).contactedStatusCount || 0);
+        setTotalCustomersCount((response.data as any).totalCustomersCount || 0);
+      }
 
       setCurrentPage(response.pagination.page);
       setLimit(response.pagination.limit);
@@ -1048,16 +1197,44 @@ const CustomerManagement: React.FC = () => {
     fetchAllCustomers();
   }, [customerTypeTab]);
 
-  const handleDeleteCustomer = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this customer?')) {
-      try {
-        await apiClient.customers.delete(id);
-        fetchCustomers()
-        // setCustomers(customers.filter(customer => customer._id !== id));
-      } catch (error) {
-        console.error('Error deleting customer:', error);
-      }
+  const handleDeleteCustomer = (customer: Customer) => {
+    setCustomerToDelete(customer);
+    setShowDeleteConfirmModal(true);
+  };
+
+  const confirmDeleteCustomer = async () => {
+    if (!customerToDelete) return;
+    
+    const entityName = customerTypeTab === 'supplier' ? 'Supplier' : 
+                       customerTypeTab === 'dg_customer' ? 'DG Customer' : 
+                       customerTypeTab === 'oem' ? 'OEM Customer' : 'Customer';
+    
+    try {
+      await apiClient.customers.delete(customerToDelete._id);
+      fetchCustomers();
+      fetchAllCustomers(); // Update statistics cards
+      
+      // Show success toast with contextual message
+      toast.success(`${entityName} deleted successfully!`);
+      
+      // Close modal and reset state
+      setShowDeleteConfirmModal(false);
+      setCustomerToDelete(null);
+    } catch (error) {
+      console.error('Error deleting customer:', error);
+      
+      // Show error toast with contextual message
+      toast.error(`Failed to delete ${entityName.toLowerCase()}. Please try again.`);
+      
+      // Close modal and reset state even on error
+      setShowDeleteConfirmModal(false);
+      setCustomerToDelete(null);
     }
+  };
+
+  const cancelDeleteCustomer = () => {
+    setShowDeleteConfirmModal(false);
+    setCustomerToDelete(null);
   };
 
   // const filteredCustomers = Array.isArray(customers) ? customers.filter(customer => {
@@ -1104,11 +1281,16 @@ const CustomerManagement: React.FC = () => {
     const districtErrors: string[] = [];
     const pincodeErrors: string[] = [];
     const gstErrors: string[] = [];
+    const emailErrors: string[] = [];
+    const phoneErrors: string[] = [];
   
     // Top-level field checks
     if (!customerFormData.name.trim()) {
       errors.name = `Corporate name is required`;
       missingFields.push(`Corporate Name`);
+    } else if (!isValidCustomerName(customerFormData.name)) {
+      errors.name = `Corporate name must contain at least one letter and can have maximum 3 special characters (&, ., ,, -, ').`;
+      missingFields.push(`Valid Corporate Name`);
     } else {
       const isDuplicateName = allCustomers.some(customer =>
         customer.name.trim().toLowerCase() === customerFormData.name.trim().toLowerCase() &&
@@ -1125,6 +1307,18 @@ const CustomerManagement: React.FC = () => {
       if (!panRegex.test(customerFormData.panNumber)) {
         errors.panNumber = 'PAN must be 10 characters: 5 letters, 4 digits, 1 letter (e.g., ABCDE1234F)';
         missingFields.push('Valid PAN Number');
+      }
+    }
+
+    // Contact person validation
+    if (customerFormData.contactPersonName && customerFormData.contactPersonName.trim() !== '') {
+      const contactPersonRegex = /^[A-Za-z\s]+$/;
+      if (!contactPersonRegex.test(customerFormData.contactPersonName.trim())) {
+        errors.contactPersonName = 'Contact person name can only contain letters and spaces';
+        missingFields.push('Valid Contact Person Name');
+      } else if (/\s{2,}/.test(customerFormData.contactPersonName)) {
+        errors.contactPersonName = 'Contact person name cannot contain multiple consecutive spaces';
+        missingFields.push('Valid Contact Person Name');
       }
     }
   
@@ -1177,6 +1371,44 @@ const CustomerManagement: React.FC = () => {
             }
           }
         }
+
+        // Email validation
+        if (addr.email && addr.email.trim() !== '') {
+          if (!isValidEmail(addr.email)) {
+            emailErrors[index] = 'Invalid email format';
+          }
+        }
+
+        // Phone validation
+        if (addr.phone && addr.phone.trim() !== '') {
+          if (!isValidPhone(addr.phone)) {
+            phoneErrors[index] = 'Invalid phone number. Must be 10-15 digits';
+          }
+        }
+
+        // Contact person name validation
+        if (addr.contactPersonName && addr.contactPersonName.trim() !== '') {
+          const contactPersonRegex = /^[A-Za-z\s]+$/;
+          if (!contactPersonRegex.test(addr.contactPersonName.trim())) {
+            errors[`addr_contact_${index}`] = 'Contact person name can only contain letters and spaces';
+            missingFields.push(`Valid Contact Person Name (Address #${index + 1})`);
+          } else if (/\s{2,}/.test(addr.contactPersonName)) {
+            errors[`addr_contact_${index}`] = 'Contact person name cannot contain multiple consecutive spaces';
+            missingFields.push(`Valid Contact Person Name (Address #${index + 1})`);
+          }
+        }
+
+        // Designation validation
+        if (addr.designation && addr.designation.trim() !== '') {
+          const designationRegex = /^[A-Za-z\s]+$/;
+          if (!designationRegex.test(addr.designation.trim())) {
+            errors[`addr_designation_${index}`] = 'Designation can only contain letters and spaces';
+            missingFields.push(`Valid Designation (Address #${index + 1})`);
+          } else if (/\s{2,}/.test(addr.designation)) {
+            errors[`addr_designation_${index}`] = 'Designation cannot contain multiple consecutive spaces';
+            missingFields.push(`Valid Designation (Address #${index + 1})`);
+          }
+        }
   
         if (addrMissing.length > 0) {
           addressErrors[index] = `Please fill in ${addrMissing.join(', ')}`;
@@ -1207,6 +1439,41 @@ const CustomerManagement: React.FC = () => {
       }
       if (gstErrors.length > 0) {
         errors.gst = gstErrors;
+      }
+      if (emailErrors.length > 0) {
+        errors.email = emailErrors;
+      }
+      if (phoneErrors.length > 0) {
+        errors.phone = phoneErrors;
+      }
+    }
+
+    // Bank Details validation (only for supplier type) - Optional fields
+    if (customerTypeTab === 'supplier' && customerFormData.bankDetails) {
+      const bankErrors: Record<string, string> = {};
+      
+      // Bank Name validation (optional but if provided, must be valid)
+      if (customerFormData.bankDetails.bankName.trim() && !isValidBankName(customerFormData.bankDetails.bankName)) {
+        bankErrors.bankName = 'Bank Name must contain at least one letter and can have maximum 3 special characters (&, ., ,, -, \', parentheses). Length should be 2-100 characters.';
+      }
+      
+      // Account Number validation (optional but if provided, must be valid)
+      if (customerFormData.bankDetails.accountNo.trim() && !isValidAccountNumber(customerFormData.bankDetails.accountNo)) {
+        bankErrors.accountNo = 'Account Number must be 9-18 digits only';
+      }
+      
+      // IFSC Code validation (optional but if provided, must be valid)
+      if (customerFormData.bankDetails.ifsc.trim() && !isValidIFSC(customerFormData.bankDetails.ifsc)) {
+        bankErrors.ifsc = 'IFSC Code must be in format: 4 letters + 0 + 6 alphanumeric characters (e.g., SBIN0001234)';
+      }
+      
+      // Branch Name validation (optional but if provided, must be valid)
+      if (customerFormData.bankDetails.branch.trim() && !isValidBranchName(customerFormData.bankDetails.branch)) {
+        bankErrors.branch = 'Branch Name must contain only letters, numbers, spaces, and common characters (&, ., ,, -, \', parentheses). Length should be 2-100 characters.';
+      }
+      
+      if (Object.keys(bankErrors).length > 0) {
+        errors.bankDetails = bankErrors;
       }
     }
 
@@ -1267,6 +1534,73 @@ const CustomerManagement: React.FC = () => {
             dgErrors.locationAddress = 'DG Location (Address) is required';
             missingFields.push(`DG Details #${index + 1} - DG Location`);
           }
+
+          // Uniqueness validation for serial numbers
+          if (dgDetail.dgSerialNumbers.trim()) {
+            // Check for duplicate DG Serial Numbers within the same form
+            const duplicateDGSerial = customerFormData.dgDetails?.find((otherDg, otherIndex) => 
+              otherIndex !== index && 
+              otherDg.dgSerialNumbers.trim() === dgDetail.dgSerialNumbers.trim()
+            );
+            if (duplicateDGSerial) {
+              dgErrors.dgSerialNumbers = 'DG Serial Number already exists in this form';
+            } else {
+              // Check for duplicate DG Serial Numbers in existing customers
+              const existingCustomer = allCustomers.find(customer =>
+                customer.dgDetails?.some(existingDg => 
+                  existingDg.dgSerialNumbers === dgDetail.dgSerialNumbers.trim() &&
+                  (!editingCustomer || customer._id !== editingCustomer._id)
+                )
+              );
+              if (existingCustomer) {
+                dgErrors.dgSerialNumbers = 'DG Serial Number already exists with another customer';
+              }
+            }
+          }
+
+          if (dgDetail.alternatorSerialNumber && dgDetail.alternatorSerialNumber.trim()) {
+            // Check for duplicate Alternator Serial Numbers within the same form
+            const duplicateAltSerial = customerFormData.dgDetails?.find((otherDg, otherIndex) => 
+              otherIndex !== index && 
+              otherDg.alternatorSerialNumber?.trim() === dgDetail.alternatorSerialNumber?.trim()
+            );
+            if (duplicateAltSerial) {
+              dgErrors.alternatorSerialNumber = 'Alternator Serial Number already exists in this form';
+            } else {
+              // Check for duplicate Alternator Serial Numbers in existing customers
+              const existingCustomer = allCustomers.find(customer =>
+                customer.dgDetails?.some(existingDg => 
+                  existingDg.alternatorSerialNumber === (dgDetail.alternatorSerialNumber || "").trim() &&
+                  (!editingCustomer || customer._id !== editingCustomer._id)
+                )
+              );
+              if (existingCustomer) {
+                dgErrors.alternatorSerialNumber = 'Alternator Serial Number already exists with another customer';
+              }
+            }
+          }
+
+          if (dgDetail.engineSerialNumber.trim()) {
+            // Check for duplicate Engine Serial Numbers within the same form
+            const duplicateEngineSerial = customerFormData.dgDetails?.find((otherDg, otherIndex) => 
+              otherIndex !== index && 
+              otherDg.engineSerialNumber.trim() === dgDetail.engineSerialNumber.trim()
+            );
+            if (duplicateEngineSerial) {
+              dgErrors.engineSerialNumber = 'Engine Serial Number already exists in this form';
+            } else {
+              // Check for duplicate Engine Serial Numbers in existing customers
+              const existingCustomer = allCustomers.find(customer =>
+                customer.dgDetails?.some(existingDg => 
+                  existingDg.engineSerialNumber === dgDetail.engineSerialNumber.trim() &&
+                  (!editingCustomer || customer._id !== editingCustomer._id)
+                )
+              );
+              if (existingCustomer) {
+                dgErrors.engineSerialNumber = 'Engine Serial Number already exists with another customer';
+              }
+            }
+          }
         }
         
         if (Object.keys(dgErrors).length > 0) {
@@ -1319,6 +1653,13 @@ const CustomerManagement: React.FC = () => {
       console.log("response-99992:", response);
       fetchCustomers();
       fetchAllCustomers();
+      
+      // Show success toast with contextual message
+      const entityName = customerTypeTab === 'supplier' ? 'Supplier' : 
+                         customerTypeTab === 'dg_customer' ? 'DG Customer' : 
+                         customerTypeTab === 'oem' ? 'OEM Customer' : 'Customer';
+      toast.success(`${entityName} added successfully!`);
+      
       setShowAddModal(false);
       resetCustomerForm();
     } catch (error: any) {
@@ -1328,6 +1669,12 @@ const CustomerManagement: React.FC = () => {
       } else {
         setFormErrors({ general: 'Failed to create customer' });
       }
+      
+      // Show error toast with contextual message
+      const entityName = customerTypeTab === 'supplier' ? 'Supplier' : 
+                         customerTypeTab === 'dg_customer' ? 'DG Customer' : 
+                         customerTypeTab === 'oem' ? 'OEM Customer' : 'Customer';
+      toast.error(`Failed to add ${entityName.toLowerCase()}. Please try again.`);
     } finally {
       setSubmitting(false);
     }
@@ -1357,6 +1704,13 @@ const CustomerManagement: React.FC = () => {
       // setCustomers(customers.map(c => c._id === editingCustomer._id ? response.data : c));
       fetchCustomers()
       fetchAllCustomers();
+      
+      // Show success toast with contextual message
+      const entityName = customerTypeTab === 'supplier' ? 'Supplier' : 
+                         customerTypeTab === 'dg_customer' ? 'DG Customer' : 
+                         customerTypeTab === 'oem' ? 'OEM Customer' : 'Customer';
+      toast.success(`${entityName} updated successfully!`);
+      
       setShowEditModal(false);
       setEditingCustomer(null);
       resetCustomerForm();
@@ -1367,6 +1721,12 @@ const CustomerManagement: React.FC = () => {
       } else {
         setFormErrors({ general: 'Failed to update customer' });
       }
+      
+      // Show error toast with contextual message
+      const entityName = customerTypeTab === 'supplier' ? 'Supplier' : 
+                         customerTypeTab === 'dg_customer' ? 'DG Customer' : 
+                         customerTypeTab === 'oem' ? 'OEM Customer' : 'Customer';
+      toast.error(`Failed to update ${entityName.toLowerCase()}. Please try again.`);
     } finally {
       setSubmitting(false);
     }
@@ -1408,19 +1768,24 @@ const CustomerManagement: React.FC = () => {
   };
 
   const handleStatusChange = async (customerId: string, newStatus: LeadStatus) => {
-    // Optimistically update local state
-    setCustomers(prev =>
-      prev.map(c =>
-        c._id === customerId ? { ...c, status: newStatus } : c
-      )
-    );
+    // Set loading state for this specific customer
+    setIsUpdating(customerId);
+    
     try {
       await apiClient.customers.update(customerId, { status: newStatus });
-      // Fetch from server after drop is complete
-      // fetchCustomers();
-      fetchAllCustomers();
+      
+      // Always refresh both current view and all customers data to ensure consistency
+      await Promise.all([
+        fetchCustomers(),
+        fetchAllCustomers()
+      ]);
+      
     } catch (error) {
       console.error('Error updating status:', error);
+      // Show error toast
+      toast.error('Failed to update customer status');
+    } finally {
+      setIsUpdating(null);
     }
   };
 
@@ -1616,11 +1981,8 @@ const CustomerManagement: React.FC = () => {
       const currentCustomer = allCustomers.find(c => c._id === customerId);
       if (currentCustomer && currentCustomer.status !== newStatus) {
         handleStatusChange(customerId, newStatus);
-        fetchAllCustomers();
-        fetchCustomers();
       }
     }
-
 
     setDraggedCustomer(null);
     setDragOverColumn(null);
@@ -1687,10 +2049,10 @@ const CustomerManagement: React.FC = () => {
              customerTypeTab === 'dg_customer' ? 'Total DG Customers' :
              'Total OEM Customers',
       value: customerTypeTab === 'dg_customer' 
-        ? allCustomers.filter(customer => customer.type === 'customer' && customer.status === 'converted').length
+        ? convertedStatusCount // For DG customers, show converted customers count
         : customerTypeTab === 'oem'
-        ? allCustomers.filter(customer => customer.type === 'customer' && customer.customerType === 'oem').length
-        : allCustomers.filter(customer => customer.type === customerTypeTab).length,
+        ? counts.totalCustomers // For OEM customers, show total OEM count from counts
+        : counts.totalCustomers, // For customer and supplier tabs, show total count from counts
       action: () => {
         clearAllFilters();
       },
@@ -1698,38 +2060,107 @@ const CustomerManagement: React.FC = () => {
       color: 'blue'
     },
     {
-      title: 'New Leads',
-      value: customerTypeTab === 'dg_customer' || customerTypeTab === 'oem' ? 0 : newLeadStatusCount,
+      title: customerTypeTab === 'dg_customer' ? 'Active DG Customers' :
+             customerTypeTab === 'oem' ? 'Active OEM Suppliers' :
+             customerTypeTab === 'supplier' ? 'Active Suppliers' :
+             'New Leads',
+      value: customerTypeTab === 'dg_customer' ? convertedStatusCount :
+             customerTypeTab === 'oem' ? qualifiedStatusCount :
+             customerTypeTab === 'supplier' ? qualifiedStatusCount :
+             newLeadStatusCount,
       action: () => {
-        if (customerTypeTab !== 'dg_customer' && customerTypeTab !== 'oem') {
+        if (customerTypeTab === 'dg_customer') {
+          // For DG, show converted customers
+          setStatusFilter('converted');
+        } else if (customerTypeTab === 'oem') {
+          // For OEM, show active suppliers
+          setStatusFilter('active');
+        } else if (customerTypeTab === 'supplier') {
+          setStatusFilter('qualified');
+        } else {
           setStatusFilter('new');
         }
       },
-      icon: <UserPlus className="w-6 h-6" />,
-      color: 'blue'
+      icon: customerTypeTab === 'dg_customer' || customerTypeTab === 'oem' ? 
+            <CheckCircle className="w-6 h-6" /> : 
+            <UserPlus className="w-6 h-6" />,
+      color: customerTypeTab === 'dg_customer' || customerTypeTab === 'oem' ? 'green' : 'blue'
     },
     {
-      title: 'Qualified',
-      value: customerTypeTab === 'dg_customer' || customerTypeTab === 'oem' ? 0 : qualifiedStatusCount,
+      title: customerTypeTab === 'dg_customer' ? 'DG With Warranty' :
+             customerTypeTab === 'oem' ? 'Inactive Suppliers' :
+             customerTypeTab === 'supplier' ? 'Supplier Contacts' :
+             'Qualified',
+      value: customerTypeTab === 'dg_customer' ? 
+             allCustomers.filter(customer => 
+               customer.type === 'customer' && 
+               customer.status === 'converted' &&
+               customer.dgDetails?.some(dg => dg.warrantyStatus === 'warranty')
+             ).length :
+             customerTypeTab === 'oem' ? 
+             allCustomers.filter(customer => 
+               customer.type === 'customer' && 
+               customer.customerType === 'oem' &&
+               ((customer as any).status === 'inactive' || (customer as any).status === 'blacklisted')
+             ).length :
+             customerTypeTab === 'supplier' ? contactedStatusCount :
+             qualifiedStatusCount,
       action: () => {
-        if (customerTypeTab !== 'dg_customer' && customerTypeTab !== 'oem') {
+        if (customerTypeTab === 'dg_customer') {
+          // Show DG customers with warranty
+          setTypeFilter('dg');
+          setStatusFilter('converted');
+        } else if (customerTypeTab === 'oem') {
+          setStatusFilter('inactive');
+        } else if (customerTypeTab === 'supplier') {
+          setStatusFilter('contacted');
+        } else {
           setStatusFilter('qualified');
         }
       },
-      icon: <Target className="w-6 h-6" />,
-      color: 'yellow'
+      icon: customerTypeTab === 'dg_customer' ? 
+            <Shield className="w-6 h-6" /> :
+            customerTypeTab === 'oem' ? 
+            <XCircle className="w-6 h-6" /> :
+            <Target className="w-6 h-6" />,
+      color: customerTypeTab === 'dg_customer' ? 'purple' :
+             customerTypeTab === 'oem' ? 'red' : 'yellow'
     },
     {
-      title: 'Converted',
-      value: customerTypeTab === 'dg_customer' ? convertedStatusCount : 
-             customerTypeTab === 'oem' ? convertedStatusCount :
+      title: customerTypeTab === 'dg_customer' ? 'DG Installations' :
+             customerTypeTab === 'oem' ? 'Total Active' :
+             customerTypeTab === 'supplier' ? 'Total Converted' :
+             'Converted',
+      value: customerTypeTab === 'dg_customer' ? 
+             allCustomers.filter(customer => 
+               customer.type === 'customer' && 
+               customer.status === 'converted' &&
+               (customer.dgDetails?.length ?? 0) > 0
+             ).length :
+             customerTypeTab === 'oem' ? 
+             allCustomers.filter(customer => 
+               customer.type === 'customer' && 
+               customer.customerType === 'oem'
+             ).length :
+             customerTypeTab === 'supplier' ? convertedStatusCount :
              convertedStatusCount,
       action: () => {
-        if (customerTypeTab !== 'dg_customer' && customerTypeTab !== 'oem') {
+        if (customerTypeTab === 'dg_customer') {
+          setStatusFilter('converted');
+          setTypeFilter('dg');
+        } else if (customerTypeTab === 'oem') {
+          setStatusFilter('active');
+        } else if (customerTypeTab === 'supplier') {
+          setStatusFilter('converted');
+        } else {
           setStatusFilter('converted');
         }
       },
-      icon: <CheckCircle className="w-6 h-6" />,
+      icon: customerTypeTab === 'dg_customer' ? 
+            <Wrench className="w-6 h-6" /> :
+            customerTypeTab === 'oem' ? 
+            <TrendingUp className="w-6 h-6" /> :
+            <CheckCircle className="w-6 h-6" />,
       color: 'green'
     }
   ];
@@ -1858,11 +2289,14 @@ const CustomerManagement: React.FC = () => {
       if (dateFrom) params.dateFrom = dateFrom;
       if (dateTo) params.dateTo = dateTo;
       
-      // Add type parameter for supplier/customer distinction
+      // Add type parameter for supplier/customer/OEM distinction
       if (customerTypeTab === 'supplier') {
         params.type = 'supplier';
       } else if (customerTypeTab === 'customer') {
         params.type = 'customer';
+      } else if (customerTypeTab === 'oem') {
+        params.type = 'customer'; // OEM customers have type 'customer' but customerType 'oem'
+        params.customerType = 'oem';
       }
 
       // Call the export API
@@ -1874,7 +2308,9 @@ const CustomerManagement: React.FC = () => {
       link.href = url;
       
       // Set filename based on type
-      const filename = customerTypeTab === 'supplier' ? 'suppliers-export.xlsx' : 'customers-export.xlsx';
+      const filename = customerTypeTab === 'supplier' ? 'suppliers-export.xlsx' : 
+                      customerTypeTab === 'oem' ? 'oem-customers-export.xlsx' : 
+                      'customers-export.xlsx';
       link.download = filename;
       
       // Trigger download
@@ -1883,7 +2319,9 @@ const CustomerManagement: React.FC = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
       
-      toast.success(`${customerTypeTab === 'supplier' ? 'Suppliers' : 'Customers'} exported successfully!`);
+      toast.success(`${customerTypeTab === 'supplier' ? 'Suppliers' : 
+                      customerTypeTab === 'oem' ? 'OEM Customers' : 
+                      'Customers'} exported successfully!`);
     } catch (error: any) {
       console.error('Export error:', error);
       toast.error('Failed to export data: ' + (error.message || 'Unknown error'));
@@ -1904,15 +2342,18 @@ const CustomerManagement: React.FC = () => {
                    'Manage customer relationships, leads, and track interactions'}
       >
         <div className="flex space-x-3">
-          <button
-            onClick={() => setShowPipelineModal(true)}
-            className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
-          >
-            <TrendingUp className="w-4 h-4" />
-            <span className="text-sm">Sales Pipeline</span>
-          </button>
+          {/* Hide Sales Pipeline button for OEM and Prospective Customer tabs */}
+          {customerTypeTab !== 'oem' && customerTypeTab !== 'dg_customer' && (
+            <button
+              onClick={() => setShowPipelineModal(true)}
+              className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              <TrendingUp className="w-4 h-4" />
+              <span className="text-sm">Sales Pipeline</span>
+            </button>
+          )}
 
-          {user?.role !== 'hr' && customerTypeTab !== 'dg_customer' && customerTypeTab !== 'oem' &&
+          {user?.role !== 'hr' && (
             <button
               onClick={() => setShowAddModal(true)}
               className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
@@ -1925,7 +2366,7 @@ const CustomerManagement: React.FC = () => {
                  'Add OEM Customer'}
               </span>
             </button>
-          }
+          )}
           {(customerTypeTab === 'customer' || customerTypeTab === 'supplier') && (
             <button
               onClick={handleImportClick}
@@ -2011,18 +2452,16 @@ const CustomerManagement: React.FC = () => {
               />
             </div>
             {/* Action Buttons */}
-            {customerTypeTab !== 'oem' && customerTypeTab !== 'dg_customer' && (
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowFilters(v => !v)}
-                  className="px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 border border-gray-300 text-sm font-medium flex items-center gap-2 shadow-sm"
-                >
-                  <Filter className="w-4 h-4" />
-                  Filters
-                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
-                </button>
-              </div>
-            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowFilters(v => !v)}
+                className="px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 border border-gray-300 text-sm font-medium flex items-center gap-2 shadow-sm"
+              >
+                <Filter className="w-4 h-4" />
+                Filters
+                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
 
             {/* Customer Type Tabs */}
             <div className="flex space-x-1 bg-white p-1 rounded-lg border border-gray-200">
@@ -2084,7 +2523,7 @@ const CustomerManagement: React.FC = () => {
           </div>
         </div>
         {/* Collapsible Filter Panel */}
-        {customerTypeTab !== 'oem' && showFilters && (
+        {showFilters && (
           <div className="px-6 py-6 bg-gray-50">
             <div className="grid grid-cols-4 gap-4 mb-6">
               {/* Sort By */}
@@ -2112,35 +2551,37 @@ const CustomerManagement: React.FC = () => {
                   <option value="desc">Descending (Z-A)</option>
                 </select>
               </div>
-              {/* Status */}
-              <div className="space-y-2">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
-                <div className="relative dropdown-container">
-                  <button
-                    onClick={() => setShowStatusDropdown(!showStatusDropdown)}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  >
-                    <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
-                    <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-                  {showStatusDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                      {statusOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => {
-                            setStatusFilter(option.value as any);
-                            setShowStatusDropdown(false);
-                          }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+              {/* Status - Hidden for Prospective Customers */}
+              {customerTypeTab !== 'dg_customer' && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                  <div className="relative dropdown-container">
+                    <button
+                      onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                      className="w-full flex items-center justify-between px-3 py-2 text-sm text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    >
+                      <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
+                      <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showStatusDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                        {statusOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => {
+                              setStatusFilter(option.value as any);
+                              setShowStatusDropdown(false);
+                            }}
+                            className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="flex items-end">
                 <button
                   onClick={clearAllFilters}
@@ -2173,7 +2614,7 @@ const CustomerManagement: React.FC = () => {
                   <button onClick={() => setTypeFilter('all')} className="ml-1 text-purple-500 hover:text-purple-700">×</button>
                 </span>
               )}
-              {statusFilter !== 'all' && (
+              {statusFilter !== 'all' && customerTypeTab !== 'dg_customer' && (
                 <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs flex items-center">
                   {getStatusLabel(statusFilter)}
                   <button onClick={() => setStatusFilter('all')} className="ml-1 text-blue-500 hover:text-blue-700">×</button>
@@ -2474,7 +2915,7 @@ const CustomerManagement: React.FC = () => {
                         )}
                         {user?.role !== 'hr' && customerTypeTab !== 'oem' && customerTypeTab !== 'dg_customer' &&
                           <button
-                            onClick={() => handleDeleteCustomer(customer._id)}
+                            onClick={() => handleDeleteCustomer(customer)}
                             className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
                             title={(customerTypeTab as string) === 'oem' ? 'Delete OEM' : 'Delete Customer'}
                           >
@@ -2946,10 +3387,13 @@ const CustomerManagement: React.FC = () => {
                         <input
                           type="text"
                           value={customerFormData.name}
-                          onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
+                          onChange={(e) => {
+                            const sanitizedValue = sanitizeCustomerName(e.target.value);
+                            setCustomerFormData({ ...customerFormData, name: sanitizedValue });
+                          }}
                           className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
                             }`}
-                          placeholder="Enter name"
+                              placeholder="Enter name (must contain letters, max 3 special chars: &, ., ,, -, ')"
                         />
                         {formErrors.name && (
                           <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
@@ -2996,40 +3440,92 @@ const CustomerManagement: React.FC = () => {
                             <input
                               type="text"
                               value={customerFormData.bankDetails?.bankName || ''}
-                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), bankName: e.target.value } })}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Enter bank name"
+                              onChange={(e) => {
+                                const sanitizedValue = sanitizeBankName(e.target.value);
+                                setCustomerFormData({ 
+                                  ...customerFormData, 
+                                  bankDetails: { 
+                                    ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), 
+                                    bankName: sanitizedValue 
+                                  } 
+                                });
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${(formErrors.bankDetails as any)?.bankName ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter bank name (must contain letters, max 3 special chars: &, ., ,, -, ', ())"
+                              maxLength={100}
                             />
+                            {(formErrors.bankDetails as any)?.bankName && (
+                              <p className="text-red-500 text-xs mt-1">{(formErrors.bankDetails as any).bankName}</p>
+                            )}
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
                             <input
                               type="text"
                               value={customerFormData.bankDetails?.accountNo || ''}
-                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), accountNo: e.target.value } })}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Enter account number"
+                              onChange={(e) => {
+                                const sanitizedValue = sanitizeAccountNumber(e.target.value);
+                                setCustomerFormData({ 
+                                  ...customerFormData, 
+                                  bankDetails: { 
+                                    ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), 
+                                    accountNo: sanitizedValue 
+                                  } 
+                                });
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${(formErrors.bankDetails as any)?.accountNo ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter account number (9-18 digits)"
+                              maxLength={18}
                             />
+                            {(formErrors.bankDetails as any)?.accountNo && (
+                              <p className="text-red-500 text-xs mt-1">{(formErrors.bankDetails as any).accountNo}</p>
+                            )}
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">IFSC Code</label>
                             <input
                               type="text"
                               value={customerFormData.bankDetails?.ifsc || ''}
-                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), ifsc: e.target.value.toUpperCase() } })}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Enter IFSC code"
+                              onChange={(e) => {
+                                const sanitizedValue = sanitizeIFSC(e.target.value);
+                                setCustomerFormData({ 
+                                  ...customerFormData, 
+                                  bankDetails: { 
+                                    ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), 
+                                    ifsc: sanitizedValue 
+                                  } 
+                                });
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${(formErrors.bankDetails as any)?.ifsc ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter IFSC code (e.g., SBIN0001234)"
+                              maxLength={11}
                             />
+                            {(formErrors.bankDetails as any)?.ifsc && (
+                              <p className="text-red-500 text-xs mt-1">{(formErrors.bankDetails as any).ifsc}</p>
+                            )}
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Branch Name</label>
                             <input
                               type="text"
                               value={customerFormData.bankDetails?.branch || ''}
-                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), branch: e.target.value } })}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              onChange={(e) => {
+                                const sanitizedValue = sanitizeBranchName(e.target.value);
+                                setCustomerFormData({ 
+                                  ...customerFormData, 
+                                  bankDetails: { 
+                                    ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), 
+                                    branch: sanitizedValue 
+                                  } 
+                                });
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${(formErrors.bankDetails as any)?.branch ? 'border-red-500' : 'border-gray-300'}`}
                               placeholder="Enter branch name"
+                              maxLength={100}
                             />
+                            {(formErrors.bankDetails as any)?.branch && (
+                              <p className="text-red-500 text-xs mt-1">{(formErrors.bankDetails as any).branch}</p>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -3135,40 +3631,64 @@ const CustomerManagement: React.FC = () => {
                                   <input
                                     type="text"
                                     value={address.contactPersonName || ''}
-                                    onChange={(e) => updateAddress(address.id, 'contactPersonName', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                    placeholder="Contact person"
+                                    onChange={(e) => {
+                                      const sanitizedValue = sanitizeContactPerson(e.target.value);
+                                      updateAddress(address.id, 'contactPersonName', sanitizedValue);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${formErrors[`addr_contact_${index}`] ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Contact person name"
                                   />
+                                  {formErrors[`addr_contact_${index}`] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors[`addr_contact_${index}`]}</p>
+                                  )}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
                                   <input
                                     type="text"
                                     value={address.designation || ''}
-                                    onChange={(e) => updateAddress(address.id, 'designation', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    onChange={(e) => {
+                                      const sanitizedValue = sanitizeDesignation(e.target.value);
+                                      updateAddress(address.id, 'designation', sanitizedValue);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${formErrors[`addr_designation_${index}`] ? 'border-red-500' : 'border-gray-300'}`}
                                     placeholder="Designation"
                                   />
+                                  {formErrors[`addr_designation_${index}`] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors[`addr_designation_${index}`]}</p>
+                                  )}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                                   <input
                                     type="email"
                                     value={address.email || ''}
-                                    onChange={(e) => updateAddress(address.id, 'email', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                    placeholder="Email"
+                                    onChange={(e) => {
+                                      const sanitizedValue = sanitizeEmail(e.target.value);
+                                      updateAddress(address.id, 'email', sanitizedValue);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${Array.isArray(formErrors.email) && formErrors.email[index] ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="example@domain.com"
                                   />
+                                  {Array.isArray(formErrors.email) && formErrors.email[index] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.email[index]}</p>
+                                  )}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                                   <input
                                     type="text"
                                     value={address.phone || ''}
-                                    onChange={(e) => updateAddress(address.id, 'phone', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                    placeholder="Phone"
+                                    onChange={(e) => {
+                                      const sanitizedValue = sanitizePhone(e.target.value);
+                                      updateAddress(address.id, 'phone', sanitizedValue);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${Array.isArray(formErrors.phone) && formErrors.phone[index] ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="+91 98765 43210"
                                   />
+                                  {Array.isArray(formErrors.phone) && formErrors.phone[index] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.phone[index]}</p>
+                                  )}
                                 </div>
                               </div>
                               {/* New fields for state, district, pincode */}
@@ -3662,7 +4182,10 @@ const CustomerManagement: React.FC = () => {
                         <input
                           type="text"
                           value={customerFormData.name}
-                          onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
+                          onChange={(e) => {
+                            const sanitizedValue = sanitizeCustomerName(e.target.value);
+                            setCustomerFormData({ ...customerFormData, name: sanitizedValue });
+                          }}
                           className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
                             }`}
                           placeholder="Enter name"
@@ -3714,40 +4237,92 @@ const CustomerManagement: React.FC = () => {
                             <input
                               type="text"
                               value={customerFormData.bankDetails?.bankName || ''}
-                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), bankName: e.target.value } })}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Enter bank name"
+                              onChange={(e) => {
+                                const sanitizedValue = sanitizeBankName(e.target.value);
+                                setCustomerFormData({ 
+                                  ...customerFormData, 
+                                  bankDetails: { 
+                                    ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), 
+                                    bankName: sanitizedValue 
+                                  } 
+                                });
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${(formErrors.bankDetails as any)?.bankName ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter bank name (must contain letters, max 3 special chars: &, ., ,, -, ', ())"
+                              maxLength={100}
                             />
+                            {(formErrors.bankDetails as any)?.bankName && (
+                              <p className="text-red-500 text-xs mt-1">{(formErrors.bankDetails as any).bankName}</p>
+                            )}
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
                             <input
                               type="text"
                               value={customerFormData.bankDetails?.accountNo || ''}
-                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), accountNo: e.target.value } })}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Enter account number"
+                              onChange={(e) => {
+                                const sanitizedValue = sanitizeAccountNumber(e.target.value);
+                                setCustomerFormData({ 
+                                  ...customerFormData, 
+                                  bankDetails: { 
+                                    ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), 
+                                    accountNo: sanitizedValue 
+                                  } 
+                                });
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${(formErrors.bankDetails as any)?.accountNo ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter account number (9-18 digits)"
+                              maxLength={18}
                             />
+                            {(formErrors.bankDetails as any)?.accountNo && (
+                              <p className="text-red-500 text-xs mt-1">{(formErrors.bankDetails as any).accountNo}</p>
+                            )}
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">IFSC Code</label>
                             <input
                               type="text"
                               value={customerFormData.bankDetails?.ifsc || ''}
-                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), ifsc: e.target.value.toUpperCase() } })}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Enter IFSC code"
+                              onChange={(e) => {
+                                const sanitizedValue = sanitizeIFSC(e.target.value);
+                                setCustomerFormData({ 
+                                  ...customerFormData, 
+                                  bankDetails: { 
+                                    ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), 
+                                    ifsc: sanitizedValue 
+                                  } 
+                                });
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${(formErrors.bankDetails as any)?.ifsc ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter IFSC code (e.g., SBIN0001234)"
+                              maxLength={11}
                             />
+                            {(formErrors.bankDetails as any)?.ifsc && (
+                              <p className="text-red-500 text-xs mt-1">{(formErrors.bankDetails as any).ifsc}</p>
+                            )}
                           </div>
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Branch Name</label>
                             <input
                               type="text"
                               value={customerFormData.bankDetails?.branch || ''}
-                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), branch: e.target.value } })}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              onChange={(e) => {
+                                const sanitizedValue = sanitizeBranchName(e.target.value);
+                                setCustomerFormData({ 
+                                  ...customerFormData, 
+                                  bankDetails: { 
+                                    ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), 
+                                    branch: sanitizedValue 
+                                  } 
+                                });
+                              }}
+                              className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${(formErrors.bankDetails as any)?.branch ? 'border-red-500' : 'border-gray-300'}`}
                               placeholder="Enter branch name"
+                              maxLength={100}
                             />
+                            {(formErrors.bankDetails as any)?.branch && (
+                              <p className="text-red-500 text-xs mt-1">{(formErrors.bankDetails as any).branch}</p>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -3841,40 +4416,64 @@ const CustomerManagement: React.FC = () => {
                                   <input
                                     type="text"
                                     value={address.contactPersonName || ''}
-                                    onChange={(e) => updateAddress(address.id, 'contactPersonName', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                    placeholder="Contact person"
+                                    onChange={(e) => {
+                                      const sanitizedValue = sanitizeContactPerson(e.target.value);
+                                      updateAddress(address.id, 'contactPersonName', sanitizedValue);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${formErrors[`addr_contact_${index}`] ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Contact person name"
                                   />
+                                  {formErrors[`addr_contact_${index}`] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors[`addr_contact_${index}`]}</p>
+                                  )}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
                                   <input
                                     type="text"
                                     value={address.designation || ''}
-                                    onChange={(e) => updateAddress(address.id, 'designation', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    onChange={(e) => {
+                                      const sanitizedValue = sanitizeDesignation(e.target.value);
+                                      updateAddress(address.id, 'designation', sanitizedValue);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${formErrors[`addr_designation_${index}`] ? 'border-red-500' : 'border-gray-300'}`}
                                     placeholder="Designation"
                                   />
+                                  {formErrors[`addr_designation_${index}`] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors[`addr_designation_${index}`]}</p>
+                                  )}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                                   <input
                                     type="email"
                                     value={address.email || ''}
-                                    onChange={(e) => updateAddress(address.id, 'email', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                    placeholder="Email"
+                                    onChange={(e) => {
+                                      const sanitizedValue = sanitizeEmail(e.target.value);
+                                      updateAddress(address.id, 'email', sanitizedValue);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${Array.isArray(formErrors.email) && formErrors.email[index] ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="example@domain.com"
                                   />
+                                  {Array.isArray(formErrors.email) && formErrors.email[index] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.email[index]}</p>
+                                  )}
                                 </div>
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                                   <input
                                     type="text"
                                     value={address.phone || ''}
-                                    onChange={(e) => updateAddress(address.id, 'phone', e.target.value)}
-                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                    placeholder="Phone"
+                                    onChange={(e) => {
+                                      const sanitizedValue = sanitizePhone(e.target.value);
+                                      updateAddress(address.id, 'phone', sanitizedValue);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${Array.isArray(formErrors.phone) && formErrors.phone[index] ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="+91 98765 43210"
                                   />
+                                  {Array.isArray(formErrors.phone) && formErrors.phone[index] && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.phone[index]}</p>
+                                  )}
                                 </div>
                               </div>
                               {/* New fields for state, district, pincode */}
@@ -5079,6 +5678,67 @@ const CustomerManagement: React.FC = () => {
                     <p className="text-xs text-gray-600">Lost</p>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirmModal && customerToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md m-4">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                    <AlertCircle className="w-5 h-5 text-red-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900">Confirm Deletion</h3>
+                </div>
+                <button
+                  onClick={cancelDeleteCustomer}
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <div className="mb-6">
+                <p className="text-gray-600 mb-2">
+                  Are you sure you want to delete this {customerTypeTab === 'supplier' ? 'supplier' : 
+                                                          customerTypeTab === 'dg_customer' ? 'DG customer' : 
+                                                          customerTypeTab === 'oem' ? 'OEM customer' : 'customer'}?
+                </p>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <div className="font-medium text-gray-900">{customerToDelete.name}</div>
+                  {customerToDelete.email && (
+                    <div className="text-sm text-gray-600 mt-1">{customerToDelete.email}</div>
+                  )}
+                  {customerToDelete.phone && (
+                    <div className="text-sm text-gray-600">{customerToDelete.phone}</div>
+                  )}
+                </div>
+                <p className="text-sm text-red-600 mt-3">
+                  ⚠️ This action cannot be undone.
+                </p>
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={cancelDeleteCustomer}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  disabled={submitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteCustomer}
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  {submitting ? 'Deleting...' : 'Delete'}
+                </button>
               </div>
             </div>
           </div>

@@ -38,15 +38,15 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ className = '' }) =
   // Initialize WebSocket connection only when user is loaded
   const { isConnected, connectionError } = useWebSocket({
     userId: user?.id || '',
-    authToken: localStorage.getItem('authToken') || '',
-    enabled: !!user?.id && !!localStorage.getItem('authToken')
+    authToken: localStorage.getItem('authToken') || sessionStorage.getItem('authToken') || '',
+    enabled: !!user?.id && !!(localStorage.getItem('authToken') || sessionStorage.getItem('authToken'))
   });
 
   // Debug WebSocket connection
   console.log('🔌 WebSocket Debug:', {
     user: user,
     userId: user?.id,
-    hasAuthToken: !!localStorage.getItem('authToken'),
+    hasAuthToken: !!(localStorage.getItem('authToken') || sessionStorage.getItem('authToken')),
     enabled: !!user?.id,
     isConnected,
     connectionError
@@ -55,6 +55,11 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ className = '' }) =
 
   // Fetch notifications and stats
   const fetchNotifications = async (pageNum = 1, append = false) => {
+    // Don't fetch notifications if user is not authenticated
+    if (!user?.id || (!localStorage.getItem('authToken') && !sessionStorage.getItem('authToken'))) {
+      return;
+    }
+
     try {
       setLoading(true);
       const response = await apiClient.notifications.getAll({
@@ -81,6 +86,11 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ className = '' }) =
   };
 
   const fetchStats = async () => {
+    // Don't fetch stats if user is not authenticated
+    if (!user?.id || (!localStorage.getItem('authToken') && !sessionStorage.getItem('authToken'))) {
+      return;
+    }
+
     try {
       setStatsLoading(true);
       const response = await apiClient.notifications.getStats();
@@ -88,10 +98,12 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ className = '' }) =
       setStats(response.data);
     } catch (error) {
       console.error('Error fetching notification stats:', error);
-      // Even if there's an error, try to fetch again after a delay
-      setTimeout(() => {
-        fetchStats();
-      }, 5000);
+      // Don't retry automatically on auth errors, only on server errors
+      if (error instanceof Error && !error.message.includes('401')) {
+        setTimeout(() => {
+          fetchStats();
+        }, 5000);
+      }
     } finally {
       setStatsLoading(false);
     }

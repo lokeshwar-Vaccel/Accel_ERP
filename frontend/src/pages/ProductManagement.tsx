@@ -54,8 +54,17 @@ interface ProductFormData {
 }
 
 const ProductManagement: React.FC = () => {
-  // Active tab state
-  const [activeTab, setActiveTab] = useState<'spare' | 'dg'>('spare');
+  // Active tab state with localStorage persistence
+  const [activeTab, setActiveTab] = useState<'spare' | 'dg'>(() => {
+    const savedTab = localStorage.getItem('productManagementActiveTab');
+    return (savedTab === 'spare' || savedTab === 'dg') ? savedTab : 'spare';
+  });
+
+  // Function to handle tab change with localStorage persistence
+  const handleTabChange = (tab: 'spare' | 'dg') => {
+    setActiveTab(tab);
+    localStorage.setItem('productManagementActiveTab', tab);
+  };
 
   // Spare Products State
   const [products, setProducts] = useState<Product[]>([]); // paginated for table
@@ -1076,17 +1085,9 @@ const ProductManagement: React.FC = () => {
     }
   }, [currentPage, limit, sort, searchTerm, statusFilter, categoryFilter]);
 
-  const filteredProducts = Array.isArray(products) ? products.filter(product => {
-    const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (product.partNo && product.partNo.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (product.brand && product.brand.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
-    const matchesStatus = statusFilter === 'all' ||
-      (statusFilter === 'active' && product.isActive) ||
-      (statusFilter === 'inactive' && !product.isActive);
-
-    return matchesSearch && matchesCategory && matchesStatus;
-  }) : [];
+  // Since filtering is already handled server-side in fetchProducts, 
+  // we don't need additional client-side filtering
+  const filteredProducts = Array.isArray(products) ? products : [];
 
   const categories = Array.isArray(products) ? [...new Set(products.map(p => p.category))] : [];
 
@@ -1162,7 +1163,7 @@ const ProductManagement: React.FC = () => {
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8 px-6">
             <button
-              onClick={() => setActiveTab('spare')}
+              onClick={() => handleTabChange('spare')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'spare'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -1174,7 +1175,7 @@ const ProductManagement: React.FC = () => {
               </div>
             </button>
             <button
-              onClick={() => setActiveTab('dg')}
+              onClick={() => handleTabChange('dg')}
               className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'dg'
                   ? 'border-orange-500 text-orange-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -1192,6 +1193,7 @@ const ProductManagement: React.FC = () => {
           {activeTab === 'spare' ? (
             <SpareProductsTab
               products={products}
+              allProductsForAvg={allProductsForAvg}
               loading={loading}
               searchTerm={searchTerm}
               setSearchTerm={setSearchTerm}
@@ -2127,110 +2129,61 @@ const ProductManagement: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
-              {/* Basic Information */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Basic Information</h3>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-gray-500 uppercase tracking-wide font-medium">Subject</label>
-                    <p className="text-sm text-gray-900 font-medium">{viewingProduct.subject}</p>
+            <div className="p-6">
+              {/* Single Page Layout */}
+              <div className="grid grid-cols-2 gap-8">
+                {/* Left Column */}
+                <div className="space-y-6">
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-3">Subject</h4>
+                    <p className="text-sm text-gray-700">{viewingProduct.subject}</p>
                   </div>
 
-                  <div>
-                    <label className="text-xs text-gray-500 uppercase tracking-wide font-medium">Status</label>
-                    <div className="flex items-center space-x-2">
-                      <div className={`w-2 h-2 rounded-full ${viewingProduct.isActive ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                      <span className="text-sm text-gray-900">{viewingProduct.isActive ? 'Active' : 'Inactive'}</span>
-                    </div>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-3">Description</h4>
+                    <p className="text-sm text-gray-700 leading-relaxed">
+                      {viewingProduct.description || `Supply of ${viewingProduct.kva} kVA ${viewingProduct.phase === 'single' ? '1 phase' : '3 phase'}, Mahindra CPCB IV+ compliant, Prime Rated, radiator cooled, powered by Mahindra engine, electronic ${viewingProduct.numberOfCylinders} cylinder engine, model ${viewingProduct.dgModel}, coupled with ${viewingProduct.kva} KVA alternator, Standard control panel with ASAS Controller with battery charger, Silencer, Anti-Vibration mountings, exhaust flexible connector, Batteries with cables, fuel tank.`}
+                    </p>
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-xs text-gray-500 uppercase tracking-wide font-medium">Created Date</label>
-                  <p className="text-sm text-gray-900">{new Date(viewingProduct.createdAt).toLocaleDateString()}</p>
-                </div>
-
-                {viewingProduct.description && (
-                  <div>
-                    <label className="text-xs text-gray-500 uppercase tracking-wide font-medium">Description</label>
-                    <p className="text-sm text-gray-900 leading-relaxed">{viewingProduct.description}</p>
+                {/* Right Column */}
+                <div className="space-y-6">
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-3">KVA Rating</h4>
+                    <p className="text-sm text-gray-700 font-medium">{viewingProduct.kva}</p>
                   </div>
-                )}
-              </div>
 
-              {/* DG Specifications */}
-              <div className="bg-blue-50 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                  <Zap className="w-5 h-5 text-blue-600 mr-2" />
-                  DG Specifications
-                </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">KVA Rating</label>
-                    <p className="text-sm text-gray-900 font-medium">{viewingProduct.kva}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Phase</label>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${viewingProduct.phase === 'single'
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-3">Phase</h4>
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium capitalize ${viewingProduct.phase === 'single'
                         ? 'bg-green-100 text-green-800'
                         : 'bg-blue-100 text-blue-800'
                       }`}>
                       {viewingProduct.phase} Phase
                     </span>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Annexure Rating</label>
-                    <p className="text-sm text-gray-900 font-medium">{viewingProduct.annexureRating}</p>
+
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-3">Annexure Rating</h4>
+                    <p className="text-sm text-gray-700 font-medium">{viewingProduct.annexureRating}</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">DG Model</label>
-                    <p className="text-sm text-gray-900 font-medium">{viewingProduct.dgModel}</p>
+
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-3">DG Model</h4>
+                    <p className="text-sm text-gray-700 font-medium">{viewingProduct.dgModel}</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Number of Cylinders</label>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-pink-100 text-pink-800">
+
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-3">Number of Cylinders</h4>
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-pink-100 text-pink-800">
                       {viewingProduct.numberOfCylinders} {viewingProduct.numberOfCylinders === 1 ? 'Cylinder' : 'Cylinders'}
                     </span>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                    <p className="text-sm text-gray-900 font-medium">{viewingProduct.subject}</p>
-                  </div>
-                </div>
-              </div>
 
-              {/* Generated Specifications */}
-              <div className="bg-green-50 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                  <Settings className="w-5 h-5 text-green-600 mr-2" />
-                  Complete Specifications
-                </h3>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
-                    <p className="text-sm text-gray-900 leading-relaxed">
-                      Offer for the Supply of {viewingProduct.kva} kVA ({viewingProduct.phase === 'single' ? '1P' : '3P'}) Genset confirming to latest CPCB IV+ emission norms.
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Annexure Rating</label>
-                    <p className="text-sm text-gray-900 leading-relaxed">
-                      {viewingProduct.kva} Kva ({viewingProduct.phase === 'single' ? '1P' : '3P'})
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Model & Cylinder</label>
-                    <p className="text-sm text-gray-900 leading-relaxed">
-                      {viewingProduct.dgModel} & CYL-{viewingProduct.numberOfCylinders}
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Product Description</label>
-                    <p className="text-sm text-gray-900 leading-relaxed">
-                      {viewingProduct.description || `Supply of ${viewingProduct.kva} kVA ${viewingProduct.phase === 'single' ? '1 phase' : '3 phase'}, Mahindra CPCB IV+ compliant, Prime Rated, radiator cooled, powered by Mahindra engine, electronic ${viewingProduct.numberOfCylinders} cylinder engine, model ${viewingProduct.dgModel}, coupled with ${viewingProduct.kva} KVA alternator, Standard control panel with ASAS Controller with battery charger, Silencer, Anti-Vibration mountings, exhaust flexible connector, Batteries with cables, fuel tank.`}
-                    </p>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="text-sm font-semibold text-gray-800 border-b border-gray-200 pb-2 mb-3">Created Date</h4>
+                    <p className="text-sm text-gray-700">{new Date(viewingProduct.createdAt).toLocaleDateString()}</p>
                   </div>
                 </div>
               </div>
@@ -2315,6 +2268,7 @@ const ProductManagement: React.FC = () => {
 // Spare Products Tab Component
 const SpareProductsTab: React.FC<{
   products: Product[];
+  allProductsForAvg: Product[];
   loading: boolean;
   searchTerm: string;
   setSearchTerm: (term: string) => void;
@@ -2345,6 +2299,7 @@ const SpareProductsTab: React.FC<{
   limit: number;
 }> = ({
   products,
+  allProductsForAvg,
   loading,
   searchTerm,
   setSearchTerm,
@@ -2399,28 +2354,6 @@ const SpareProductsTab: React.FC<{
                 <p className="text-xl font-bold text-green-600">{totalDatas}</p>
               </div>
               <TrendingUp className="w-6 h-6 text-green-600" />
-            </div>
-          </div>
-          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-600">Categories</p>
-                <p className="text-xl font-bold text-purple-600">{categories.length}</p>
-              </div>
-              <Package className="w-6 h-6 text-purple-600" />
-            </div>
-          </div>
-          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-gray-600">Avg Price</p>
-                <p className="text-xl font-bold text-orange-600">
-                  ₹{products.length > 0
-                    ? (products.reduce((acc, p) => acc + (p.price || 0), 0) / products.length).toFixed(2)
-                    : 0}
-                </p>
-              </div>
-              <IndianRupee className="w-6 h-6 text-orange-600" />
             </div>
           </div>
         </div>
@@ -2766,90 +2699,35 @@ const DGProductsTab: React.FC<{
         {/* Search and Filters */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
           <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 relative">
+            <div className="relative">
               <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
                 placeholder="Search DG products..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="pl-8 pr-3 py-1.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="pl-8 pr-3 py-1.5 w-80 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-            </div>
-            <div className="flex space-x-2">
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-                className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-              >
-                {dgStatusOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
             </div>
           </div>
         </div>
 
         {/* DG Products Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Zap className="w-5 h-5 text-orange-600" />
-                <h3 className="text-lg font-semibold text-gray-900">DG Products</h3>
-                <span className="px-2 py-1 text-xs font-medium bg-orange-100 text-orange-800 rounded-full">
-                  {filteredDGProducts.length} {filteredDGProducts.length === 1 ? 'product' : 'products'}
-                </span>
-              </div>
-              <div className="flex items-center space-x-3">
-
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
-                  <span>Showing</span>
-                  <span className="font-medium text-gray-900">{filteredDGProducts.length}</span>
-                  <span>of</span>
-                  <span className="font-medium text-gray-900">{totalDatas}</span>
-                  <span>DG products</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="overflow-x-auto">
-            <table className="min-w-full border border-gray-300">
-              <thead className="bg-gray-100">
+            <table className="w-full">
+              <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-16">
-                    S.No
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-48">
-                    Subject
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-32">
-                    Annexure Rating
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-24">
-                    KVA
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-20">
-                    Phase
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-32">
-                    Model & Cylinder
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-64">
-                    Product Description
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-24">
-                    Model
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-28">
-                    Cylinders
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-32">
-                    Actions
-                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">S.No</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Subject</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Annexure Rating</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">KVA</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Phase</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Model & Cylinder</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-64">Product Description</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Model</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Cylinders</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Actions</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -2864,71 +2742,65 @@ const DGProductsTab: React.FC<{
                 ) : (
                   filteredDGProducts.map((product, index) => (
                     <tr key={product._id} className="hover:bg-gray-50">
-                      <td className="px-3 py-3 border border-gray-300 text-xs font-medium text-gray-900 text-center">
+                      <td className="px-4 py-3 text-xs text-gray-600 text-center">
                         {(currentPage - 1) * limit + index + 1}
                       </td>
-                      <td className="px-3 py-3 border border-gray-300">
-                        <div className="text-xs text-gray-900 font-medium leading-tight">
+                      <td className="px-4 py-3">
+                        <div className="text-xs font-medium text-gray-900 break-words">
                           Offer for the Supply of {product.kva} kVA ({product.phase === 'single' ? '1P' : '3P'}) Genset confirming to latest CPCB IV+ emission norms.
                         </div>
                       </td>
-                      <td className="px-3 py-3 border border-gray-300">
-                        <div className="text-xs text-gray-900 font-medium leading-tight">
+                      <td className="px-4 py-3 text-xs text-gray-600">
+                        <div className="break-words">
                           {product.kva} Kva ({product.phase === 'single' ? '1P' : '3P'})
                         </div>
                       </td>
-                      <td className="px-3 py-3 border border-gray-300">
-                        <div className="text-xs text-gray-900 font-medium text-center">
-                          {product.kva}
-                        </div>
+                      <td className="px-4 py-3 text-xs text-gray-600 text-center">
+                        {product.kva}
                       </td>
-                      <td className="px-3 py-3 border border-gray-300">
-                        <div className="text-xs text-gray-900 font-medium text-center">
-                          {product.phase === 'single' ? '1P' : '3P'}
-                        </div>
+                      <td className="px-4 py-3 text-xs text-gray-600 text-center">
+                        {product.phase === 'single' ? '1P' : '3P'}
                       </td>
-                      <td className="px-3 py-3 border border-gray-300">
-                        <div className="text-xs text-gray-900 font-medium leading-tight">
+                      <td className="px-4 py-3 text-xs text-gray-600">
+                        <div className="break-words">
                           {product.dgModel} & CYL-{product.numberOfCylinders}
                         </div>
                       </td>
-                      <td className="px-3 py-3 border border-gray-300">
-                        <div className="text-xs text-gray-900 leading-tight max-w-xs">
-                          {product.description || `Supply of ${product.kva} kVA ${product.phase === 'single' ? '1 phase' : '3 phase'}, Mahindra CPCB IV+ compliant, Prime Rated, radiator cooled, powered by Mahindra engine, electronic ${product.numberOfCylinders} cylinder engine, model ${product.dgModel}, coupled with ${product.kva} KVA alternator, Standard control panel with ASAS Controller with battery charger, Silencer, Anti-Vibration mountings, exhaust flexible connector, Batteries with cables, fuel tank.`}
+                      <td className="px-4 py-3 text-xs text-gray-600">
+                        <div className="h-16 overflow-hidden">
+                          <div className="overflow-hidden" style={{display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical'}}>
+                            {product.description || `Supply of ${product.kva} kVA ${product.phase === 'single' ? '1 phase' : '3 phase'}, Mahindra CPCB IV+ compliant, Prime Rated, radiator cooled, powered by Mahindra engine, electronic ${product.numberOfCylinders} cylinder engine, model ${product.dgModel}, coupled with ${product.kva} KVA alternator, Standard control panel with ASAS Controller with battery charger, Silencer, Anti-Vibration mountings, exhaust flexible connector, Batteries with cables, fuel tank.`}
+                          </div>
                         </div>
                       </td>
-                      <td className="px-3 py-3 border border-gray-300">
-                        <div className="text-xs text-gray-900 font-medium text-center">
-                          {product.dgModel}
-                        </div>
+                      <td className="px-4 py-3 text-xs text-gray-600 text-center">
+                        {product.dgModel}
                       </td>
-                      <td className="px-3 py-3 border border-gray-300">
-                        <div className="text-xs text-gray-900 font-medium text-center">
-                          {product.numberOfCylinders}
-                        </div>
+                      <td className="px-4 py-3 text-xs text-gray-600 text-center">
+                        {product.numberOfCylinders}
                       </td>
-                      <td className="px-3 py-3 border border-gray-300">
-                        <div className="flex items-center space-x-1">
+                      <td className="px-4 py-3 text-xs font-medium">
+                        <div className="flex items-center space-x-2">
                           <button
                             onClick={() => openViewProductModal(product)}
-                            className="text-green-600 hover:text-green-900 p-1.5 rounded hover:bg-green-50 transition-colors"
+                            className="text-green-600 hover:text-green-900 p-2 rounded-lg hover:bg-green-50 transition-colors"
                             title="View Product"
                           >
-                            <Eye className="w-3.5 h-3.5" />
+                            <Eye className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => openEditProductModal(product)}
-                            className="text-blue-600 hover:text-blue-900 p-1.5 rounded hover:bg-blue-50 transition-colors"
+                            className="text-blue-600 hover:text-blue-900 p-2 rounded-lg hover:bg-blue-50 transition-colors"
                             title="Edit Product"
                           >
-                            <Edit className="w-3.5 h-3.5" />
+                            <Edit className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => openDeleteConfirm(product)}
-                            className="text-red-600 hover:text-red-900 p-1.5 rounded hover:bg-red-50 transition-colors"
+                            className="text-red-600 hover:text-red-900 p-2 rounded-lg hover:bg-red-50 transition-colors"
                             title="Delete Product"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </td>

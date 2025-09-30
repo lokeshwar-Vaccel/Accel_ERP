@@ -5,7 +5,7 @@ import Layout from 'layout/Layout';
 import { RootState, AppDispatch } from './store';
 import { LoadingSpinner } from 'components/ui/LoadingSpinner';
 import { LoginForm } from 'components/features/auth/LoginForm';
-import { checkAuthStatus } from './redux/auth/authSlice';
+import { checkAuthStatus, forceLogout } from './redux/auth/authSlice';
 import { Toaster } from 'react-hot-toast';
 import { ForgotPasswordForm } from 'components/features/auth/ForgotPasswordForm';
 import { Navigate, Route, Routes } from 'react-router-dom';
@@ -20,11 +20,23 @@ const App = () => {
 
   // Check authentication status on app startup
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
+    // Check both localStorage and sessionStorage for token
+    const persistentToken = localStorage.getItem('authToken');
+    const sessionToken = sessionStorage.getItem('authToken');
+    const token = persistentToken || sessionToken;
+    
     if (token) {
       dispatch(checkAuthStatus());
     }
   }, [dispatch]);
+
+  // Separate effect to handle stuck loading state
+  useEffect(() => {
+    // If we're loading but there's no token, stop loading
+    if (isLoading && !localStorage.getItem('authToken') && !sessionStorage.getItem('authToken')) {
+      dispatch(forceLogout());
+    }
+  }, [dispatch, isLoading]);
 
   // Fallback moduleAccess if user doesn't have it defined
   const moduleAccess = user?.moduleAccess || [];

@@ -78,7 +78,8 @@ MONGODB_URI=mongodb://localhost:27017/sun-power-erp
 
 # JWT Configuration
 JWT_SECRET=your_jwt_secret_key_here
-JWT_EXPIRE=7d
+JWT_EXPIRES_IN=7d
+JWT_REMEMBER_ME_EXPIRES_IN=30d
 
 # Server Configuration
 PORT=3000

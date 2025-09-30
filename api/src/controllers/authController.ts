@@ -68,7 +68,7 @@ export const login = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { email, password } = req.body;
+    const { email, password, rememberMe } = req.body;
 
     // Validate email & password
     if (!email || !password) {
@@ -100,8 +100,8 @@ export const login = async (
     user.lastLoginAt = new Date();
     await user.save();
 
-    // Generate token
-    const token = user.generateJWT();
+    // Generate token with appropriate expiration based on rememberMe
+    const token = user.generateJWT(rememberMe);
 
     const response: APIResponse = {
       success: true,

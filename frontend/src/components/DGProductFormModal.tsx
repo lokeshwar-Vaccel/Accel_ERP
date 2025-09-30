@@ -62,6 +62,10 @@ const DGProductFormModal: React.FC<DGProductFormModalProps> = ({
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
+    if (!formData.description.trim()) {
+      newErrors.description = 'Description is required';
+    }
+
     if (!formData.kva.trim()) {
       newErrors.kva = 'KVA rating is required';
     }
@@ -123,15 +127,18 @@ const DGProductFormModal: React.FC<DGProductFormModalProps> = ({
           {/* Description */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description
+              Description <span className="text-red-500">*</span>
             </label>
             <textarea
               value={formData.description}
               onChange={(e) => handleInputChange('description', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                errors.description ? 'border-red-500' : 'border-gray-300'
+              }`}
               rows={3}
               placeholder="Enter product description..."
             />
+            {errors.description && <p className="mt-1 text-sm text-red-600">{errors.description}</p>}
           </div>
 
           {/* KVA and Phase Row */}
@@ -178,7 +185,7 @@ const DGProductFormModal: React.FC<DGProductFormModalProps> = ({
                 value={formData.annexureRating}
                 onChange={(e) => handleInputChange('annexureRating', e.target.value)}
                 className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                  errors.annexureRating ? 'border-red-500' : 'border-red-500'
+                  errors.annexureRating ? 'border-red-500' : 'border-gray-300'
                 }`}
                 placeholder="e.g., CPCB IV+"
               />
@@ -236,20 +243,6 @@ const DGProductFormModal: React.FC<DGProductFormModalProps> = ({
               />
               {errors.subject && <p className="mt-1 text-sm text-red-600">{errors.subject}</p>}
             </div>
-          </div>
-
-          {/* Active Status */}
-          <div className="flex items-center space-x-3">
-            <input
-              type="checkbox"
-              id="isActive"
-              checked={formData.isActive}
-              onChange={(e) => handleInputChange('isActive', e.target.checked)}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-            />
-            <label htmlFor="isActive" className="text-sm font-medium text-gray-700">
-              Active Product
-            </label>
           </div>
 
           {/* Footer */}
