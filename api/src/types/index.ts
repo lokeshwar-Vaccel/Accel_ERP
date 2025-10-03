@@ -48,8 +48,14 @@ export enum CustomerType {
 export enum CustomerMainType {
   CUSTOMER = 'customer',
   SUPPLIER = 'supplier',
-  DG_SALES_CUSTOMER = 'dg_sales_customer',
-  OEM_CUSTOMER = 'oem_customer'
+}
+
+// EV Service Types based on service request number prefix
+export enum EVServiceType {
+  ENQUIRY_VISIT = 'Enquiry Visit',
+  SURVEY_VISIT = 'Survey Visit', 
+  INSTALLATION_VISIT = 'Installation Visit',
+  COMMISSION_VISIT = 'Commission Visit'
 }
 
 // Lead Status
@@ -510,6 +516,7 @@ export interface QueryParams {
   search?: string;
   startDate?: Date;
   endDate?: Date;
+  serviceType?: string;
 }
 
 // Email Template Interface

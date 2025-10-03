@@ -2403,6 +2403,55 @@ class ApiClient {
     getByTicketId: (ticketId: string) =>
       this.makeRequest<{ success: boolean; data: any }>(`/feedback/ticket/${ticketId}`),
   };
+
+  // EV Customers APIs
+  evCustomers = {
+    getAll: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: { customers: any[]; pagination: any } }>(`/ev-customers${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    getById: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/ev-customers/${id}`),
+
+    create: (customerData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/ev-customers', {
+        method: 'POST',
+        body: JSON.stringify(customerData),
+      }),
+
+    update: (id: string, customerData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/ev-customers/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(customerData),
+      }),
+
+    delete: (id: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/ev-customers/${id}`, {
+        method: 'DELETE',
+      }),
+
+    previewImport: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return this.makeRequest<{ success: boolean; data: any }>('/ev-customers/preview-import', {
+        method: 'POST',
+        body: formData,
+      });
+    },
+
+    import: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return this.makeRequest<{ success: boolean; data: any }>('/ev-customers/import', {
+        method: 'POST',
+        body: formData,
+      });
+    },
+
+    export: (params?: any) =>
+      this.makeRequest<Blob>(`/ev-customers/export${params ? `?${new URLSearchParams(params)}` : ''}`, {
+        responseType: 'blob',
+      }),
+  };
 }
 
 export const apiClient = new ApiClient();
