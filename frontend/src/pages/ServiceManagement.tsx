@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
+import { RootState } from '../store';
 import {
   Plus,
   Search,
@@ -18,6 +20,7 @@ import {
   FileText,
   Wrench,
   Package,
+  Zap,
   Signature,
   MapPin,
   Phone,
@@ -207,9 +210,85 @@ interface Address {
 
 const ServiceManagement: React.FC = () => {
   const location = useLocation();
+  const { isAuthenticated, user, token } = useSelector((state: RootState) => state.auth);
 
   // Sub-tab state for Retail and EV
   const [activeSubTab, setActiveSubTab] = useState<'retail' | 'ev'>('retail');
+
+  // EV Customer state
+  const [evCustomers, setEvCustomers] = useState<any[]>([]);
+  const [evCustomersLoading, setEvCustomersLoading] = useState(false);
+  const [evCustomersPage, setEvCustomersPage] = useState(1);
+  const [evCustomersTotalPages, setEvCustomersTotalPages] = useState(1);
+  const [evCustomersLimit, setEvCustomersLimit] = useState(10);
+  const [evCustomersTotalItems, setEvCustomersTotalItems] = useState(0);
+  const [evCustomersSearch, setEvCustomersSearch] = useState('');
+  const [evCustomersSearchDebounced, setEvCustomersSearchDebounced] = useState('');
+  
+  // EV Service Type filter state
+  const [evServiceTypeFilter, setEvServiceTypeFilter] = useState<'all' | 'EV' | 'SV' | 'IN' | 'CM'>('all');
+
+  // Date filter states for all tabs
+  const [requestedDateFilter, setRequestedDateFilter] = useState({ from: '', to: '' });
+  const [completedDateFilter, setCompletedDateFilter] = useState({ from: '', to: '' });
+  const [allStatusFilter, setAllStatusFilter] = useState('all');
+  const [evStatusFilter, setEvStatusFilter] = useState('all');
+  const [svStatusFilter, setSvStatusFilter] = useState('all');
+  const [inStatusFilter, setInStatusFilter] = useState('all');
+  const [cmStatusFilter, setCmStatusFilter] = useState('all');
+
+  // EV Customer modals
+  const [showEVImportModal, setShowEVImportModal] = useState(false);
+  const [showEVCreateModal, setShowEVCreateModal] = useState(false);
+  const [showEVPaymentSummaryModal, setShowEVPaymentSummaryModal] = useState(false);
+  const [showEVViewModal, setShowEVViewModal] = useState(false);
+  const [showEVEditModal, setShowEVEditModal] = useState(false);
+  const [showEVDeleteModal, setShowEVDeleteModal] = useState(false);
+  const [customerToDelete, setCustomerToDelete] = useState<any>(null);
+  const [evImportFile, setEvImportFile] = useState<File | null>(null);
+  const [evImportPreview, setEvImportPreview] = useState<any>(null);
+  const [evImportLoading, setEvImportLoading] = useState(false);
+  const [selectedEVCustomer, setSelectedEVCustomer] = useState<any>(null);
+  const [editingEVCustomer, setEditingEVCustomer] = useState<any>(null);
+  
+  // EV Edit form state
+  const [evEditForm, setEvEditForm] = useState<{
+    serviceRequestNumber: string;
+    serviceType: string;
+    serviceRequestStatus: string;
+    requestedDate: string;
+    completedDate: string;
+    chargerRating: string;
+    serviceEngineer1: string;
+    serviceEngineer2: string;
+    serviceEngineer3: string;
+    cableLength: string;
+    actualCableLength: string;
+    additionalMcb: boolean;
+    scope: string | null;
+    chargerSerialNumber: string;
+    chargerID: string;
+    VINNumber: string;
+    DBSerialNumber: string;
+  }>({
+    serviceRequestNumber: '',
+    serviceType: '',
+    serviceRequestStatus: 'open',
+    requestedDate: '',
+    completedDate: '',
+    chargerRating: '',
+    serviceEngineer1: '',
+    serviceEngineer2: '',
+    serviceEngineer3: '',
+    cableLength: '',
+    actualCableLength: '',
+    additionalMcb: false,
+    scope: null,
+    chargerSerialNumber: '',
+    chargerID: '',
+    VINNumber: '',
+    DBSerialNumber: ''
+  });
 
   // Helper function to generate service request number for manual creation
   const generateServiceRequestNumber = () => {
@@ -535,6 +614,22 @@ const [engineerWorkStats, setEngineerWorkStats] = useState<any[]>([]);
     }
   }, []);
 
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setEvCustomersSearchDebounced(evCustomersSearch);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [evCustomersSearch]);
+
+  // Fetch EV customers when EV tab is active
+  useEffect(() => {
+    if (activeSubTab === 'ev') {
+      fetchEVCustomers();
+    }
+  }, [activeSubTab, evCustomersPage, evCustomersLimit, evCustomersSearchDebounced, evServiceTypeFilter, requestedDateFilter, completedDateFilter, allStatusFilter, evStatusFilter, svStatusFilter, inStatusFilter, cmStatusFilter]);
+
 
 
   // Refetch tickets when any filter or pagination changes (like CustomerManagement)
@@ -739,6 +834,404 @@ const [engineerWorkStats, setEngineerWorkStats] = useState<any[]>([]);
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Fetch EV Customers
+  const fetchEVCustomers = async () => {
+    try {
+      const authToken = token || localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+      
+      if (!isAuthenticated || !authToken) {
+        toast.error('Please log in to access EV customers');
+        return;
+      }
+      
+      setEvCustomersLoading(true);
+      const params = new URLSearchParams({
+        page: evCustomersPage.toString(),
+        limit: evCustomersLimit.toString(),
+        ...(evCustomersSearchDebounced && { search: evCustomersSearchDebounced }),
+        ...(evServiceTypeFilter !== 'all' && { serviceType: evServiceTypeFilter })
+      });
+
+      // Add date filters for all tabs
+      if (requestedDateFilter.from) params.append('requestedDateFrom', requestedDateFilter.from);
+      if (requestedDateFilter.to) params.append('requestedDateTo', requestedDateFilter.to);
+      if (completedDateFilter.from) params.append('completedDateFrom', completedDateFilter.from);
+      if (completedDateFilter.to) params.append('completedDateTo', completedDateFilter.to);
+
+      // Add status filters based on service type
+      if (evServiceTypeFilter === 'all') {
+        if (allStatusFilter !== 'all') params.append('allStatusFilter', allStatusFilter);
+      } else if (evServiceTypeFilter === 'EV') {
+        if (evStatusFilter !== 'all') params.append('evStatusFilter', evStatusFilter);
+      } else if (evServiceTypeFilter === 'SV') {
+        if (svStatusFilter !== 'all') params.append('svStatusFilter', svStatusFilter);
+      } else if (evServiceTypeFilter === 'IN') {
+        if (inStatusFilter !== 'all') params.append('inStatusFilter', inStatusFilter);
+      } else if (evServiceTypeFilter === 'CM') {
+        if (cmStatusFilter !== 'all') params.append('cmStatusFilter', cmStatusFilter);
+      }
+
+      const response = await fetch(`/api/v1/ev-customers?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch EV customers');
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setEvCustomers(data.data.evCustomers);
+        setEvCustomersTotalPages(data.data.pagination.totalPages);
+        setEvCustomersTotalItems(data.data.pagination.totalItems);
+      }
+    } catch (error) {
+      console.error('Error fetching EV customers:', error);
+    } finally {
+      setEvCustomersLoading(false);
+    }
+  };
+
+  // EV Customer Import Functions
+  const handleEVImportFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setEvImportFile(file);
+      setEvImportPreview([]);
+    }
+  };
+
+  const handleEVImportPreview = async () => {
+    if (!evImportFile) return;
+
+    try {
+      const authToken = token || localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+      
+      if (!isAuthenticated || !authToken) {
+        toast.error('Please log in to preview import');
+        return;
+      }
+      
+      setEvImportLoading(true);
+      const formData = new FormData();
+      formData.append('file', evImportFile);
+
+      const response = await fetch('/api/v1/ev-customers/preview-import', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to preview import');
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setEvImportPreview(data.data);
+      }
+    } catch (error) {
+      console.error('Error previewing import:', error);
+      alert('Error previewing import');
+    } finally {
+      setEvImportLoading(false);
+    }
+  };
+
+  const handleEVImport = async () => {
+    if (!evImportFile) return;
+
+    try {
+      const authToken = token || localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+      
+      if (!isAuthenticated || !authToken) {
+        toast.error('Please log in to import data');
+        return;
+      }
+      
+      setEvImportLoading(true);
+      const formData = new FormData();
+      formData.append('file', evImportFile);
+
+      const response = await fetch('/api/v1/ev-customers/import', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to import EV customers');
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        const { created, updated, failed } = data.data.summary;
+        alert(`Import completed. ${created} customers created, ${updated} updated, ${failed} failed.`);
+        setShowEVImportModal(false);
+        setEvImportFile(null);
+        setEvImportPreview(null);
+        fetchEVCustomers(); // Refresh the table
+      }
+    } catch (error) {
+      console.error('Error importing EV customers:', error);
+      toast.error('Error importing EV customers');
+    } finally {
+      setEvImportLoading(false);
+    }
+  };
+
+  // EV Customer Export Function
+  const handleEVExport = async () => {
+    try {
+      const authToken = token || localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+      
+      if (!isAuthenticated || !authToken) {
+        toast.error('Please log in to export data');
+        return;
+      }
+      
+      const params = new URLSearchParams({
+        ...(evCustomersSearchDebounced && { search: evCustomersSearchDebounced }),
+        ...(evServiceTypeFilter !== 'all' && { serviceType: evServiceTypeFilter })
+      });
+
+      // Add date filters for all tabs
+      if (requestedDateFilter.from) params.append('requestedDateFrom', requestedDateFilter.from);
+      if (requestedDateFilter.to) params.append('requestedDateTo', requestedDateFilter.to);
+      if (completedDateFilter.from) params.append('completedDateFrom', completedDateFilter.from);
+      if (completedDateFilter.to) params.append('completedDateTo', completedDateFilter.to);
+
+      // Add status filters based on service type (same logic as fetchEVCustomers)
+      if (evServiceTypeFilter === 'all') {
+        if (allStatusFilter !== 'all') params.append('allStatusFilter', allStatusFilter);
+      } else if (evServiceTypeFilter === 'EV') {
+        if (evStatusFilter !== 'all') params.append('evStatusFilter', evStatusFilter);
+      } else if (evServiceTypeFilter === 'SV') {
+        if (svStatusFilter !== 'all') params.append('svStatusFilter', svStatusFilter);
+      } else if (evServiceTypeFilter === 'IN') {
+        if (inStatusFilter !== 'all') params.append('inStatusFilter', inStatusFilter);
+      } else if (evServiceTypeFilter === 'CM') {
+        if (cmStatusFilter !== 'all') params.append('cmStatusFilter', cmStatusFilter);
+      }
+
+      const response = await fetch(`/api/v1/ev-customers/export?${params}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to export EV customers');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `ev-customers-${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error exporting EV customers:', error);
+      toast.error('Error exporting EV customers');
+    }
+  };
+
+  // EV Customer handlers
+  const handleViewEVCustomer = (customer: any) => {
+    setSelectedEVCustomer(customer);
+    setShowEVViewModal(true);
+  };
+
+  const handleEditEVCustomer = (customer: any) => {
+    setEditingEVCustomer(customer);
+    
+    // Initialize form with customer data
+    setEvEditForm({
+      serviceRequestNumber: customer.serviceRequest?.serviceRequestNumber || '',
+      serviceType: customer.serviceRequest?.serviceType || '',
+      serviceRequestStatus: customer.serviceRequest?.serviceRequestStatus || 'open',
+      requestedDate: customer.serviceRequest?.requestedDate ? 
+        new Date(customer.serviceRequest.requestedDate).toISOString().split('T')[0] : '',
+      completedDate: customer.serviceRequest?.completedDate ? 
+        new Date(customer.serviceRequest.completedDate).toISOString().split('T')[0] : '',
+      chargerRating: customer.serviceRequest?.chargerRating || '',
+      serviceEngineer1: customer.serviceRequest?.serviceEngineerName1 || '',
+      serviceEngineer2: customer.serviceRequest?.serviceEngineerName2 || '',
+      serviceEngineer3: customer.serviceRequest?.serviceEngineerName3 || '',
+      cableLength: customer.serviceRequest?.cableLength?.toString() || '',
+      actualCableLength: customer.serviceRequest?.actualCableLength?.toString() || '',
+      additionalMcb: customer.serviceRequest?.additionalMcb || false,
+      scope: (() => {
+        const cableLength = customer.serviceRequest?.cableLength?.toString() || '';
+        const actualCableLength = customer.serviceRequest?.actualCableLength?.toString() || '';
+        return (!cableLength && !actualCableLength) ? null : customer.serviceRequest?.scope || null;
+      })(),
+      chargerSerialNumber: customer.serviceRequest?.chargerSerialNumber || '',
+      chargerID: customer.serviceRequest?.chargerID || '',
+      VINNumber: customer.serviceRequest?.VINNumber || '',
+      DBSerialNumber: customer.serviceRequest?.DBSerialNumber || ''
+    });
+    
+    setShowEVEditModal(true);
+  };
+
+  const handleDeleteEVCustomer = (customer: any) => {
+    setCustomerToDelete(customer);
+    setShowEVDeleteModal(true);
+  };
+
+  const confirmDeleteEVCustomer = async () => {
+    if (!customerToDelete) return;
+
+    try {
+      console.log('Deleting EV customer:', customerToDelete._id);
+      
+      // Use apiClient for consistent authentication and base URL handling
+      const response = await apiClient.evCustomers.delete(customerToDelete._id);
+
+      console.log('Delete success:', response);
+      toast.success('EV customer deleted successfully');
+      fetchEVCustomers(); // Refresh the table
+      setShowEVDeleteModal(false);
+      setCustomerToDelete(null);
+    } catch (error: any) {
+      console.error('Error deleting EV customer:', error);
+      const errorMessage = error?.response?.data?.message || error?.message || 'Unknown error';
+      toast.error(`Error deleting EV customer: ${errorMessage}`);
+    }
+  };
+
+  const handleSaveEVCustomer = async () => {
+    if (!editingEVCustomer) return;
+
+    try {
+      const serviceType = editingEVCustomer.serviceRequest?.serviceType;
+      let updateData: any = {};
+
+      if (serviceType === 'EV' || serviceType === 'Enquiry Visit') {
+        // For EV and Enquiry Visit types, update service engineer 1 and survey planned date
+        updateData = {
+          serviceRequest: {
+            serviceRequestNumber: evEditForm.serviceRequestNumber || null,
+            serviceType: evEditForm.serviceType || null,
+            serviceRequestStatus: evEditForm.serviceRequestStatus,
+            serviceEngineerName1: evEditForm.serviceEngineer1 || null,
+            requestedDate: evEditForm.requestedDate ? new Date(evEditForm.requestedDate) : null,
+            completedDate: evEditForm.completedDate ? new Date(evEditForm.completedDate) : null
+          }
+        };
+      } else if (serviceType === 'SV' || serviceType === 'Survey Visit') {
+        // For SV and Survey Visit types, update survey completed date and installation planned date
+        updateData = {
+          serviceRequest: {
+            serviceRequestNumber: evEditForm.serviceRequestNumber || null,
+            serviceType: evEditForm.serviceType || null,
+            serviceRequestStatus: evEditForm.serviceRequestStatus,
+            chargerRating: evEditForm.chargerRating || null,
+            serviceEngineerName2: evEditForm.serviceEngineer2 || null,
+            serviceEngineerName3: evEditForm.serviceEngineer3 || null,
+            cableLength: evEditForm.cableLength ? parseFloat(evEditForm.cableLength) : null,
+            additionalMcb: evEditForm.additionalMcb,
+            requestedDate: evEditForm.requestedDate ? new Date(evEditForm.requestedDate) : null,
+            completedDate: evEditForm.completedDate ? new Date(evEditForm.completedDate) : null,
+            scope: evEditForm.scope || null
+          }
+        };
+      } else if (serviceType === 'Installation Visit') {
+        // For Installation Visit type, update installation completed date and commission planned date
+        updateData = {
+          serviceRequest: {
+            serviceRequestNumber: evEditForm.serviceRequestNumber || null,
+            serviceType: evEditForm.serviceType || null,
+            serviceRequestStatus: evEditForm.serviceRequestStatus,
+            serviceEngineerName2: evEditForm.serviceEngineer2 || null,
+            serviceEngineerName3: evEditForm.serviceEngineer3 || null,
+            actualCableLength: evEditForm.actualCableLength ? parseFloat(evEditForm.actualCableLength) : null,
+            requestedDate: evEditForm.requestedDate ? new Date(evEditForm.requestedDate) : null,
+            completedDate: evEditForm.completedDate ? new Date(evEditForm.completedDate) : null,
+            scope: evEditForm.scope || null
+          }
+        };
+      } else if (serviceType === 'Commission Visit' || serviceType === 'CM') {
+        // For Commission Visit/CM type, update commission completed date
+        updateData = {
+          serviceRequest: {
+            serviceRequestNumber: evEditForm.serviceRequestNumber || null,
+            serviceType: evEditForm.serviceType || null,
+            serviceRequestStatus: evEditForm.serviceRequestStatus,
+            serviceEngineerName2: evEditForm.serviceEngineer2 || null,
+            serviceEngineerName3: evEditForm.serviceEngineer3 || null,
+            DBSerialNumber: evEditForm.DBSerialNumber || null,
+            chargerSerialNumber: evEditForm.chargerSerialNumber || null,
+            chargerID: evEditForm.chargerID || null,
+            VINNumber: evEditForm.VINNumber || null,
+            requestedDate: evEditForm.requestedDate ? new Date(evEditForm.requestedDate) : null,
+            completedDate: evEditForm.completedDate ? new Date(evEditForm.completedDate) : null
+          }
+        };
+      }
+
+      const response = await apiClient.evCustomers.update(editingEVCustomer._id, updateData);
+
+      if (response.success) {
+        // Update the local state with the complete updated customer data from the API response
+        setEvCustomers(prevCustomers =>
+          prevCustomers.map(customer =>
+            customer._id === editingEVCustomer._id
+              ? response.data // Use the complete updated customer data from API response
+              : customer
+          )
+        );
+        toast.success('EV customer updated successfully');
+        setShowEVEditModal(false);
+      } else {
+        toast.error('Failed to update EV customer');
+      }
+    } catch (error: any) {
+      console.error('Error updating EV customer:', error);
+      const errorMessage = error?.response?.data?.message || error?.message || 'Unknown error';
+      toast.error(`Error updating EV customer: ${errorMessage}`);
+    }
+  };
+
+  // Handle EV Customer Status Update
+  const handleEVStatusUpdate = async (customerId: string, newStatus: 'open' | 'pending' | 'resolved' | 'closed') => {
+    try {
+      const response = await apiClient.evCustomers.update(customerId, {
+        serviceRequest: {
+          serviceRequestStatus: newStatus
+        }
+      });
+
+      if (response.success) {
+        // Update the local state with the complete updated customer data from the API
+        setEvCustomers(prevCustomers =>
+          prevCustomers.map(customer =>
+            customer._id === customerId
+              ? response.data // Use the complete updated customer data from API response
+              : customer
+          )
+        );
+      } else {
+        toast.error('Failed to update status');
+      }
+    } catch (error: any) {
+      console.error('Error updating EV customer status:', error);
+      const errorMessage = error?.response?.data?.message || error?.message || 'Unknown error';
+      toast.error(`Error updating status: ${errorMessage}`);
     }
   };
 
@@ -3293,33 +3786,37 @@ const rows = engineerReportRows.map((r: any) =>
       >
         <div className="flex space-x-3">
           <button
-            onClick={handleExcelUpload}
+            onClick={activeSubTab === 'retail' ? handleExcelUpload : () => setShowEVImportModal(true)}
             className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
             <Upload className="w-4 h-4" />
             <span className="text-sm">Upload Excel</span>
           </button>
           <button
-            onClick={handleExportToExcel}
+            onClick={activeSubTab === 'retail' ? handleExportToExcel : handleEVExport}
             className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-purple-700 hover:to-purple-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
             <Download className="w-4 h-4" />
             <span className="text-sm">Export Excel</span>
           </button>
-          <button
-            onClick={() => setShowEngineerReportModal(true)}
-            className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-indigo-700 hover:to-indigo-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
-          >
-            <FileText className="w-4 h-4" />
-            <span className="text-sm">Payment Summary</span>
-          </button>
-          <button
-            onClick={handleCreateTicket}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="text-sm">Create Ticket</span>
-          </button>
+          {activeSubTab === 'retail' && (
+            <button
+              onClick={() => setShowEngineerReportModal(true)}
+              className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-indigo-700 hover:to-indigo-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              <FileText className="w-4 h-4" />
+              <span className="text-sm">Payment Summary</span>
+            </button>
+          )}
+          {activeSubTab === 'retail' && (
+            <button
+              onClick={handleCreateTicket}
+              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="text-sm">Create Ticket</span>
+            </button>
+          )}
         </div>
       </PageHeader>
 
@@ -3329,23 +3826,25 @@ const rows = engineerReportRows.map((r: any) =>
           <nav className="flex space-x-8 px-6" aria-label="Tabs">
             <button
               onClick={() => setActiveSubTab('retail')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors flex items-center space-x-2 ${
                 activeSubTab === 'retail'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              Retail
+              <Package className="w-4 h-4" />
+              <span>Retail</span>
             </button>
             <button
               onClick={() => setActiveSubTab('ev')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors flex items-center space-x-2 ${
                 activeSubTab === 'ev'
                   ? 'border-blue-500 text-blue-600'
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              EV
+              <Zap className="w-4 h-4" />
+              <span>EV</span>
             </button>
           </nav>
         </div>
@@ -3725,22 +4224,430 @@ const rows = engineerReportRows.map((r: any) =>
 
       {/* EV Tab Content */}
       {activeSubTab === 'ev' && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
-          <div className="text-center">
-            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 mb-4">
-              <svg className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+          {/* EV Service Type Tabs */}
+          <div className="px-6 py-4 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <div className="flex space-x-1 bg-gray-100 p-1 rounded-lg w-fit">
+                <button
+                  onClick={() => {
+                    setEvServiceTypeFilter('all');
+                    setEvCustomersPage(1);
+                  }}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    evServiceTypeFilter === 'all'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  onClick={() => {
+                    setEvServiceTypeFilter('EV');
+                    setEvCustomersPage(1);
+                  }}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    evServiceTypeFilter === 'EV'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  EV
+                </button>
+                <button
+                  onClick={() => {
+                    setEvServiceTypeFilter('SV');
+                    setEvCustomersPage(1);
+                  }}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    evServiceTypeFilter === 'SV'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  SV
+                </button>
+                <button
+                  onClick={() => {
+                    setEvServiceTypeFilter('IN');
+                    setEvCustomersPage(1);
+                  }}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    evServiceTypeFilter === 'IN'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  IN
+                </button>
+                <button
+                  onClick={() => {
+                    setEvServiceTypeFilter('CM');
+                    setEvCustomersPage(1);
+                  }}
+                  className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                    evServiceTypeFilter === 'CM'
+                      ? 'bg-white text-blue-600 shadow-sm'
+                      : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  CM
+                </button>
+              </div>
+
+              {/* Search Filter */}
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search by booking ref, customer name, SR number, or contact..."
+                  value={evCustomersSearch}
+                  onChange={(e) => {
+                    setEvCustomersSearch(e.target.value);
+                    setEvCustomersPage(1);
+                  }}
+                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent w-80"
+                />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+              </div>
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">EV Service Management</h3>
-            <p className="text-gray-500 mb-6">EV-specific service management features will be available here.</p>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800">
-                This section is reserved for Electric Vehicle service management functionality. 
-                Features will be added based on specific EV service requirements.
-              </p>
+
+            {/* Combined Filters - Date and Status */}
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-4">
+                  {/* Requested Date Filter */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700 whitespace-nowrap">Requested Date:</span>
+                    <input
+                      type="date"
+                      value={requestedDateFilter.from}
+                      onChange={(e) => {
+                        setRequestedDateFilter(prev => ({ ...prev, from: e.target.value }));
+                        setEvCustomersPage(1);
+                      }}
+                      className="px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent w-32"
+                    />
+                    <span className="text-sm text-gray-500">to</span>
+                    <input
+                      type="date"
+                      value={requestedDateFilter.to}
+                      onChange={(e) => {
+                        setRequestedDateFilter(prev => ({ ...prev, to: e.target.value }));
+                        setEvCustomersPage(1);
+                      }}
+                      className="px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent w-32"
+                    />
+                  </div>
+
+                  {/* Completed Date Filter */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700 whitespace-nowrap">Completed Date:</span>
+                    <input
+                      type="date"
+                      value={completedDateFilter.from}
+                      onChange={(e) => {
+                        setCompletedDateFilter(prev => ({ ...prev, from: e.target.value }));
+                        setEvCustomersPage(1);
+                      }}
+                      className="px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent w-32"
+                    />
+                    <span className="text-sm text-gray-500">to</span>
+                    <input
+                      type="date"
+                      value={completedDateFilter.to}
+                      onChange={(e) => {
+                        setCompletedDateFilter(prev => ({ ...prev, to: e.target.value }));
+                        setEvCustomersPage(1);
+                      }}
+                      className="px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent w-32"
+                    />
+                  </div>
+
+                  {/* Status Filter */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700 whitespace-nowrap">Status:</span>
+                    {evServiceTypeFilter === 'all' && (
+                      <select
+                        value={allStatusFilter}
+                        onChange={(e) => {
+                          setAllStatusFilter(e.target.value);
+                          setEvCustomersPage(1);
+                        }}
+                        className="px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent w-32"
+                      >
+                        <option value="all">All</option>
+                        <option value="open">Open</option>
+                        <option value="pending">Pending</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    )}
+                    {evServiceTypeFilter === 'EV' && (
+                      <select
+                        value={evStatusFilter}
+                        onChange={(e) => {
+                          setEvStatusFilter(e.target.value);
+                          setEvCustomersPage(1);
+                        }}
+                        className="px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent w-32"
+                      >
+                        <option value="all">All</option>
+                        <option value="open">Open</option>
+                        <option value="pending">Pending</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    )}
+                    {evServiceTypeFilter === 'SV' && (
+                      <select
+                        value={svStatusFilter}
+                        onChange={(e) => {
+                          setSvStatusFilter(e.target.value);
+                          setEvCustomersPage(1);
+                        }}
+                        className="px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent w-32"
+                      >
+                        <option value="all">All</option>
+                        <option value="open">Open</option>
+                        <option value="pending">Pending</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    )}
+                    {evServiceTypeFilter === 'IN' && (
+                      <select
+                        value={inStatusFilter}
+                        onChange={(e) => {
+                          setInStatusFilter(e.target.value);
+                          setEvCustomersPage(1);
+                        }}
+                        className="px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent w-32"
+                      >
+                        <option value="all">All</option>
+                        <option value="open">Open</option>
+                        <option value="pending">Pending</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    )}
+                    {evServiceTypeFilter === 'CM' && (
+                      <select
+                        value={cmStatusFilter}
+                        onChange={(e) => {
+                          setCmStatusFilter(e.target.value);
+                          setEvCustomersPage(1);
+                        }}
+                        className="px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent w-32"
+                      >
+                        <option value="all">All</option>
+                        <option value="open">Open</option>
+                        <option value="pending">Pending</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    )}
+                  </div>
+                </div>
+
+                {/* Clear All Filters Button */}
+                <button
+                  onClick={() => {
+                    setRequestedDateFilter({ from: '', to: '' });
+                    setCompletedDateFilter({ from: '', to: '' });
+                    setAllStatusFilter('all');
+                    setEvStatusFilter('all');
+                    setSvStatusFilter('all');
+                    setInStatusFilter('all');
+                    setCmStatusFilter('all');
+                    setEvCustomersPage(1);
+                  }}
+                  className="px-3 py-1.5 text-xs bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors"
+                >
+                  Clear All
+                </button>
+              </div>
             </div>
+
           </div>
+
+          {/* EV Customers Table */}
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Serial No.
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    SR Number
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Type
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Customer Name
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Contact Number
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Booking Reference No
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Vehicle Model
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Automobile Dealer Name
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+                    Location
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {evCustomersLoading ? (
+                  <tr>
+                    <td colSpan={11} className="px-6 py-4 text-center">
+                      <div className="flex items-center justify-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                        <span className="ml-2 text-gray-600">Loading EV customers...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : evCustomers.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="px-6 py-4 text-center text-gray-500">
+                      No EV customers found
+                    </td>
+                  </tr>
+                ) : (
+                  evCustomers.map((customer, index) => (
+                    <tr key={customer._id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-900">
+                        {(evCustomersPage - 1) * evCustomersLimit + index + 1}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-900">
+                        {customer.serviceRequest?.serviceRequestNumber || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-900">
+                        {customer.serviceRequest?.serviceType || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-900">
+                        {customer.customer?.customerName || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-900">
+                        {customer.customer?.contactNumber || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-900">
+                        {customer.customer?.bookingReference || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-900">
+                        {customer.customer?.vehicleModel || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-900">
+                        {customer.customer?.automobileDealerName || '-'}
+                      </td>
+                      <td className="px-3 py-4 whitespace-nowrap text-xs text-gray-900 w-32">
+                        {customer.customer?.location || '-'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-xs font-medium">
+                        <select
+                          value={customer.serviceRequest?.serviceRequestStatus || 'open'}
+                          onChange={(e) => {
+                            const status = e.target.value as 'open' | 'pending' | 'resolved' | 'closed';
+                            handleEVStatusUpdate(customer._id, status);
+                          }}
+                          className={`px-2 py-1 rounded-full text-xs font-medium border-0 focus:ring-2 focus:ring-offset-1 ${
+                            customer.serviceRequest?.serviceRequestStatus === 'open'
+                              ? 'bg-blue-100 text-blue-800 focus:ring-blue-500'
+                              : customer.serviceRequest?.serviceRequestStatus === 'pending'
+                              ? 'bg-yellow-100 text-yellow-800 focus:ring-yellow-500'
+                              : customer.serviceRequest?.serviceRequestStatus === 'resolved'
+                              ? 'bg-green-100 text-green-800 focus:ring-green-500'
+                              : customer.serviceRequest?.serviceRequestStatus === 'closed'
+                              ? 'bg-red-100 text-red-800 focus:ring-red-500'
+                              : 'bg-blue-100 text-blue-800 focus:ring-blue-500'
+                          }`}
+                        >
+                          <option value="open">Open</option>
+                          <option value="pending">Pending</option>
+                          <option value="resolved">Resolved</option>
+                          <option value="closed">Closed</option>
+                        </select>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-xs font-medium">
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handleViewEVCustomer(customer)}
+                            className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
+                            title="View Details"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleEditEVCustomer(customer)}
+                            className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
+                            title="Edit Customer"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteEVCustomer(customer)}
+                            className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
+                            title="Delete Customer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Controls */}
+          {!evCustomersLoading && evCustomersTotalItems > 0 && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-2">
+                  <select
+                    value={evCustomersLimit}
+                    onChange={(e) => {
+                      setEvCustomersLimit(Number(e.target.value));
+                      setEvCustomersPage(1);
+                    }}
+                    className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value={5}>5 per page</option>
+                    <option value={10}>10 per page</option>
+                    <option value={20}>20 per page</option>
+                    <option value={50}>50 per page</option>
+                  </select>
+                </div>
+              </div>
+
+              <Pagination
+                currentPage={evCustomersPage}
+                totalPages={evCustomersTotalPages}
+                onPageChange={setEvCustomersPage}
+                totalItems={evCustomersTotalItems}
+                itemsPerPage={evCustomersLimit}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -6856,6 +7763,1288 @@ const rows = engineerReportRows.map((r: any) =>
                   </table>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EV Import Modal */}
+      {showEVImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Import EV Customers</h2>
+              <button
+                onClick={() => {
+                  setShowEVImportModal(false);
+                  setEvImportFile(null);
+                  setEvImportPreview(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Excel File
+                </label>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleEVImportFileChange}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+              </div>
+
+              {evImportFile && (
+                <div className="flex space-x-2">
+                  <button
+                    onClick={handleEVImportPreview}
+                    disabled={evImportLoading}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    {evImportLoading ? 'Previewing...' : 'Preview Import'}
+                  </button>
+                  <button
+                    onClick={handleEVImport}
+                    disabled={evImportLoading || !evImportPreview || ((!evImportPreview.evCustomersToCreate || evImportPreview.evCustomersToCreate.length === 0) && (!evImportPreview.evCustomersToUpdate || evImportPreview.evCustomersToUpdate.length === 0))}
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50"
+                  >
+                    {evImportLoading ? 'Importing...' : 'Import'}
+                  </button>
+                </div>
+              )}
+
+              {evImportPreview && ((evImportPreview.evCustomersToCreate && evImportPreview.evCustomersToCreate.length > 0) || (evImportPreview.evCustomersToUpdate && evImportPreview.evCustomersToUpdate.length > 0)) && (
+                <div className="mt-4">
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Preview Data</h3>
+                  
+                  {/* New Customers Table */}
+                  {evImportPreview.evCustomersToCreate && evImportPreview.evCustomersToCreate.length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="text-md font-medium text-green-700 mb-2">New Customers to Create ({evImportPreview.evCustomersToCreate.length})</h4>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-green-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-green-700 uppercase tracking-wider">
+                                Service Request Number
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-green-700 uppercase tracking-wider">
+                                Customer Name
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-green-700 uppercase tracking-wider">
+                                Contact Number
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-green-700 uppercase tracking-wider">
+                                Vehicle Model
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {(evImportPreview.evCustomersToCreate || []).slice(0, 10).map((customer: any, index: number) => (
+                              <tr key={`create-${index}`}>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {customer.serviceRequestNumber}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {customer.customerName}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {customer.contactNumber}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {customer.vehicleModel}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Updated Customers Table */}
+                  {evImportPreview.evCustomersToUpdate && evImportPreview.evCustomersToUpdate.length > 0 && (
+                    <div className="mb-6">
+                      <h4 className="text-md font-medium text-blue-700 mb-2">Existing Customers to Update ({evImportPreview.evCustomersToUpdate.length})</h4>
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-blue-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-blue-700 uppercase tracking-wider">
+                                Service Request Number
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-blue-700 uppercase tracking-wider">
+                                Customer Name
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-blue-700 uppercase tracking-wider">
+                                Contact Number
+                              </th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-blue-700 uppercase tracking-wider">
+                                Vehicle Model
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {(evImportPreview.evCustomersToUpdate || []).slice(0, 10).map((customer: any, index: number) => (
+                              <tr key={`update-${index}`}>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {customer.serviceRequestNumber}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {customer.customerName}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {customer.contactNumber}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {customer.vehicleModel}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {evImportPreview?.summary && (
+                    <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                      <p className="text-sm text-gray-800">
+                        Summary: {evImportPreview.summary.newEVCustomers} new customers, {evImportPreview.summary.existingEVCustomers} existing customers to update
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EV Create Ticket Modal */}
+      {showEVCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Create EV Service Ticket</h2>
+              <button
+                onClick={() => setShowEVCreateModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="text-center py-8">
+                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 mb-4">
+                  <svg className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">EV Service Ticket Creation</h3>
+                <p className="text-gray-500 mb-6">This feature will allow you to create new EV service tickets.</p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm text-blue-800">
+                    EV service ticket creation functionality will be implemented here.
+                    This will include forms for customer details, service requirements, and scheduling.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EV Payment Summary Modal */}
+      {showEVPaymentSummaryModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">EV Payment Summary</h2>
+              <button
+                onClick={() => setShowEVPaymentSummaryModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="text-center py-8">
+                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+                  <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">EV Payment Summary</h3>
+                <p className="text-gray-500 mb-6">View and manage EV service payment summaries.</p>
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <p className="text-sm text-green-800">
+                    EV payment summary functionality will be implemented here.
+                    This will include payment tracking, outstanding amounts, and payment history for EV services.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EV Customer View Modal */}
+      {showEVViewModal && selectedEVCustomer && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">
+                EV Customer Details - {selectedEVCustomer.serviceRequest?.serviceType || 'Unknown Type'}
+              </h2>
+              <button
+                onClick={() => setShowEVViewModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              {/* Customer Information - Always shown */}
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Customer Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Customer Name</label>
+                    <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.customer?.customerName || '-'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Contact Number</label>
+                    <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.customer?.contactNumber || '-'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Booking Reference</label>
+                    <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.customer?.bookingReference || '-'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Vehicle Model</label>
+                    <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.customer?.vehicleModel || '-'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Automobile Dealer Name</label>
+                    <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.customer?.automobileDealerName || '-'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Location</label>
+                    <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.customer?.location || '-'}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700">Address</label>
+                    <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.customer?.address || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Service Request Information - Type-specific views */}
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Service Request Information</h3>
+                
+                {/* Basic Service Request Info - Always shown */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Service Request Number</label>
+                    <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.serviceRequestNumber || '-'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Service Type</label>
+                    <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.serviceType || '-'}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Service Request Status</label>
+                    <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.serviceRequestStatus || 'open'}</p>
+                  </div>
+                </div>
+
+                {/* Type-specific service details */}
+                {selectedEVCustomer.serviceRequest?.serviceType === 'Enquiry Visit' ? (
+                  // Enquiry Visit - Show service required date and service engineer 1
+                  <div>
+                    <h4 className="text-md font-medium text-gray-800 mb-3">Enquiry Visit Details</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Service Engineer 1 (From Excel)</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.serviceEngineerName1 || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Requested Date</label>
+                        <p className="mt-1 text-sm text-gray-900">
+                          {selectedEVCustomer.serviceRequest?.requestedDate 
+                            ? new Date(selectedEVCustomer.serviceRequest.requestedDate).toLocaleDateString()
+                            : '-'
+                          }
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Completed Date</label>
+                        <p className="mt-1 text-sm text-gray-900">
+                          {selectedEVCustomer.serviceRequest?.completedDate 
+                            ? new Date(selectedEVCustomer.serviceRequest.completedDate).toLocaleDateString()
+                            : '-'
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : selectedEVCustomer.serviceRequest?.serviceType === 'Survey Visit' || selectedEVCustomer.serviceRequest?.serviceType === 'SV' ? (
+                  // Survey Visit - Show charger rating, SE2, scope, cable length, additional MCB, installation planned date
+                  <div>
+                    <h4 className="text-md font-medium text-gray-800 mb-3">Survey Visit Details</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Service Engineer 1 (From Excel)</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.serviceEngineerName1 || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Charger Rating</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.chargerRating || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Service Engineer 2</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.serviceEngineerName2 || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Service Engineer 3</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.serviceEngineerName3 || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Cable Length</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.cableLength || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Additional MCB</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.additionalMcb ? 'Yes' : 'No'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Requested Date</label>
+                        <p className="mt-1 text-sm text-gray-900">
+                          {selectedEVCustomer.serviceRequest?.requestedDate 
+                            ? new Date(selectedEVCustomer.serviceRequest.requestedDate).toLocaleDateString()
+                            : '-'
+                          }
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Completed Date</label>
+                        <p className="mt-1 text-sm text-gray-900">
+                          {selectedEVCustomer.serviceRequest?.completedDate 
+                            ? new Date(selectedEVCustomer.serviceRequest.completedDate).toLocaleDateString()
+                            : '-'
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : selectedEVCustomer.serviceRequest?.serviceType === 'Installation Visit' ? (
+                  // Installation Visit - Show relevant fields
+                  <div>
+                    <h4 className="text-md font-medium text-gray-800 mb-3">Installation Visit Details</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Service Engineer 1 (From Excel)</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.serviceEngineerName1 || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Service Engineer 2</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.serviceEngineerName2 || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Service Engineer 3</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.serviceEngineerName3 || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Actual Cable Length</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.actualCableLength || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Requested Date</label>
+                        <p className="mt-1 text-sm text-gray-900">
+                          {selectedEVCustomer.serviceRequest?.requestedDate 
+                            ? new Date(selectedEVCustomer.serviceRequest.requestedDate).toLocaleDateString()
+                            : '-'
+                          }
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Completed Date</label>
+                        <p className="mt-1 text-sm text-gray-900">
+                          {selectedEVCustomer.serviceRequest?.completedDate 
+                            ? new Date(selectedEVCustomer.serviceRequest.completedDate).toLocaleDateString()
+                            : '-'
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : selectedEVCustomer.serviceRequest?.serviceType === 'Commission Visit' || selectedEVCustomer.serviceRequest?.serviceType === 'CM' ? (
+                  // Commission Visit - Show SE1, SE2, SE3, DB Serial Number, Charger Serial Number, Charger ID, VIN Number, Commission Done Date
+                  <div>
+                    <h4 className="text-md font-medium text-gray-800 mb-3">Commission Visit Details</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Service Engineer 1 (From Excel)</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.serviceEngineerName1 || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Service Engineer 2</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.serviceEngineerName2 || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Service Engineer 3</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.serviceEngineerName3 || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">DB Serial Number</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.DBSerialNumber || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Charger Serial Number</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.chargerSerialNumber || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Charger ID</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.chargerID || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">VIN Number</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.VINNumber || '-'}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : selectedEVCustomer.serviceRequest?.serviceType === 'EV' ? (
+                  // EV Type - Show SE1 and Service Required Date
+                  <div>
+                    <h4 className="text-md font-medium text-gray-800 mb-3">EV Service Details</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Service Engineer 1 (From Excel)</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.serviceEngineerName1 || '-'}</p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Requested Date</label>
+                        <p className="mt-1 text-sm text-gray-900">
+                          {selectedEVCustomer.serviceRequest?.requestedDate 
+                            ? new Date(selectedEVCustomer.serviceRequest.requestedDate).toLocaleDateString()
+                            : '-'
+                          }
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Completed Date</label>
+                        <p className="mt-1 text-sm text-gray-900">
+                          {selectedEVCustomer.serviceRequest?.completedDate 
+                            ? new Date(selectedEVCustomer.serviceRequest.completedDate).toLocaleDateString()
+                            : '-'
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  // Default view for unknown types
+                  <div>
+                    <h4 className="text-md font-medium text-gray-800 mb-3">Service Details</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Survey Planned Date</label>
+                        <p className="mt-1 text-sm text-gray-900">
+                          {selectedEVCustomer.serviceRequest?.surveyPlannedDate 
+                            ? new Date(selectedEVCustomer.serviceRequest.surveyPlannedDate).toLocaleDateString()
+                            : '-'
+                          }
+                        </p>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Completed Service Date</label>
+                        <p className="mt-1 text-sm text-gray-900">
+                          {selectedEVCustomer.serviceRequest?.completedServiceDate 
+                            ? new Date(selectedEVCustomer.serviceRequest.completedServiceDate).toLocaleDateString()
+                            : '-'
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Scope Information - Only for Survey Visit and Installation Visit */}
+                {(selectedEVCustomer.serviceRequest?.serviceType === 'Survey Visit' || 
+                  selectedEVCustomer.serviceRequest?.serviceType === 'SV' || 
+                  selectedEVCustomer.serviceRequest?.serviceType === 'Installation Visit') && (
+                  <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+                    <h4 className="text-md font-medium text-gray-800 mb-3">Scope Information</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Scope</label>
+                        <p className="mt-1 text-sm text-gray-900">{selectedEVCustomer.serviceRequest?.scope || '-'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex justify-end p-6 border-t border-gray-200">
+              <button
+                onClick={() => setShowEVViewModal(false)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EV Customer Edit Modal */}
+      {showEVEditModal && editingEVCustomer && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Edit EV Customer - {editingEVCustomer.customer?.customerName || 'Unknown'}
+              </h2>
+              <button
+                onClick={() => setShowEVEditModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6">
+
+              {editingEVCustomer.serviceRequest?.serviceType === 'EV' ? (
+                // EV Type Form - Service Engineer 1 and Survey Planned Date
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Service Engineer 1
+                    </label>
+                    <input
+                      type="text"
+                      value={evEditForm.serviceEngineer1}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, serviceEngineer1: e.target.value }))}
+                      placeholder="Enter service engineer name"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="flex justify-start gap-4">
+                    <div className="w-32">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Status
+                      </label>
+                      <select
+                        value={evEditForm.serviceRequestStatus}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, serviceRequestStatus: e.target.value as 'open' | 'pending' | 'resolved' | 'closed' }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="open">Open</option>
+                        <option value="pending">Pending</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    </div>
+                    <div className="w-40">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Requested Date
+                      </label>
+                      <input
+                        type="date"
+                        value={evEditForm.requestedDate}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, requestedDate: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="w-40">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Completed Date
+                      </label>
+                      <input
+                        type="date"
+                        value={evEditForm.completedDate}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, completedDate: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : editingEVCustomer.serviceRequest?.serviceType === 'Enquiry Visit' ? (
+                // Enquiry Visit Type Form - Service Engineer 1 and Survey Planned Date
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Service Engineer 1
+                    </label>
+                    <input
+                      type="text"
+                      value={evEditForm.serviceEngineer1}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, serviceEngineer1: e.target.value }))}
+                      placeholder="Enter service engineer name"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div className="flex justify-start gap-4">
+                    <div className="w-32">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Status
+                      </label>
+                      <select
+                        value={evEditForm.serviceRequestStatus}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, serviceRequestStatus: e.target.value as 'open' | 'pending' | 'resolved' | 'closed' }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="open">Open</option>
+                        <option value="pending">Pending</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    </div>
+                    <div className="w-40">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Requested Date
+                      </label>
+                      <input
+                        type="date"
+                        value={evEditForm.requestedDate}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, requestedDate: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="w-40">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Completed Date
+                      </label>
+                      <input
+                        type="date"
+                        value={evEditForm.completedDate}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, completedDate: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : editingEVCustomer.serviceRequest?.serviceType === 'Survey Visit' ? (
+                // Survey Visit Type Form - Full form with all fields (same as SV)
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Charger Rating
+                      </label>
+                      <input
+                      type="text"
+                      value={evEditForm.chargerRating}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, chargerRating: e.target.value }))}
+                      placeholder="Enter charger rating"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Service Engineer 2
+                    </label>
+                    <select
+                      value={evEditForm.serviceEngineer2}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, serviceEngineer2: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Select Service Engineer</option>
+                      {users.map((engineer) => (
+                        <option key={engineer._id} value={engineer.fullName}>
+                          {engineer.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Service Engineer 3
+                    </label>
+                    <select
+                      value={evEditForm.serviceEngineer3}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, serviceEngineer3: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Select Service Engineer</option>
+                      {users.map((engineer) => (
+                        <option key={engineer._id} value={engineer.fullName}>
+                          {engineer.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Cable Length
+                    </label>
+                    <input
+                      type="number"
+                      value={evEditForm.cableLength}
+                      onChange={(e) => {
+                        const newCableLength = e.target.value;
+                        setEvEditForm(prev => {
+                          const newActualCableLength = prev.actualCableLength;
+                          const newScope = (!newCableLength && !newActualCableLength) ? null : prev.scope;
+                          return { ...prev, cableLength: newCableLength, scope: newScope };
+                        });
+                      }}
+                      placeholder="Enter cable length"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Scope
+                    </label>
+                    <input
+                      type="text"
+                      value={evEditForm.scope || ''}
+                      readOnly
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                      title="Scope is automatically updated based on cable length"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={evEditForm.additionalMcb}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, additionalMcb: e.target.checked }))}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Additional MCB</span>
+                    </label>
+                  </div>
+                  </div>
+                  <div className="flex justify-start gap-4">
+                    <div className="w-32">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Status
+                      </label>
+                      <select
+                        value={evEditForm.serviceRequestStatus}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, serviceRequestStatus: e.target.value as 'open' | 'pending' | 'resolved' | 'closed' }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="open">Open</option>
+                        <option value="pending">Pending</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    </div>
+                    <div className="w-40">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Requested Date
+                      </label>
+                      <input
+                        type="date"
+                        value={evEditForm.requestedDate}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, requestedDate: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="w-40">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Completed Date
+                      </label>
+                      <input
+                        type="date"
+                        value={evEditForm.completedDate}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, completedDate: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : editingEVCustomer.serviceRequest?.serviceType === 'Installation Visit' ? (
+                // Installation Visit Type Form - SE2, SE3, Actual Cable Length, Commission Planned Date
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Service Engineer 2
+                      </label>
+                      <select
+                      value={evEditForm.serviceEngineer2}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, serviceEngineer2: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Select Service Engineer</option>
+                      {users.map((engineer) => (
+                        <option key={engineer._id} value={engineer.fullName}>
+                          {engineer.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Service Engineer 3
+                    </label>
+                    <select
+                      value={evEditForm.serviceEngineer3}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, serviceEngineer3: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Select Service Engineer</option>
+                      {users.map((engineer) => (
+                        <option key={engineer._id} value={engineer.fullName}>
+                          {engineer.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Actual Cable Length
+                    </label>
+                    <input
+                      type="number"
+                      value={evEditForm.actualCableLength}
+                      onChange={(e) => {
+                        const newActualCableLength = e.target.value;
+                        setEvEditForm(prev => {
+                          const newCableLength = prev.cableLength;
+                          const newScope = (!newCableLength && !newActualCableLength) ? null : prev.scope;
+                          return { ...prev, actualCableLength: newActualCableLength, scope: newScope };
+                        });
+                      }}
+                      placeholder="Enter actual cable length"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Scope
+                    </label>
+                    <input
+                      type="text"
+                      value={evEditForm.scope || ''}
+                      readOnly
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                      title="Scope is automatically updated based on cable length"
+                    />
+                  </div>
+                  </div>
+                  <div className="flex justify-start gap-4">
+                    <div className="w-32">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Status
+                      </label>
+                      <select
+                        value={evEditForm.serviceRequestStatus}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, serviceRequestStatus: e.target.value as 'open' | 'pending' | 'resolved' | 'closed' }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="open">Open</option>
+                        <option value="pending">Pending</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    </div>
+                    <div className="w-40">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Requested Date
+                      </label>
+                      <input
+                        type="date"
+                        value={evEditForm.requestedDate}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, requestedDate: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="w-40">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Completed Date
+                      </label>
+                      <input
+                        type="date"
+                        value={evEditForm.completedDate}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, completedDate: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : editingEVCustomer.serviceRequest?.serviceType === 'Commission Visit' || editingEVCustomer.serviceRequest?.serviceType === 'CM' ? (
+                // Commission Visit/CM Type Form - SE2, SE3, DB Serial Number, Charger Serial Number, Charger ID, VIN Number, Commission Done Date
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Service Engineer 2
+                      </label>
+                      <select
+                      value={evEditForm.serviceEngineer2}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, serviceEngineer2: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Select Service Engineer</option>
+                      {users.map((engineer) => (
+                        <option key={engineer._id} value={engineer.fullName}>
+                          {engineer.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Service Engineer 3
+                    </label>
+                    <select
+                      value={evEditForm.serviceEngineer3}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, serviceEngineer3: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Select Service Engineer</option>
+                      {users.map((engineer) => (
+                        <option key={engineer._id} value={engineer.fullName}>
+                          {engineer.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      DB Serial Number
+                    </label>
+                    <input
+                      type="text"
+                      value={evEditForm.DBSerialNumber}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, DBSerialNumber: e.target.value }))}
+                      placeholder="Enter DB serial number"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Charger Serial Number
+                    </label>
+                    <input
+                      type="text"
+                      value={evEditForm.chargerSerialNumber}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, chargerSerialNumber: e.target.value }))}
+                      placeholder="Enter charger serial number"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Charger ID
+                    </label>
+                    <input
+                      type="text"
+                      value={evEditForm.chargerID}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, chargerID: e.target.value }))}
+                      placeholder="Enter charger ID"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      VIN Number
+                    </label>
+                    <input
+                      type="text"
+                      value={evEditForm.VINNumber}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, VINNumber: e.target.value }))}
+                      placeholder="Enter VIN number"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  </div>
+                  <div className="flex justify-start gap-4">
+                    <div className="w-32">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Status
+                      </label>
+                      <select
+                        value={evEditForm.serviceRequestStatus}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, serviceRequestStatus: e.target.value as 'open' | 'pending' | 'resolved' | 'closed' }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="open">Open</option>
+                        <option value="pending">Pending</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    </div>
+                    <div className="w-40">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Requested Date
+                      </label>
+                      <input
+                        type="date"
+                        value={evEditForm.requestedDate}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, requestedDate: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="w-40">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Completed Date
+                      </label>
+                      <input
+                        type="date"
+                        value={evEditForm.completedDate}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, completedDate: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : editingEVCustomer.serviceRequest?.serviceType === 'SV' ? (
+                // SV Type Form - Multiple fields
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Charger Rating
+                      </label>
+                      <input
+                      type="text"
+                      value={evEditForm.chargerRating}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, chargerRating: e.target.value }))}
+                      placeholder="Enter charger rating"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Service Engineer 2
+                    </label>
+                    <select
+                      value={evEditForm.serviceEngineer2}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, serviceEngineer2: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Select Service Engineer</option>
+                      {users.map((engineer) => (
+                        <option key={engineer._id} value={engineer.fullName}>
+                          {engineer.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Service Engineer 3
+                    </label>
+                    <select
+                      value={evEditForm.serviceEngineer3}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, serviceEngineer3: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Select Service Engineer</option>
+                      {users.map((engineer) => (
+                        <option key={engineer._id} value={engineer.fullName}>
+                          {engineer.fullName}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Cable Length
+                    </label>
+                    <input
+                      type="number"
+                      value={evEditForm.cableLength}
+                      onChange={(e) => {
+                        const newCableLength = e.target.value;
+                        setEvEditForm(prev => {
+                          const newActualCableLength = prev.actualCableLength;
+                          const newScope = (!newCableLength && !newActualCableLength) ? null : prev.scope;
+                          return { ...prev, cableLength: newCableLength, scope: newScope };
+                        });
+                      }}
+                      placeholder="Enter cable length"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Scope
+                    </label>
+                    <select
+                      value={evEditForm.scope || ''}
+                      onChange={(e) => setEvEditForm(prev => ({ ...prev, scope: e.target.value === '' ? null : e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">None</option>
+                      <option value="in scope">In Scope</option>
+                      <option value="out scope">Out Scope</option>
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={evEditForm.additionalMcb}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, additionalMcb: e.target.checked }))}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <span className="ml-2 text-sm text-gray-700">Additional MCB</span>
+                    </label>
+                  </div>
+                  </div>
+                  <div className="flex justify-start gap-4">
+                    <div className="w-32">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Status
+                      </label>
+                      <select
+                        value={evEditForm.serviceRequestStatus}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, serviceRequestStatus: e.target.value as 'open' | 'pending' | 'resolved' | 'closed' }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="open">Open</option>
+                        <option value="pending">Pending</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                      </select>
+                    </div>
+                    <div className="w-40">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Requested Date
+                      </label>
+                      <input
+                        type="date"
+                        value={evEditForm.requestedDate}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, requestedDate: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="w-40">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Completed Date
+                      </label>
+                      <input
+                        type="date"
+                        value={evEditForm.completedDate}
+                        onChange={(e) => setEvEditForm(prev => ({ ...prev, completedDate: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                // Unknown service type
+                <div className="text-center py-8">
+                  <p className="text-gray-500">Unknown service type: {editingEVCustomer.serviceRequest?.serviceType}</p>
+                  <p className="text-sm text-gray-400 mt-2">Please contact support for assistance.</p>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end p-6 border-t border-gray-200 space-x-3">
+              <button
+                onClick={() => setShowEVEditModal(false)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEVCustomer}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EV Customer Delete Confirmation Modal */}
+      {showEVDeleteModal && customerToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md m-4">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Confirm Delete</h2>
+              <button
+                onClick={() => {
+                  setShowEVDeleteModal(false);
+                  setCustomerToDelete(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="flex-shrink-0">
+                  <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                    <svg className="w-6 h-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">Delete EV Customer</h3>
+                  <p className="text-sm text-gray-500">This action cannot be undone.</p>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-4 mb-6">
+                <p className="text-sm text-gray-700">
+                  Are you sure you want to delete the EV customer{' '}
+                  <span className="font-medium">
+                    "{customerToDelete.customer?.customerName || customerToDelete.serviceRequest?.serviceRequestNumber}"
+                  </span>?
+                </p>
+                <p className="text-xs text-gray-500 mt-2">
+                  All associated data will be permanently removed.
+                </p>
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => {
+                    setShowEVDeleteModal(false);
+                    setCustomerToDelete(null);
+                  }}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDeleteEVCustomer}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
         </div>
