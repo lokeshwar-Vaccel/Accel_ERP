@@ -4,7 +4,7 @@ import { Input } from './Input';
 import { Select } from './Select';
 import { Button } from './Botton';
 
-interface ProformaInvoiceFormProps {
+interface DGProformaInvoiceFormProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
@@ -14,7 +14,7 @@ interface ProformaInvoiceFormProps {
   initialData?: any;
 }
 
-const ProformaInvoiceForm: React.FC<ProformaInvoiceFormProps> = ({
+const DGProformaInvoiceForm: React.FC<DGProformaInvoiceFormProps> = ({
   isOpen,
   onClose,
   onSuccess,
@@ -153,13 +153,13 @@ const ProformaInvoiceForm: React.FC<ProformaInvoiceFormProps> = ({
     setLoading(true);
 
     try {
-      let endpoint = '/proforma-invoices';
+      let endpoint = '/dg-proforma-invoices';
       let method = 'POST';
 
       if (mode === 'from-po' && purchaseOrder) {
-        endpoint = `/proforma-invoices/from-po/${purchaseOrder._id}`;
+        endpoint = `/dg-proforma-invoices/from-po/${purchaseOrder._id}`;
       } else if (mode === 'edit' && initialData) {
-        endpoint = `/proforma-invoices/${initialData._id}`;
+        endpoint = `/dg-proforma-invoices/${initialData._id}`;
         method = 'PUT';
       }
 
@@ -446,4 +446,4 @@ const ProformaInvoiceForm: React.FC<ProformaInvoiceFormProps> = ({
   );
 };
 
-export default ProformaInvoiceForm; 
+export default DGProformaInvoiceForm; 

@@ -1,6 +1,6 @@
 export * from './DGEnquiry';
 export * from './DGPurchaseOrder';
-export * from './ProformaInvoice';
+export * from './DGProformaInvoice';
 export * from './DGInvoice';
 export * from './DGPayment';
 export * from './OEM';

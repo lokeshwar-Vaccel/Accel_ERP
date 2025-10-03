@@ -1,5 +1,5 @@
 import { Response, NextFunction } from 'express';
-import { ProformaInvoice } from '../models/ProformaInvoice';
+import { DGProformaInvoice } from '../models/DGProformaInvoice';
 import { DGPurchaseOrder } from '../models/DGPurchaseOrder';
 import { Customer } from '../models/Customer';
 import { AuthenticatedRequest, APIResponse } from '../types';
@@ -9,7 +9,7 @@ import { TransactionCounter } from '../models/TransactionCounter';
 // Generate next Proforma Invoice number
 const generateProformaNumber = async () => {
   const counter = await TransactionCounter.findOneAndUpdate(
-    { type: 'proformaInvoice' },
+    { type: 'DGProformaInvoiceData' },
     { $inc: { sequence: 1 } },
     { new: true, upsert: true }
   );
@@ -17,9 +17,9 @@ const generateProformaNumber = async () => {
 };
 
 // @desc    Create new Proforma Invoice
-// @route   POST /api/v1/proforma-invoices
+// @route   POST /api/v1/dg-proforma-invoices
 // @access  Private
-export const createProformaInvoice = async (
+export const createDGProformaInvoice = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
@@ -46,7 +46,7 @@ export const createProformaInvoice = async (
     const invoiceNumber = await generateProformaNumber();
 
     // Create proforma invoice
-    const proformaInvoice = await ProformaInvoice.create({
+    const DGProformaInvoiceData = await DGProformaInvoice.create({
       ...invoiceData,
       invoiceNumber,
       customer: customerId,
@@ -55,12 +55,12 @@ export const createProformaInvoice = async (
       createdBy: req.user?.id
     });
 
-    await proformaInvoice.populate('customer dgPurchaseOrder quotation createdBy');
+    await DGProformaInvoiceData.populate('customer dgPurchaseOrder quotation createdBy');
 
     res.status(201).json({
       success: true,
       message: 'Proforma Invoice created successfully',
-      data: proformaInvoice
+      data: DGProformaInvoiceData
     });
   } catch (error) {
     next(error);
@@ -68,9 +68,9 @@ export const createProformaInvoice = async (
 };
 
 // @desc    Get all Proforma Invoices
-// @route   GET /api/v1/proforma-invoices
+// @route   GET /api/v1/dg-proforma-invoices
 // @access  Private
-export const getProformaInvoices = async (
+export const getDGProformaInvoices = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
@@ -89,8 +89,8 @@ export const getProformaInvoices = async (
     if (customerId) filter.customer = customerId;
     if (purpose) filter.purpose = purpose;
 
-    const total = await ProformaInvoice.countDocuments(filter);
-    const proformaInvoices = await ProformaInvoice.find(filter)
+    const total = await DGProformaInvoice.countDocuments(filter);
+    const proformaInvoices = await DGProformaInvoice.find(filter)
       .populate('customer', 'name email phone')
       .populate('dgPurchaseOrder', 'poNumber totalAmount')
       .populate('quotation', 'quotationNumber grandTotal')
@@ -113,27 +113,27 @@ export const getProformaInvoices = async (
 };
 
 // @desc    Get single Proforma Invoice
-// @route   GET /api/v1/proforma-invoices/:id
+// @route   GET /api/v1/dg-proforma-invoices/:id
 // @access  Private
-export const getProformaInvoice = async (
+export const getDGProformaInvoice = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const proformaInvoice = await ProformaInvoice.findById(req.params.id)
+    const DGProformaInvoiceData = await DGProformaInvoice.findById(req.params.id)
       .populate('customer')
       .populate('dgPurchaseOrder')
       .populate('quotation')
       .populate('createdBy', 'firstName lastName');
 
-    if (!proformaInvoice) {
+    if (!DGProformaInvoiceData) {
       return next(new AppError('Proforma Invoice not found', 404));
     }
 
     res.json({
       success: true,
-      data: proformaInvoice
+      data: DGProformaInvoiceData
     });
   } catch (error) {
     next(error);
@@ -141,28 +141,28 @@ export const getProformaInvoice = async (
 };
 
 // @desc    Update Proforma Invoice
-// @route   PUT /api/v1/proforma-invoices/:id
+// @route   PUT /api/v1/dg-proforma-invoices/:id
 // @access  Private
-export const updateProformaInvoice = async (
+export const updateDGProformaInvoice = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const proformaInvoice = await ProformaInvoice.findByIdAndUpdate(
+    const DGProformaInvoiceData = await DGProformaInvoice.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
     ).populate('customer dgPurchaseOrder quotation createdBy');
 
-    if (!proformaInvoice) {
+    if (!DGProformaInvoiceData) {
       return next(new AppError('Proforma Invoice not found', 404));
     }
 
     res.json({
       success: true,
       message: 'Proforma Invoice updated successfully',
-      data: proformaInvoice
+      data: DGProformaInvoiceData
     });
   } catch (error) {
     next(error);
@@ -170,9 +170,9 @@ export const updateProformaInvoice = async (
 };
 
 // @desc    Update Proforma Invoice status
-// @route   PATCH /api/v1/proforma-invoices/:id/status
+// @route   PATCH /api/v1/dg-proforma-invoices/:id/status
 // @access  Private
-export const updateProformaInvoiceStatus = async (
+export const updateDGProformaInvoiceStatus = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
@@ -180,20 +180,20 @@ export const updateProformaInvoiceStatus = async (
   try {
     const { status } = req.body;
     
-    const proformaInvoice = await ProformaInvoice.findByIdAndUpdate(
+    const DGProformaInvoiceData = await DGProformaInvoice.findByIdAndUpdate(
       req.params.id,
       { status },
       { new: true, runValidators: true }
     ).populate('customer');
 
-    if (!proformaInvoice) {
+    if (!DGProformaInvoiceData) {
       return next(new AppError('Proforma Invoice not found', 404));
     }
 
     res.json({
       success: true,
       message: 'Proforma Invoice status updated successfully',
-      data: proformaInvoice
+      data: DGProformaInvoiceData
     });
   } catch (error) {
     next(error);
@@ -201,17 +201,17 @@ export const updateProformaInvoiceStatus = async (
 };
 
 // @desc    Delete Proforma Invoice
-// @route   DELETE /api/v1/proforma-invoices/:id
+// @route   DELETE /api/v1/dg-proforma-invoices/:id
 // @access  Private
-export const deleteProformaInvoice = async (
+export const deleteDGProformaInvoice = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const proformaInvoice = await ProformaInvoice.findByIdAndDelete(req.params.id);
+    const DGProformaInvoiceData = await DGProformaInvoice.findByIdAndDelete(req.params.id);
 
-    if (!proformaInvoice) {
+    if (!DGProformaInvoiceData) {
       return next(new AppError('Proforma Invoice not found', 404));
     }
 
@@ -225,9 +225,9 @@ export const deleteProformaInvoice = async (
 };
 
 // @desc    Create Proforma Invoice from Purchase Order
-// @route   POST /api/v1/proforma-invoices/from-po/:poId
+// @route   POST /api/v1/dg-proforma-invoices/from-po/:poId
 // @access  Private
-export const createProformaFromPO = async (
+export const createDGProformaFromPO = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
@@ -265,7 +265,7 @@ export const createProformaFromPO = async (
       return sum + (itemSubtotal * item.taxRate) / 100;
     }, 0);
 
-    const proformaInvoice = await ProformaInvoice.create({
+    const DGProformaInvoiceData = await DGProformaInvoice.create({
       invoiceNumber,
       customer: dgPurchaseOrder.customer,
       dgPurchaseOrder: dgPurchaseOrder._id,
@@ -293,12 +293,12 @@ export const createProformaFromPO = async (
       ...req.body
     });
 
-    await proformaInvoice.populate('customer dgPurchaseOrder quotation');
+    await DGProformaInvoiceData.populate('customer dgPurchaseOrder quotation');
 
     res.status(201).json({
       success: true,
       message: 'Proforma Invoice created from Purchase Order successfully',
-      data: proformaInvoice
+      data: DGProformaInvoiceData
     });
   } catch (error) {
     next(error);

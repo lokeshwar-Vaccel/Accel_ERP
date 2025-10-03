@@ -10,7 +10,7 @@ import { Modal } from '../components/ui/Modal';
 import { Pagination } from '../components/ui/Pagination';
 import DGPurchaseOrderManagement from './DGPurchaseOrderManagement';
 import DGProformaManagement from './DGProformaManagement';
-import ProformaInvoiceForm from '../components/ui/ProformaInvoiceForm';
+import DGProformaInvoiceForm from '../components/ui/DGProformaInvoiceForm';
 import DGInvoiceForm from '../components/ui/DGInvoiceForm';
 import DGInvoiceManagement from './DGInvoiceManagement';
 import DGPaymentForm from '../components/ui/DGPaymentForm';
@@ -302,7 +302,7 @@ export default function DGSales() {
           break;
         case 4: // Proformas
           try {
-            const proformaResponse: any = await apiClient.dgSales.proformaInvoices.getAll(params);
+            const proformaResponse: any = await apiClient.dgSales.dgProformaInvoices.getAll(params);
             setProformaInvoices(proformaResponse.data || []);
             
             // Set pagination data from response
@@ -1962,7 +1962,7 @@ export default function DGSales() {
       )}
 
       {showProformaForm && (
-        <ProformaInvoiceForm
+        <DGProformaInvoiceForm
           isOpen={showProformaForm}
           onClose={() => {
             setShowProformaForm(false);

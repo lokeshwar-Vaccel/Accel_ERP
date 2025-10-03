@@ -13,6 +13,7 @@ interface DocumentViewModalProps {
   documentType: 'invoice' | 'quotation';
   onPrint: (document: any) => void;
   onCreateInvoice?: (quotation: any) => void;
+  onCreateProforma?: (quotation: any) => void;
   onSendEmail?: (document: any) => void;
   onCreateChallan?: (invoice: any) => void;
   onSaveChanges?: (document: any) => Promise<boolean>;
@@ -39,6 +40,7 @@ const DocumentViewModal: React.FC<DocumentViewModalProps> = ({
   documentType,
   onPrint,
   onCreateInvoice,
+  onCreateProforma,
   onSendEmail,
   onCreateChallan,
   onSaveChanges,
@@ -60,6 +62,8 @@ const DocumentViewModal: React.FC<DocumentViewModalProps> = ({
   const [originalDocumentData, setOriginalDocumentData] = useState<any>(null);
   const [savingChanges, setSavingChanges] = useState(false);
 
+  console.log("document123:",document);
+  
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
@@ -72,6 +76,7 @@ const DocumentViewModal: React.FC<DocumentViewModalProps> = ({
 
   const isInvoice = documentType === 'invoice';
   const isQuotation = documentType === 'quotation';
+  const isProforma = isInvoice && document.invoiceType === 'proforma';
 
   const hasAmountMismatch = (doc: any) => {
     return isInvoice && doc.externalInvoiceTotal && doc.totalAmount && 
@@ -92,7 +97,7 @@ const DocumentViewModal: React.FC<DocumentViewModalProps> = ({
   const renderHeader = () => (
     <div className="flex items-center justify-between p-4 border-b border-gray-200">
       <h2 className="text-xl font-semibold text-gray-900">
-        {isInvoice ? 'Invoice' : 'Quotation'} - {document.invoiceNumber || document.quotationNumber}
+        {isProforma ? 'Proforma' : isInvoice ? 'Invoice' : 'Quotation'} - {document.invoiceNumber || document.quotationNumber}
       </h2>
       <div className="flex items-center space-x-2">
         <button
@@ -128,6 +133,24 @@ const DocumentViewModal: React.FC<DocumentViewModalProps> = ({
           </button>
         )}
 
+        {isQuotation && onCreateProforma && (
+          <button
+            onClick={() => onCreateProforma(document)}
+            className="flex items-center px-3 py-1 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700"
+          >
+            Create Proforma
+          </button>
+        )}
+
+        {isProforma && onCreateInvoice && (
+          <button
+            onClick={() => onCreateInvoice(document)}
+            className="flex items-center px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            Create Invoice
+          </button>
+        )}
+
         {onSendEmail && (
           <button
             onClick={() => onSendEmail(document)}
@@ -138,7 +161,7 @@ const DocumentViewModal: React.FC<DocumentViewModalProps> = ({
                 : 'bg-gray-400 text-white cursor-not-allowed'
             }`}
             title={getPrimaryAddressEmail(document.customer) ? 
-              `Send ${isInvoice ? 'invoice' : 'quotation'} to customer` : 
+              `Send ${isProforma ? 'proforma' : isInvoice ? 'invoice' : 'quotation'} to customer` : 
               'Customer email not available'
             }
           >
@@ -164,7 +187,7 @@ const DocumentViewModal: React.FC<DocumentViewModalProps> = ({
       <div className="flex justify-between items-start">
         <div>
           <h3 className="text-xl font-bold text-gray-900">
-            {isInvoice ? 'Invoice' : 'Quotation'} #{document.invoiceNumber || document.quotationNumber}
+            {isProforma ? 'Proforma' : isInvoice ? 'Invoice' : 'Quotation'} #{document.invoiceNumber || document.quotationNumber}
           </h3>
           <p className="text-sm text-gray-600 mt-1">
             Issue Date: {document.issueDate ? new Date(document.issueDate).toLocaleDateString() : ''}
@@ -213,7 +236,7 @@ const DocumentViewModal: React.FC<DocumentViewModalProps> = ({
           {renderDocumentHeader()}
           
           {/* Reference Information Section */}
-          {(document.sourceQuotation || document.poFromCustomer) && (
+          {(document.sourceQuotation || document.sourceProforma || document.poFromCustomer) && (
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 print:bg-white print:border-gray-400">
               <h4 className="font-medium text-gray-900 mb-3 print:text-black">Reference Information</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -232,6 +255,27 @@ const DocumentViewModal: React.FC<DocumentViewModalProps> = ({
                       {document.sourceQuotation?.issueDate && (
                         <div className="text-gray-600 print:text-black mt-1">
                           Issue Date: {new Date(document.sourceQuotation.issueDate).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {document.proformaNumber && (
+                  <div className="bg-white border border-purple-200 rounded-lg p-3 print:border-gray-300">
+                    <div className="flex items-center mb-2">
+                      <div className="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center mr-2 print:bg-gray-100">
+                        <FileText className="w-3 h-3 text-purple-600 print:text-gray-600" />
+                      </div>
+                      <span className="text-sm font-medium text-purple-900 print:text-black">Proforma</span>
+                    </div>
+                    <div className="text-sm">
+                      <div className="font-mono text-purple-700 print:text-black">
+                        Proforma Number: {document.sourceProforma?.invoiceNumber || document.proformaNumber}
+                      </div>
+                      {document.sourceProforma?.issueDate && (
+                        <div className="text-gray-600 print:text-black mt-1">
+                          Issue Date: {new Date(document.sourceProforma.issueDate).toLocaleDateString()}
                         </div>
                       )}
                     </div>
@@ -267,7 +311,7 @@ const DocumentViewModal: React.FC<DocumentViewModalProps> = ({
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
               <h4 className="font-medium text-blue-900 mb-3 flex items-center">
                 <FileText className="w-4 h-4 mr-2" />
-                {isInvoice ? 'Invoice' : 'Quotation'} Details
+                {isProforma ? 'Proforma' : isInvoice ? 'Invoice' : 'Quotation'} Details
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {document.subject && (
@@ -326,8 +370,8 @@ const DocumentViewModal: React.FC<DocumentViewModalProps> = ({
             </div>
           )}
 
-          {/* Invoice Details Section - Only for Sale Invoices */}
-          {isInvoice && document.invoiceType === 'sale' && (
+          {/* Invoice Details Section - Only for Sale and Proforma Invoices */}
+          {isInvoice && (document.invoiceType === 'sale' || document.invoiceType === 'proforma') && (
             <InvoiceDetails invoice={document} />
           )}
 

@@ -135,6 +135,14 @@ export interface QuotationData {
   deliveryNoteDate?: Date; // Delivery Note Date
   destination?: string; // Destination
   termsOfDelivery?: string; // Terms of Delivery
+  // Reference fields for invoices created from proformas
+  sourceProforma?: string; // Reference to the proforma this invoice was created from
+  proformaNumber?: string; // Proforma number for display purposes
+  proformaPaymentDetails?: {
+    paidAmount: number; // Amount already paid in proforma
+    remainingAmount: number; // Remaining amount from proforma
+    paymentStatus: string; // Payment status from proforma
+  };
   referenceNo?: string; // Reference Number
   referenceDate?: Date; // Reference Date
   // Payment fields
@@ -624,6 +632,10 @@ export const sanitizeQuotationData = (data: any): any => {
     sourceQuotation: data.sourceQuotation,
     quotationNumber: data.quotationNumber,
     quotationPaymentDetails: data.quotationPaymentDetails,
+    // Preserve proforma reference fields for invoices created from proformas
+    sourceProforma: data.sourceProforma,
+    proformaNumber: data.proformaNumber,
+    proformaPaymentDetails: data.proformaPaymentDetails,
     // Preserve PO From Customer data
     poFromCustomer: data.poFromCustomer
   };

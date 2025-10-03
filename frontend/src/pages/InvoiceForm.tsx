@@ -87,7 +87,7 @@ const InvoiceFormPage: React.FC = () => {
   const isEditMode = Boolean(id);
 
   // 🚀 INVOICE TYPE HANDLING - Get invoice type from location state or URL params
-  const getInvoiceType = (): 'quotation' | 'sale' | 'purchase' | 'challan' => {
+  const getInvoiceType = (): 'quotation' | 'proforma' | 'sale' | 'purchase' | 'challan' => {
     // First check location state (from InvoiceManagement)
     if (location.state?.invoiceType) {
       return location.state.invoiceType;
@@ -96,8 +96,8 @@ const InvoiceFormPage: React.FC = () => {
     // Check URL params for invoice type
     const urlParams = new URLSearchParams(window.location.search);
     const typeFromUrl = urlParams.get('type');
-    if (typeFromUrl && ['quotation', 'sale', 'purchase', 'challan'].includes(typeFromUrl)) {
-      return typeFromUrl as 'quotation' | 'sale' | 'purchase' | 'challan';
+    if (typeFromUrl && ['quotation', 'proforma', 'sale', 'purchase', 'challan'].includes(typeFromUrl)) {
+      return typeFromUrl as 'quotation' | 'proforma' | 'sale' | 'purchase' | 'challan';
     }
 
     // Default to sale invoice
@@ -109,16 +109,20 @@ const InvoiceFormPage: React.FC = () => {
   // 🎯 CONDITIONAL LOGIC BASED ON INVOICE TYPE
   const isDeliveryChallan = invoiceType === 'challan';
   const isQuotation = invoiceType === 'quotation';
+  const isProformaInvoice = invoiceType === 'proforma';
   const isSalesInvoice = invoiceType === 'sale';
   const isPurchaseInvoice = invoiceType === 'purchase';
 
   // 🎯 HANDLE QUOTATION DATA FROM LOCATION STATE
   const quotationData = location.state?.quotationData;
+  const proformaData = location.state?.proformaData;
 
   console.log("quotationData:",quotationData);
+  console.log("proformaData:",proformaData);
   
-  // 🎯 CHECK IF INVOICE IS FROM QUOTATION
+  // 🎯 CHECK IF INVOICE IS FROM QUOTATION OR PROFORMA
   const isFromQuotation = quotationData?.sourceQuotation ? true : false;
+  const isFromProforma = proformaData?.sourceProforma ? true : false;
 
   // 🎯 GET INVOICE TYPE TITLE FOR DISPLAY
   const getInvoiceTypeTitle = (): string => {
@@ -127,6 +131,8 @@ const InvoiceFormPage: React.FC = () => {
         return 'Delivery Challan';
       case 'quotation':
         return 'Quotation';
+      case 'proforma':
+        return 'Proforma Invoice';
       case 'sale':
         return 'Sales Invoice';
       case 'purchase':
@@ -496,23 +502,134 @@ const InvoiceFormPage: React.FC = () => {
     }
   }, [quotationData, loading, customers, addresses]);
 
-  // Load addresses when customers are loaded and we have quotation data
+  // Handle proforma data initialization
   useEffect(() => {
-    if (quotationData && customers.length > 0 && !loading) {
-      const customerId = typeof quotationData.customer === 'string' ? quotationData.customer : quotationData.customer?._id;
+    if (proformaData && !loading) {
+      console.log('InvoiceForm: Received proforma data:', proformaData);
+      
+      // Check if this is from a proforma (has sourceProforma field)
+      const isFromProforma = proformaData.sourceProforma;
+      
+      // Recalculate totals when proforma data is loaded
+      const recalculatedData = calculateQuotationTotals(
+        proformaData.items || [], 
+        proformaData.serviceCharges || [], 
+        proformaData.batteryBuyBack || null,
+        proformaData.overallDiscount || 0
+      );
+      
+      console.log('InvoiceForm: Original proforma items:', proformaData.items);
+      console.log('InvoiceForm: Recalculated data:', recalculatedData);
+      
+      setFormData(prev => {
+        const updatedData = {
+          ...prev,
+          customer: proformaData.customer ? (typeof proformaData.customer === 'string' ? { 
+            _id: proformaData.customer,
+            name: '',
+            email: '',
+            phone: ''
+          } : {
+            _id: proformaData.customer._id || proformaData.customer,
+            name: proformaData.customer.name || '',
+            email: proformaData.customer.email || '', // This will be updated when addresses are loaded
+            phone: proformaData.customer.phone || '',
+            pan: proformaData.customer.pan || ''
+          }) : undefined,
+          billToAddress: proformaData.billToAddress,
+          shipToAddress: proformaData.shipToAddress,
+          assignedEngineer: proformaData.assignedEngineer,
+          items: recalculatedData.items, // Use recalculated items with proper totals
+          overallDiscount: proformaData.overallDiscount || 0,
+          overallDiscountAmount: recalculatedData.overallDiscountAmount || 0,
+          notes: proformaData.notes || '',
+          terms: proformaData.terms || '',
+          location: proformaData.location,
+          validUntil: proformaData.dueDate ? new Date(proformaData.dueDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          subtotal: recalculatedData.subtotal,
+          totalDiscount: recalculatedData.totalDiscount,
+          totalTax: recalculatedData.totalTax,
+          grandTotal: recalculatedData.grandTotal,
+          roundOff: recalculatedData.roundOff,
+          // New fields from proforma
+          subject: proformaData.subject || '',
+          engineSerialNumber: proformaData.engineSerialNumber || '',
+          kva: proformaData.kva || '',
+          hourMeterReading: proformaData.hourMeterReading || '',
+          serviceRequestDate: proformaData.serviceRequestDate ? new Date(proformaData.serviceRequestDate) : undefined,
+          qrCodeImage: proformaData.qrCodeImage || '',
+          serviceCharges: proformaData.serviceCharges || [],
+          batteryBuyBack: proformaData.batteryBuyBack || {
+            description: '',
+            quantity: 0,
+            unitPrice: 0,
+            discount: 0,
+            discountedAmount: 0,
+            taxRate: 0,
+            taxAmount: 0,
+            totalPrice: 0
+          },
+          // Add proforma reference fields if this is from a proforma
+          ...(isFromProforma && {
+            sourceProforma: proformaData.sourceProforma,
+            proformaNumber: proformaData.proformaNumber,
+            proformaPaymentDetails: proformaData.proformaPaymentDetails
+          }),
+          // Add PO From Customer data if available
+          ...(proformaData.poFromCustomer && {
+            poFromCustomer: proformaData.poFromCustomer
+          })
+        };
+        
+        console.log('InvoiceForm: Updated form data from proforma:', updatedData);
+        return updatedData;
+      });
+
+      // Load customer addresses if customer is provided
+      if (proformaData.customer && customers.length > 0) {
+        const customerId = typeof proformaData.customer === 'string' ? proformaData.customer : proformaData.customer._id;
+        if (customerId) {
+          console.log('InvoiceForm: Loading addresses for customer from proforma:', customerId);
+          loadCustomerAddresses(customerId);
+        }
+      }
+
+      // Load stock data if location is available
+      if (proformaData.location) {
+        console.log('InvoiceForm: Loading stock for location from proforma data:', proformaData.location);
+        setTimeout(() => {
+          loadAllStockForLocation(proformaData.location);
+        }, 500);
+      }
+
+      // Initialize QR Code preview if available from proforma
+      if (proformaData.qrCodeImage) {
+        setQrCodePreview(proformaData.qrCodeImage);
+        // Note: We can't restore the original file, but we can show the preview
+        console.log('InvoiceForm: QR Code image loaded from proforma');
+      }
+    }
+  }, [proformaData, loading, customers, addresses]);
+
+  // Load addresses when customers are loaded and we have quotation or proforma data
+  useEffect(() => {
+    if ((quotationData || proformaData) && customers.length > 0 && !loading) {
+      const dataSource = quotationData || proformaData;
+      const customerId = typeof dataSource.customer === 'string' ? dataSource.customer : dataSource.customer?._id;
       if (customerId) {
         console.log('InvoiceForm: Loading addresses after customers loaded for customer:', customerId);
         loadCustomerAddresses(customerId);
       }
     }
-  }, [customers, quotationData, loading]);
+  }, [customers, quotationData, proformaData, loading]);
 
-  // Map quotation addresses to customer addresses after addresses are loaded
+  // Map quotation/proforma addresses to customer addresses after addresses are loaded
   useEffect(() => {
-    if (quotationData && addresses.length > 0 && !loading) {
-      console.log('InvoiceForm: Mapping quotation addresses to customer addresses');
+    if ((quotationData || proformaData) && addresses.length > 0 && !loading) {
+      const dataSource = quotationData || proformaData;
+      console.log('InvoiceForm: Mapping addresses to customer addresses from:', quotationData ? 'quotation' : 'proforma');
       
-      const mappedAddresses = mapQuotationAddressesToCustomerAddresses(quotationData, addresses);
+      const mappedAddresses = mapQuotationAddressesToCustomerAddresses(dataSource, addresses);
       
       if (Object.keys(mappedAddresses).length > 0) {
         setFormData(prev => ({
@@ -543,7 +660,7 @@ const InvoiceFormPage: React.FC = () => {
         }
       }
     }
-  }, [addresses, quotationData, loading]);
+  }, [addresses, quotationData, proformaData, loading]);
 
   // Ensure totals are properly calculated when form data changes
   useEffect(() => {
@@ -1770,6 +1887,12 @@ const InvoiceFormPage: React.FC = () => {
           quotationNumber: sanitizedData.quotationNumber,
           quotationPaymentDetails: sanitizedData.quotationPaymentDetails
         }),
+        // Include proforma reference fields if this is from a proforma
+        ...(sanitizedData.sourceProforma && {
+          sourceProforma: sanitizedData.sourceProforma,
+          proformaNumber: sanitizedData.proformaNumber,
+          proformaPaymentDetails: sanitizedData.proformaPaymentDetails
+        }),
         // Include PO From Customer data if available
         ...(sanitizedData.poFromCustomer && {
           poFromCustomer: sanitizedData.poFromCustomer._id,
@@ -1785,6 +1908,11 @@ const InvoiceFormPage: React.FC = () => {
         quotationNumber: invoiceData.quotationNumber,
         quotationPaymentDetails: invoiceData.quotationPaymentDetails
       });
+      console.log('Proforma reference fields being sent:', {
+        sourceProforma: invoiceData.sourceProforma,
+        proformaNumber: invoiceData.proformaNumber,
+        proformaPaymentDetails: invoiceData.proformaPaymentDetails
+      });
       console.log('PO From Customer fields being sent:', {
         poFromCustomer: invoiceData.poFromCustomer,
         poNumber: invoiceData.poNumber,
@@ -1792,6 +1920,7 @@ const InvoiceFormPage: React.FC = () => {
       });
       console.log('Both IDs being stored in invoice:', {
         quotationId: invoiceData.sourceQuotation,
+        proformaId: invoiceData.sourceProforma,
         poFromCustomerId: invoiceData.poFromCustomer
       });
 
@@ -2579,6 +2708,37 @@ const InvoiceFormPage: React.FC = () => {
         </div>
       )}
 
+      {/* Proforma Reference Banner */}
+      {formData.sourceProforma && (
+        <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
+                <FileText className="w-4 h-4 text-purple-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-purple-900">
+                  Creating Invoice from Proforma
+                </h3>
+                <p className="text-xs text-purple-700">
+                  Proforma: {formData.proformaNumber} • 
+                  {formData.proformaPaymentDetails && (
+                    <span className="ml-2">
+                      Payment Status: {formData.proformaPaymentDetails.paymentStatus} • 
+                      Paid: ₹{formData.proformaPaymentDetails.paidAmount?.toFixed(2) || '0.00'} • 
+                      Remaining: ₹{formData.proformaPaymentDetails.remainingAmount?.toFixed(2) || '0.00'}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="text-xs text-purple-600 bg-purple-100 px-2 py-1 rounded-full">
+              Pre-filled from Proforma
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PO From Customer Banner */}
       {formData.poFromCustomer && (() => {
         console.log('PO From Customer data in form:', formData.poFromCustomer);
@@ -2671,7 +2831,7 @@ const InvoiceFormPage: React.FC = () => {
                   onKeyDown={isFromQuotation ? undefined : handleLocationKeyDown}
                   placeholder="Search location or press ↓ to open"
                   data-field="location"
-                  disabled={isFromQuotation}
+                  disabled={isFromQuotation || isFromProforma}
                   className={`w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg transition-colors ${
                     isFromQuotation 
                       ? 'bg-gray-100 text-gray-600 cursor-not-allowed' 
@@ -2808,7 +2968,7 @@ const InvoiceFormPage: React.FC = () => {
                   autoComplete="off"
                   placeholder={isPurchaseInvoice ? "Search supplier or press ↓ to open" : "Search customer or press ↓ to open"}
                   data-field="customer"
-                  disabled={isFromQuotation}
+                  disabled={isFromQuotation || isFromProforma}
                   className={`w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg transition-colors ${
                     isFromQuotation 
                       ? 'bg-gray-100 text-gray-600 cursor-not-allowed' 
@@ -3226,7 +3386,7 @@ const InvoiceFormPage: React.FC = () => {
                     e.preventDefault();
                     // Move to engineer field if it exists, otherwise to first product field
                     setTimeout(() => {
-                      if (isSalesInvoice) {
+                      if (isSalesInvoice || isProformaInvoice) {
                         const engineerInput = document.querySelector('[data-field="engineer"]') as HTMLInputElement;
                         if (engineerInput) engineerInput.focus();
                       } else {
@@ -3251,7 +3411,7 @@ const InvoiceFormPage: React.FC = () => {
             {/* Invoice Details Section - Additional Fields */}
             <div className="col-span-3">
               <h3 className="text-lg font-semibold text-gray-800 mb-4 border-b border-gray-200 pb-2">
-                Invoice Details
+                {isProformaInvoice ? 'Proforma' : 'Invoice'} Details
               </h3>
             </div>
 
@@ -3259,19 +3419,19 @@ const InvoiceFormPage: React.FC = () => {
             <div className="col-span-3 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Invoice No
+                  {isProformaInvoice ? 'Proforma' : 'Invoice'} No
                 </label>
                 <input
                   type="text"
                   value={formData.invoiceNumber || ''}
                   onChange={(e) => setFormData({ ...formData, invoiceNumber: e.target.value })}
-                  placeholder="Enter invoice number"
+                  placeholder={`Enter ${isProformaInvoice ? 'proforma' : 'invoice'} number`}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Invoice Date
+                  {isProformaInvoice ? 'Proforma' : 'Invoice'} Date
                 </label>
                 <input
                   type="date"
@@ -3469,7 +3629,7 @@ const InvoiceFormPage: React.FC = () => {
             <div className="col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  IRN (Invoice Reference Number)
+                  IRN ({isProformaInvoice ? 'Proforma' : 'Invoice'} Reference Number)
                 </label>
                 <input
                   type="text"
@@ -3509,7 +3669,7 @@ const InvoiceFormPage: React.FC = () => {
                 />
               </div>
             </div>
-            {isSalesInvoice && (
+            {(isSalesInvoice || isProformaInvoice) && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Referred By
@@ -4064,8 +4224,9 @@ const InvoiceFormPage: React.FC = () => {
                 type="button"
                 className={`text-white px-4 py-2 rounded-lg transition-colors text-sm flex items-center space-x-2 ${isDeliveryChallan ? 'bg-orange-600 hover:bg-orange-700' :
                   isQuotation ? 'bg-blue-600 hover:bg-blue-700' :
-                    isSalesInvoice ? 'bg-green-600 hover:bg-green-700' :
-                      'bg-purple-600 hover:bg-purple-700'
+                    isProformaInvoice ? 'bg-purple-600 hover:bg-purple-700' :
+                      isSalesInvoice ? 'bg-green-600 hover:bg-green-700' :
+                        'bg-indigo-600 hover:bg-indigo-700'
                   }`}
               >
                 <Plus className="w-4 h-4" />
@@ -4092,7 +4253,7 @@ const InvoiceFormPage: React.FC = () => {
                   <div className="p-3 border-r border-gray-300 text-center bg-gray-200">S.No</div>
                   <div className="p-3 border-r border-gray-300 bg-gray-200">Part No</div>
                   <div className="p-3 border-r border-gray-300 bg-gray-200">Product Name</div>
-                  <div className="p-3 border-r border-gray-300 bg-gray-200">HSC/SAC</div>
+                  <div className="p-3 border-r border-gray-300 bg-gray-200">HSN/SAC</div>
                   <div className="p-3 border-r border-gray-300 bg-gray-200">GST(%)</div>
                   <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
                   <div className="p-3 border-r border-gray-300 bg-gray-200">UOM</div>
@@ -4440,7 +4601,7 @@ const InvoiceFormPage: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* HSC/SAC */}
+                      {/* HSN/SAC */}
                       <div className="p-1 border-r border-gray-200">
                         <input
                           type="text"
@@ -5694,7 +5855,7 @@ const InvoiceFormPage: React.FC = () => {
                   } else if (e.key === 'Tab' && !e.shiftKey) {
                     e.preventDefault();
                     setTimeout(() => {
-                      if (isSalesInvoice) {
+                      if (isSalesInvoice || isProformaInvoice) {
                         const overallDiscountInput = document.querySelector('[data-field="overall-discount"]') as HTMLInputElement;
                         if (overallDiscountInput) overallDiscountInput.focus();
                       } else {
@@ -5855,7 +6016,7 @@ const InvoiceFormPage: React.FC = () => {
                   if (e.key === 'Tab' && e.shiftKey) {
                     e.preventDefault();
                     setTimeout(() => {
-                      if (isSalesInvoice) {
+                      if (isSalesInvoice || isProformaInvoice) {
                         const overallDiscountInput = document.querySelector('[data-field="overall-discount"]') as HTMLInputElement;
                         if (overallDiscountInput) overallDiscountInput.focus();
                       } else {
@@ -5868,8 +6029,9 @@ const InvoiceFormPage: React.FC = () => {
                 data-action="create"
                 className={`px-6 py-2 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center space-x-2 ${isDeliveryChallan ? 'bg-orange-600 hover:bg-orange-700' :
                   isQuotation ? 'bg-blue-600 hover:bg-blue-700' :
-                    isSalesInvoice ? 'bg-green-600 hover:bg-green-700' :
-                      'bg-purple-600 hover:bg-purple-700'
+                    isProformaInvoice ? 'bg-purple-600 hover:bg-purple-700' :
+                      isSalesInvoice ? 'bg-green-600 hover:bg-green-700' :
+                        'bg-indigo-600 hover:bg-indigo-700'
                   }`}
               >
                 {submitting ? (

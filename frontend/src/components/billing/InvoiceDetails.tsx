@@ -6,6 +6,8 @@ interface InvoiceDetailsProps {
 }
 
 const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({ invoice }) => {
+  const isProforma = invoice?.invoiceType === 'proforma';
+  
   // Only show if we have at least one invoice detail field
   const hasInvoiceDetails = 
     invoice?.irn || 
@@ -36,7 +38,7 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({ invoice }) => {
     <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
       <h4 className="font-medium text-green-900 mb-3 flex items-center">
         <FileText className="w-4 h-4 mr-2" />
-        Invoice Details
+        {isProforma ? 'Proforma' : 'Invoice'} Details
       </h4>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -44,7 +46,7 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({ invoice }) => {
         {invoice?.invoiceNumber && (
           <div>
             <label className="block text-xs font-medium text-green-700 uppercase tracking-wide mb-1">
-              Invoice Number
+              {isProforma ? 'Proforma' : 'Invoice'} Number
             </label>
             <p className="text-sm text-green-900 bg-white px-3 py-2 rounded border border-green-200 font-mono">
               {invoice.invoiceNumber}
@@ -56,7 +58,7 @@ const InvoiceDetails: React.FC<InvoiceDetailsProps> = ({ invoice }) => {
         {invoice?.irn && (
           <div>
             <label className="block text-xs font-medium text-green-700 uppercase tracking-wide mb-1">
-              IRN (Invoice Reference Number)
+              IRN ({isProforma ? 'Proforma' : 'Invoice'} Reference Number)
             </label>
             <p className="text-sm text-green-900 bg-white px-3 py-2 rounded border border-green-200 font-mono">
               {invoice.irn}

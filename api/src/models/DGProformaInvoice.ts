@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export interface IProformaInvoice extends Document {
+export interface IDGProformaInvoice extends Document {
   invoiceNumber: string;
   customer: any;
   dgPurchaseOrder?: any;
@@ -51,7 +51,7 @@ export interface IProformaInvoice extends Document {
   createdBy: any;
 }
 
-const ProformaInvoiceSchema = new Schema<IProformaInvoice>({
+const DGProformaInvoiceSchema = new Schema<IDGProformaInvoice>({
   invoiceNumber: { 
     type: String, 
     required: true, 
@@ -133,8 +133,8 @@ const ProformaInvoiceSchema = new Schema<IProformaInvoice>({
   toObject: { virtuals: true }
 });
 
-ProformaInvoiceSchema.index({ invoiceNumber: 1 });
-ProformaInvoiceSchema.index({ customer: 1 });
-ProformaInvoiceSchema.index({ status: 1 });
+DGProformaInvoiceSchema.index({ invoiceNumber: 1 });
+DGProformaInvoiceSchema.index({ customer: 1 });
+DGProformaInvoiceSchema.index({ status: 1 });
 
-export const ProformaInvoice = mongoose.model<IProformaInvoice>('ProformaInvoice', ProformaInvoiceSchema); 
+export const DGProformaInvoice = mongoose.model<IDGProformaInvoice>('DGProformaInvoice', DGProformaInvoiceSchema); 

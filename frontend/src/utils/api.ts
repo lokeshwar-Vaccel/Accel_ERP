@@ -1828,40 +1828,40 @@ class ApiClient {
         this.makeRequest<{ success: boolean; data: any }>('/oem-orders/stats'),
     },
 
-    // Proforma Invoices
-    proformaInvoices: {
+    // DG Proforma Invoices
+    dgProformaInvoices: {
       getAll: (params?: any) =>
-        this.makeRequest<{ success: boolean; data: any[]; page: number; limit: number; total: number; totalPages: number }>(`/proforma-invoices${params ? `?${new URLSearchParams(params)}` : ''}`),
+        this.makeRequest<{ success: boolean; data: any[]; page: number; limit: number; total: number; totalPages: number }>(`/dg-proforma-invoices${params ? `?${new URLSearchParams(params)}` : ''}`),
 
       getById: (id: string) =>
-        this.makeRequest<{ success: boolean; data: any }>(`/proforma-invoices/${id}`),
+        this.makeRequest<{ success: boolean; data: any }>(`/dg-proforma-invoices/${id}`),
 
       create: (invoiceData: any) =>
-        this.makeRequest<{ success: boolean; data: any }>('/proforma-invoices', {
+        this.makeRequest<{ success: boolean; data: any }>('/dg-proforma-invoices', {
           method: 'POST',
           body: JSON.stringify(invoiceData),
         }),
 
       createFromPO: (poId: string, invoiceData?: any) =>
-        this.makeRequest<{ success: boolean; data: any }>(`/proforma-invoices/from-po/${poId}`, {
+        this.makeRequest<{ success: boolean; data: any }>(`/dg-proforma-invoices/from-po/${poId}`, {
           method: 'POST',
           body: invoiceData ? JSON.stringify(invoiceData) : undefined,
         }),
 
       update: (id: string, invoiceData: any) =>
-        this.makeRequest<{ success: boolean; data: any }>(`/proforma-invoices/${id}`, {
+        this.makeRequest<{ success: boolean; data: any }>(`/dg-proforma-invoices/${id}`, {
           method: 'PUT',
           body: JSON.stringify(invoiceData),
         }),
 
       updateStatus: (id: string, status: string) =>
-        this.makeRequest<{ success: boolean; data: any }>(`/proforma-invoices/${id}/status`, {
+        this.makeRequest<{ success: boolean; data: any }>(`/dg-proforma-invoices/${id}/status`, {
           method: 'PATCH',
           body: JSON.stringify({ status }),
         }),
 
       delete: (id: string) =>
-        this.makeRequest<{ success: boolean; message: string }>(`/proforma-invoices/${id}`, {
+        this.makeRequest<{ success: boolean; message: string }>(`/dg-proforma-invoices/${id}`, {
           method: 'DELETE',
         }),
     },

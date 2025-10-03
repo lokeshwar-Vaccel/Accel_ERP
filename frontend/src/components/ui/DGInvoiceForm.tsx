@@ -11,7 +11,7 @@ interface DGInvoiceFormProps {
   onClose: () => void;
   onSuccess: () => void;
   purchaseOrder?: any;
-  proformaInvoice?: any;
+  DGProformaInvoiceData?: any;
   customer?: any;
   mode?: 'create' | 'edit' | 'from-po' | 'from-proforma';
   initialData?: any;
@@ -22,17 +22,17 @@ const DGInvoiceForm: React.FC<DGInvoiceFormProps> = ({
   onClose,
   onSuccess,
   purchaseOrder,
-  proformaInvoice,
+  DGProformaInvoiceData,
   customer,
   mode = 'create',
   initialData
 }) => {
   const [loading, setLoading] = useState(false);
-  const sourceDoc = purchaseOrder || proformaInvoice;
+  const sourceDoc = purchaseOrder || DGProformaInvoiceData;
   const [formData, setFormData] = useState({
     customerId: customer?._id || sourceDoc?.customer?._id || '',
     dgPurchaseOrderId: purchaseOrder?._id || '',
-    proformaInvoiceId: proformaInvoice?._id || '',
+    proformaInvoiceId: DGProformaInvoiceData?._id || '',
     quotationId: sourceDoc?.quotation || '',
     issueDate: new Date().toISOString().split('T')[0],
     dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],

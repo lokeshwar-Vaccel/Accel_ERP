@@ -39,7 +39,7 @@ export const getInvoices = async (
       supplier?: string;
       startDate?: string;
       endDate?: string;
-      invoiceType?: 'sale' | 'purchase';
+      invoiceType?: 'sale' | 'proforma' | 'purchase';
     };
 
     // Build query
@@ -78,6 +78,7 @@ export const getInvoices = async (
       .populate('createdBy', 'firstName lastName')
       .populate('assignedEngineer', 'firstName lastName email phone')
       .populate('sourceQuotation', 'quotationNumber issueDate validUntil grandTotal status paymentStatus')
+      .populate('sourceProforma', 'invoiceNumber issueDate dueDate totalAmount status paymentStatus')
       .populate('items.product', 'name category brand partNo hsnNumber')
       .populate('poFromCustomer', 'poNumber status totalAmount orderDate expectedDeliveryDate poPdf')
       .sort(sort as string)
@@ -125,6 +126,8 @@ export const getInvoice = async (
       .populate('location', 'name address type')
       .populate('createdBy', 'firstName lastName email')
       .populate('assignedEngineer', 'firstName lastName email phone')
+      .populate('sourceQuotation', 'quotationNumber issueDate validUntil grandTotal status paymentStatus')
+      .populate('sourceProforma', 'invoiceNumber issueDate dueDate totalAmount status paymentStatus')
       .populate('items.product', 'name category brand modelNumber')
       .populate('poFromCustomer', 'poNumber status totalAmount orderDate expectedDeliveryDate poPdf');
 
@@ -189,6 +192,10 @@ export const createInvoice = async (
       sourceQuotation,
       quotationNumber,
       quotationPaymentDetails,
+      // Proforma reference fields
+      sourceProforma,
+      proformaNumber,
+      proformaPaymentDetails,
       // PO From Customer fields
       poFromCustomer,
       poNumber,
@@ -451,6 +458,12 @@ export const createInvoice = async (
         sourceQuotation,
         quotationNumber,
         quotationPaymentDetails
+      }),
+      // Proforma reference fields
+      ...(sourceProforma && {
+        sourceProforma,
+        proformaNumber,
+        proformaPaymentDetails
       }),
       // PO From Customer fields
       ...poFromCustomerFields,

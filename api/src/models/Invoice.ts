@@ -11,6 +11,9 @@ export interface IInvoiceItem {
   taxAmount?: number;
   uom?: string;
   discount?: number;
+  discountedAmount?: number;
+  hsnNumber?: string;
+  partNo?: string;
 }
 
 // Invoice Interface
@@ -63,7 +66,7 @@ export interface IInvoice extends mongoose.Document {
   paymentStatus: 'pending' | 'partial' | 'paid' | 'gst_pending';
   notes?: string;
   terms?: string;
-  invoiceType: 'sale' | 'purchase' | 'challan' | 'quotation' ;
+  invoiceType: 'sale' | 'purchase' | 'challan' | 'quotation' | 'proforma';
   referenceId?: string; // Service ticket, AMC contract, etc.
   dgSalesEnquiry?: mongoose.Types.ObjectId; // Link to DG Sales Enquiry
   sourceQuotation?: mongoose.Types.ObjectId; // Reference to the quotation this invoice was created from
@@ -72,6 +75,13 @@ export interface IInvoice extends mongoose.Document {
     paidAmount: number; // Amount already paid in quotation
     remainingAmount: number; // Remaining amount from quotation
     paymentStatus: string; // Payment status from quotation
+  };
+  sourceProforma?: mongoose.Types.ObjectId; // Reference to the proforma this invoice was created from
+  proformaNumber?: string; // Proforma number for display purposes
+  proformaPaymentDetails?: {
+    paidAmount: number; // Amount already paid in proforma
+    remainingAmount: number; // Remaining amount from proforma
+    paymentStatus: string; // Payment status from proforma
   };
   poFromCustomer?: mongoose.Types.ObjectId; // Reference to PO From Customer
   poPdf?: string; // PO PDF file URL or base64
@@ -209,6 +219,23 @@ const invoiceItemSchema = new Schema({
     default: 0,
     min: 0,
     max: 100
+  },
+  discountedAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  hsnNumber: {
+    type: String,
+    required: false,
+    trim: true,
+    default: ''
+  },
+  partNo: {
+    type: String,
+    required: false,
+    trim: true,
+    default: ''
   }
 });
 
@@ -359,7 +386,7 @@ const invoiceSchema = new Schema<IInvoice>({
   },
   invoiceType: {
     type: String,
-    enum: ['sale', 'quotation', 'purchase', 'challan'],
+    enum: ['sale', 'quotation', 'purchase', 'challan', 'proforma'],
     required: true
   },
   referenceId: {
@@ -382,6 +409,33 @@ const invoiceSchema = new Schema<IInvoice>({
     required: false
   },
   quotationPaymentDetails: {
+    paidAmount: {
+      type: Number,
+      required: false,
+      min: 0
+    },
+    remainingAmount: {
+      type: Number,
+      required: false,
+      min: 0
+    },
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'partial', 'paid', 'failed'],
+      required: false
+    }
+  },
+  sourceProforma: {
+    type: Schema.Types.ObjectId,
+    ref: 'Invoice',
+    required: false
+  },
+  proformaNumber: {
+    type: String,
+    trim: true,
+    required: false
+  },
+  proformaPaymentDetails: {
     paidAmount: {
       type: Number,
       required: false,

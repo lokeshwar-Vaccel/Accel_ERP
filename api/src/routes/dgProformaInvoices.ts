@@ -2,59 +2,59 @@ import { Router } from 'express';
 import { protect, restrictTo, checkPermission } from '../middleware/auth';
 import { UserRole } from '../types';
 import {
-  createProformaInvoice,
-  getProformaInvoices,
-  getProformaInvoice,
-  updateProformaInvoice,
-  updateProformaInvoiceStatus,
-  deleteProformaInvoice,
-  createProformaFromPO
-} from '../controllers/proformaInvoiceController';
+  createDGProformaInvoice,
+  getDGProformaInvoices,
+  getDGProformaInvoice,
+  updateDGProformaInvoice,
+  updateDGProformaInvoiceStatus,
+  deleteDGProformaInvoice,
+  createDGProformaFromPO
+} from '../controllers/DGProformaInvoiceController';
 
 const router = Router();
 
 // All routes are protected
 router.use(protect);
 
-// @route   GET /api/v1/proforma-invoices
-router.get('/', getProformaInvoices);
+// @route   GET /api/v1/dg-proforma-invoices
+router.get('/', getDGProformaInvoices);
 
-// @route   POST /api/v1/proforma-invoices
+// @route   POST /api/v1/dg-proforma-invoices
 router.post('/', 
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
   checkPermission('write'),
-  createProformaInvoice
+  createDGProformaInvoice
 );
 
-// @route   POST /api/v1/proforma-invoices/from-po/:poId
+// @route   POST /api/v1/dg-proforma-invoices/from-po/:poId
 router.post('/from-po/:poId',
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
   checkPermission('write'),
-  createProformaFromPO
+  createDGProformaFromPO
 );
 
-// @route   GET /api/v1/proforma-invoices/:id
-router.get('/:id', getProformaInvoice);
+// @route   GET /api/v1/dg-proforma-invoices/:id
+router.get('/:id', getDGProformaInvoice);
 
-// @route   PUT /api/v1/proforma-invoices/:id
+// @route   PUT /api/v1/dg-proforma-invoices/:id
 router.put('/:id',
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
   checkPermission('write'),
-  updateProformaInvoice
+  updateDGProformaInvoice
 );
 
-// @route   PATCH /api/v1/proforma-invoices/:id/status
+// @route   PATCH /api/v1/dg-proforma-invoices/:id/status
 router.patch('/:id/status',
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
   checkPermission('write'),
-  updateProformaInvoiceStatus
+  updateDGProformaInvoiceStatus
 );
 
-// @route   DELETE /api/v1/proforma-invoices/:id
+// @route   DELETE /api/v1/dg-proforma-invoices/:id
 router.delete('/:id',
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN),
   checkPermission('write'),
-  deleteProformaInvoice
+  deleteDGProformaInvoice
 );
 
 export default router; 

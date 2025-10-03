@@ -31,7 +31,9 @@ import {
   Battery,
   Trash2,
   RefreshCw,
-  Settings
+  Settings,
+  ReceiptCent,
+  ReceiptIndianRupee
 } from 'lucide-react';
 import { Button } from '../components/ui/Botton';
 import { Modal } from '../components/ui/Modal';
@@ -554,7 +556,7 @@ interface Invoice {
   discountAmount?: number;
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
   paymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
-  invoiceType: 'quotation' | 'sale' | 'purchase' | 'challan';
+  invoiceType: 'quotation' | 'proforma' | 'sale' | 'purchase' | 'challan';
   items: InvoiceItem[];
   referenceNo?: string;
   referenceDate?: string;
@@ -750,7 +752,7 @@ interface NewInvoice {
   customer: string;
   address?: string;
   dueDate: string;
-  invoiceType: 'quotation' | 'sale' | 'purchase' | 'challan';
+  invoiceType: 'quotation' | 'proforma' | 'sale' | 'purchase' | 'challan';
   location: string;
   notes: string;
   items: NewInvoiceItem[];
@@ -897,6 +899,7 @@ function safeToFixed(val: any, digits = 2) {
 
 const INVOICE_TYPES = [
   { value: 'quotation', label: 'Quotation', icon: <FileText /> },
+  { value: 'proforma', label: 'Proforma', icon: <ReceiptIndianRupee /> },
   { value: 'sale', label: 'Sales Invoice', icon: <TrendingUp /> },
   { value: 'purchase', label: 'Purchase Invoice', icon: <TrendingDown /> },
   { value: 'challan', label: 'Delivery Challan', icon: <Package /> },
@@ -928,6 +931,11 @@ const InvoiceManagement: React.FC = () => {
     acceptedQuotations: 0,
     rejectedQuotations: 0,
     quotationValue: 0,
+    // Proforma invoice stats
+    totalProformaInvoices: 0,
+    paidProformaInvoices: 0,
+    overdueProformaInvoices: 0,
+    totalProformaRevenue: 0,
     // Purchase invoice stats
     totalPurchaseInvoices: 0,
     paidPurchaseInvoices: 0,
@@ -951,6 +959,8 @@ const InvoiceManagement: React.FC = () => {
   const [openStatusDropdown, setOpenStatusDropdown] = useState<string | null>(null);
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+  const [fromDateProforma, setFromDateProforma] = useState('');
+  const [toDateProforma, setToDateProforma] = useState('');
   const [fromDateSale, setFromDateSale] = useState('');
   const [toDateSale, setToDateSale] = useState('');
   const [fromDatePurchase, setFromDatePurchase] = useState('');
@@ -973,6 +983,11 @@ const InvoiceManagement: React.FC = () => {
   const [totalDatas, setTotalDatas] = useState(0);
   const [sort, setSort] = useState('-createdAt');
 
+  const [activeSubTab, setActiveSubTab] = useState<'Spare' | 'AMC'>('Spare');
+  const handleSubTabChange = (tab: 'Spare' | 'AMC') => {
+    setActiveSubTab(tab);
+    localStorage.setItem('invoiceManagementActiveSubTab', tab);
+  };
 
 
   // Custom dropdown states
@@ -996,9 +1011,9 @@ const InvoiceManagement: React.FC = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   // Initialize invoiceType from localStorage or default to 'quotation'
-  const [invoiceType, setInvoiceType] = useState<'quotation' | 'sale' | 'purchase' | 'challan'>(() => {
+  const [invoiceType, setInvoiceType] = useState<'quotation' | 'proforma' | 'sale' | 'purchase' | 'challan'>(() => {
     const savedInvoiceType = localStorage.getItem('selectedInvoiceType');
-    return (savedInvoiceType as 'quotation' | 'sale' | 'purchase' | 'challan') || 'quotation';
+    return (savedInvoiceType as 'quotation' | 'proforma' | 'sale' | 'purchase' | 'challan') || 'quotation';
   });
 
   console.log("selectedInvoice123:", selectedInvoice);
@@ -1020,7 +1035,7 @@ const InvoiceManagement: React.FC = () => {
   };
 
   // Custom setter function that updates both state and localStorage
-  const updateInvoiceType = (newType: 'quotation' | 'sale' | 'purchase' | 'challan') => {
+  const updateInvoiceType = (newType: 'quotation' | 'proforma' | 'sale' | 'purchase' | 'challan') => {
     setInvoiceType(newType);
     localStorage.setItem('selectedInvoiceType', newType);
     setDateRangeError(''); // Clear date range error when switching types
@@ -1459,10 +1474,15 @@ const InvoiceManagement: React.FC = () => {
             break;
           case '2':
             event.preventDefault();
+            handleCreateInvoice('proforma');
+            toast.success('Creating Proforma Invoice...', { duration: 2000 });
+            break;
+          case '3':
+            event.preventDefault();
             handleCreateInvoice('sale');
             toast.success('Creating Sales Invoice...', { duration: 2000 });
             break;
-          case '3':
+          case '4':
             event.preventDefault();
             handleCreateInvoice('challan');
             toast.success('Creating Delivery Challan...', { duration: 2000 });
@@ -1536,6 +1556,9 @@ const InvoiceManagement: React.FC = () => {
 
   const fetchInvoices = async () => {
     // Check for date range validation before making API call
+    if (invoiceType === 'proforma' && fromDateProforma && toDateProforma && !validateDateRange(fromDateProforma, toDateProforma)) {
+      return; // Don't fetch if date range is invalid
+    }
     if (invoiceType === 'sale' && fromDateSale && toDateSale && !validateDateRange(fromDateSale, toDateSale)) {
       return; // Don't fetch if date range is invalid
     }
@@ -1554,7 +1577,10 @@ const InvoiceManagement: React.FC = () => {
     };
 
     // Add date filters based on invoice type
-    if (invoiceType === 'sale') {
+    if (invoiceType === 'proforma') {
+      if (fromDateProforma) params.startDate = fromDateProforma;
+      if (toDateProforma) params.endDate = toDateProforma;
+    } else if (invoiceType === 'sale') {
       if (fromDateSale) params.startDate = fromDateSale;
       if (toDateSale) params.endDate = toDateSale;
     } else if (invoiceType === 'purchase') {
@@ -1597,7 +1623,7 @@ const InvoiceManagement: React.FC = () => {
     };
 
     loadDataAndStats();
-  }, [currentPage, limit, sort, searchTerm, statusFilter, paymentFilter, invoiceType, searchQuotationTerm, fromDate, toDate, fromDateSale, toDateSale, fromDatePurchase, toDatePurchase, fromDateChallan, toDateChallan]);
+  }, [currentPage, limit, sort, searchTerm, statusFilter, paymentFilter, invoiceType, searchQuotationTerm, fromDate, toDate, fromDateProforma, toDateProforma, fromDateSale, toDateSale, fromDatePurchase, toDatePurchase, fromDateChallan, toDateChallan]);
 
 
 
@@ -1817,6 +1843,9 @@ const InvoiceManagement: React.FC = () => {
       if (invoiceType === 'quotation') {
         console.log('Fetching quotation stats...');
         await fetchQuotationStats();
+      } else if (invoiceType === 'proforma') {
+        console.log('Fetching proforma invoice stats...');
+        await fetchProformaInvoiceStats();
       } else if (invoiceType === 'purchase') {
         console.log('Fetching purchase invoice stats...');
         await fetchPurchaseInvoiceStats();
@@ -1844,6 +1873,23 @@ const InvoiceManagement: React.FC = () => {
       }));
     } catch (error) {
       console.error('Error fetching sales invoice stats:', error);
+    }
+  };
+
+  const fetchProformaInvoiceStats = async () => {
+    try {
+      console.log('Fetching proforma invoice stats...');
+      const response = await apiClient.invoices.getStats('proforma');
+      console.log('Proforma invoice stats response:', response);
+      setStats((prev: any) => ({
+        ...prev,
+        totalProformaInvoices: response.data.totalInvoices || 0,
+        paidProformaInvoices: response.data.paidInvoices || 0,
+        overdueProformaInvoices: response.data.overdueInvoices || 0,
+        totalProformaRevenue: response.data.totalRevenue || 0
+      }));
+    } catch (error) {
+      console.error('Error fetching proforma invoice stats:', error);
     }
   };
 
@@ -1909,7 +1955,7 @@ const InvoiceManagement: React.FC = () => {
     }
   };
 
-  const handleCreateInvoice = (specificType?: 'quotation' | 'sale' | 'purchase' | 'challan') => {
+  const handleCreateInvoice = (specificType?: 'quotation' | 'proforma' | 'sale' | 'purchase' | 'challan') => {
     const typeToUse = specificType || invoiceType;
     console.log("typeToUse:", typeToUse);
 
@@ -1993,6 +2039,51 @@ const InvoiceManagement: React.FC = () => {
     } catch (error) {
       console.error('Error exporting quotations:', error);
       toast.error('Failed to export quotations. Please try again.');
+    }
+  };
+
+  const handleExportProformaInvoices = async () => {
+    try {
+      const loadingToast = toast.loading('Exporting proforma invoices to Excel...');
+
+      // Prepare export parameters with current filters
+      const exportParams: any = {
+        search: searchTerm,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        paymentStatus: paymentFilter !== 'all' ? paymentFilter : undefined,
+        invoiceType: 'proforma',
+      };
+
+      if (fromDateProforma) exportParams.startDate = fromDateProforma;
+      if (toDateProforma) exportParams.endDate = toDateProforma;
+
+      console.log('Exporting proforma invoices with params:', exportParams);
+
+      // Call the export API
+      const response = await apiClient.invoices.export(exportParams);
+
+      // Convert JSON data to Excel format with proper column widths
+      const blob = convertInvoiceToExcel(response.data);
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+
+      // Generate filename with current date and filters
+      const currentDate = new Date().toISOString().split('T')[0];
+      const filterSuffix = fromDateProforma || toDateProforma ? `_${fromDateProforma || 'start'}_to_${toDateProforma || 'end'}` : '';
+      link.download = `proforma_invoices_${currentDate}${filterSuffix}.xlsx`;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast.dismiss(loadingToast);
+      toast.success('Proforma invoices exported successfully!');
+    } catch (error) {
+      console.error('Error exporting proforma invoices:', error);
+      toast.error('Failed to export proforma invoices. Please try again.');
     }
   };
 
@@ -2752,6 +2843,210 @@ const InvoiceManagement: React.FC = () => {
     }
   };
 
+  const handleCreateProformaFromQuotation = async (quotation: any) => {
+    try {
+      console.log('Preparing to create proforma from quotation:', quotation);
+      console.log('Quotation _id:', quotation._id);
+      console.log('Quotation quotationNumber:', quotation.quotationNumber);
+
+      // Close the quotation view modal
+      setShowQuotationViewModal(false);
+
+      // Prepare quotation data with proper structure for InvoiceFormPage
+      const quotationData = {
+        customer: quotation.customer,
+        billToAddress: quotation.billToAddress ? {
+          id: quotation.billToAddress.id || quotation.billToAddress.addressId || 0,
+          address: quotation.billToAddress.address || '',
+          state: quotation.billToAddress.state || '',
+          district: quotation.billToAddress.district || '',
+          pincode: quotation.billToAddress.pincode || '',
+          isPrimary: quotation.billToAddress.isPrimary || false,
+          gstNumber: quotation.billToAddress.gstNumber || ''
+        } : null,
+        shipToAddress: quotation.shipToAddress ? {
+          id: quotation.shipToAddress.id || quotation.shipToAddress.addressId || 0,
+          address: quotation.shipToAddress.address || '',
+          state: quotation.shipToAddress.state || '',
+          district: quotation.shipToAddress.district || '',
+          pincode: quotation.shipToAddress.pincode || '',
+          isPrimary: quotation.shipToAddress.isPrimary || false,
+          gstNumber: quotation.shipToAddress.gstNumber || ''
+        } : null,
+        assignedEngineer: quotation.assignedEngineer?._id || quotation.assignedEngineer,
+        items: quotation.items?.map((item: any) => ({
+          product: item.product?._id || item.product,
+          description: item.description || '',
+          quantity: item.quantity || 0,
+          unitPrice: item.unitPrice || 0,
+          taxRate: item.taxRate || 0,
+          hsnNumber: item.hsnNumber || item.hsnSac || '',
+          partNo: item.partNo || '',
+          uom: item.uom || 'nos',
+          discount: item.discount || 0
+        })) || [],
+        overallDiscount: quotation.overallDiscount || 0,
+        overallDiscountAmount: quotation.overallDiscountAmount || 0,
+        notes: quotation.notes || '',
+        terms: quotation.terms || '',
+        location: quotation.location?._id || quotation.location,
+        dueDate: quotation.validUntil ? new Date(quotation.validUntil).toISOString().split('T')[0] : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        // ✅ NEW: All the quotation fields we added
+        subject: quotation.subject || '',
+        engineSerialNumber: quotation.engineSerialNumber || '',
+        kva: quotation.kva || '',
+        hourMeterReading: quotation.hourMeterReading || '',
+        serviceRequestDate: quotation.serviceRequestDate ? new Date(quotation.serviceRequestDate).toISOString().split('T')[0] : undefined,
+        qrCodeImage: quotation.qrCodeImage || '',
+        serviceCharges: quotation.serviceCharges || [],
+        batteryBuyBack: quotation.batteryBuyBack || {
+          description: '',
+          quantity: 0,
+          unitPrice: 0,
+          discount: 0,
+          discountedAmount: 0,
+          taxRate: 0,
+          taxAmount: 0,
+          totalPrice: 0
+        },
+        // Quotation reference information
+        sourceQuotation: quotation._id,
+        quotationNumber: quotation.quotationNumber,
+        quotationPaymentDetails: {
+          paidAmount: quotation.paidAmount || 0,
+          remainingAmount: quotation.remainingAmount || 0,
+          paymentStatus: quotation.paymentStatus || 'pending'
+        },
+        // PO From Customer data
+        poFromCustomer: quotation.pofromcustomer ? {
+          _id: quotation.pofromcustomer._id,
+          poNumber: quotation.pofromcustomer.poNumber,
+          status: quotation.pofromcustomer.status,
+          totalAmount: quotation.pofromcustomer.totalAmount,
+          orderDate: quotation.pofromcustomer.orderDate,
+          expectedDeliveryDate: quotation.pofromcustomer.expectedDeliveryDate,
+          pdfFile: quotation.pofromcustomer.poPdf
+        } : null
+      };
+
+      console.log('Prepared quotation data for Proforma creation:', quotationData);
+
+      // Navigate to create proforma page with quotation data
+      navigate('/billing/create', {
+        state: {
+          invoiceType: 'proforma',
+          quotationData: quotationData,
+          fromQuotation: true
+        }
+      });
+    } catch (error: any) {
+      console.error('Error preparing proforma from quotation:', error);
+      toast.error('Failed to prepare proforma from quotation');
+    }
+  };
+
+  const handleCreateInvoiceFromProforma = async (proforma: any) => {
+    try {
+      console.log('Preparing to create invoice from proforma:', proforma);
+      console.log('Proforma _id:', proforma._id);
+      console.log('Proforma invoiceNumber:', proforma.invoiceNumber);
+
+      // Close the proforma view modal
+      setShowViewModal(false);
+
+      // Prepare proforma data with proper structure for InvoiceFormPage
+      const proformaData = {
+        customer: proforma.customer,
+        billToAddress: proforma.billToAddress ? {
+          id: proforma.billToAddress.id || proforma.billToAddress.addressId || 0,
+          address: proforma.billToAddress.address || '',
+          state: proforma.billToAddress.state || '',
+          district: proforma.billToAddress.district || '',
+          pincode: proforma.billToAddress.pincode || '',
+          isPrimary: proforma.billToAddress.isPrimary || false,
+          gstNumber: proforma.billToAddress.gstNumber || ''
+        } : null,
+        shipToAddress: proforma.shipToAddress ? {
+          id: proforma.shipToAddress.id || proforma.shipToAddress.addressId || 0,
+          address: proforma.shipToAddress.address || '',
+          state: proforma.shipToAddress.state || '',
+          district: proforma.shipToAddress.district || '',
+          pincode: proforma.shipToAddress.pincode || '',
+          isPrimary: proforma.shipToAddress.isPrimary || false,
+          gstNumber: proforma.shipToAddress.gstNumber || ''
+        } : null,
+        assignedEngineer: proforma.assignedEngineer?._id || proforma.assignedEngineer,
+        items: proforma.items?.map((item: any) => ({
+          product: item.product?._id || item.product,
+          description: item.description || '',
+          quantity: item.quantity || 0,
+          unitPrice: item.unitPrice || 0,
+          taxRate: item.taxRate || 0,
+          hsnNumber: item.hsnNumber || item.hsnSac || '',
+          partNo: item.partNo || '',
+          uom: item.uom || 'nos',
+          discount: item.discount || 0
+        })) || [],
+        overallDiscount: proforma.overallDiscount || 0,
+        overallDiscountAmount: proforma.overallDiscountAmount || 0,
+        notes: proforma.notes || '',
+        terms: proforma.terms || '',
+        location: proforma.location?._id || proforma.location,
+        dueDate: proforma.dueDate ? new Date(proforma.dueDate).toISOString().split('T')[0] : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        // ✅ NEW: All the proforma fields we added
+        subject: proforma.subject || '',
+        engineSerialNumber: proforma.engineSerialNumber || '',
+        kva: proforma.kva || '',
+        hourMeterReading: proforma.hourMeterReading || '',
+        serviceRequestDate: proforma.serviceRequestDate ? new Date(proforma.serviceRequestDate).toISOString().split('T')[0] : undefined,
+        qrCodeImage: proforma.qrCodeImage || '',
+        serviceCharges: proforma.serviceCharges || [],
+        batteryBuyBack: proforma.batteryBuyBack || {
+          description: '',
+          quantity: 0,
+          unitPrice: 0,
+          discount: 0,
+          discountedAmount: 0,
+          taxRate: 0,
+          taxAmount: 0,
+          totalPrice: 0
+        },
+        // Proforma reference information
+        sourceProforma: proforma._id,
+        proformaNumber: proforma.invoiceNumber,
+        proformaPaymentDetails: {
+          paidAmount: proforma.paidAmount || 0,
+          remainingAmount: proforma.remainingAmount || 0,
+          paymentStatus: proforma.paymentStatus || 'pending'
+        },
+        // PO From Customer data
+        poFromCustomer: proforma.pofromcustomer ? {
+          _id: proforma.pofromcustomer._id,
+          poNumber: proforma.pofromcustomer.poNumber,
+          status: proforma.pofromcustomer.status,
+          totalAmount: proforma.pofromcustomer.totalAmount,
+          orderDate: proforma.pofromcustomer.orderDate,
+          expectedDeliveryDate: proforma.pofromcustomer.expectedDeliveryDate,
+          pdfFile: proforma.pofromcustomer.poPdf
+        } : null
+      };
+
+      console.log('Prepared proforma data for Invoice creation:', proformaData);
+
+      // Navigate to create invoice page with proforma data
+      navigate('/billing/create', {
+        state: {
+          invoiceType: 'sale',
+          proformaData: proformaData,
+          fromProforma: true
+        }
+      });
+    } catch (error: any) {
+      console.error('Error preparing invoice from proforma:', error);
+      toast.error('Failed to prepare invoice from proforma');
+    }
+  };
+
   // Helper function to get primary address email
   const getPrimaryAddressEmail = (customer: any): string | null => {
     if (!customer?.addresses || !Array.isArray(customer.addresses)) {
@@ -3228,8 +3523,8 @@ const InvoiceManagement: React.FC = () => {
       color: 'text-blue-600 hover:text-blue-900 hover:bg-blue-50'
     });
 
-    // Only show payment-related actions for sales invoices
-    if (invoice.invoiceType === 'sale' || invoice.invoiceType === 'purchase') {
+    // Only show payment-related actions for sales, proforma, and purchase invoices
+    if (invoice.invoiceType === 'sale' || invoice.invoiceType === 'proforma' || invoice.invoiceType === 'purchase') {
 
       // Edit Invoice - Available for all invoices except cancelled
       // if (invoice.status !== 'cancelled') {
@@ -3272,8 +3567,8 @@ const InvoiceManagement: React.FC = () => {
         });
       }
 
-      // Email actions
-      if (invoice.status === 'draft' && invoice.invoiceType === 'sale') {
+      // Email actions - Available for both sale and proforma invoices
+      if (invoice.status === 'draft' && (invoice.invoiceType === 'sale' || invoice.invoiceType === 'proforma')) {
         actions.push({
           icon: <Send className="w-4 h-4" />,
           label: 'Send Email',
@@ -3282,7 +3577,7 @@ const InvoiceManagement: React.FC = () => {
         });
       }
 
-      if (invoice.status === 'sent' && invoice.invoiceType === 'sale' && (invoice.paymentStatus === 'pending' || invoice.paymentStatus === 'partial')) {
+      if (invoice.status === 'sent' && (invoice.invoiceType === 'sale' || invoice.invoiceType === 'proforma') && (invoice.paymentStatus === 'pending' || invoice.paymentStatus === 'partial')) {
         actions.push({
           icon: <Send className="w-4 h-4" />,
           label: 'Send Reminder',
@@ -3291,7 +3586,7 @@ const InvoiceManagement: React.FC = () => {
         });
       }
 
-      if (invoice.status === 'sent' && invoice.paymentStatus === 'pending' || invoice.invoiceType === 'purchase' && invoice.paymentStatus === 'pending') {
+      if ((invoice.status === 'sent' && invoice.paymentStatus === 'pending') || (invoice.invoiceType === 'purchase' && invoice.paymentStatus === 'pending') || (invoice.invoiceType === 'proforma' && invoice.paymentStatus === 'pending')) {
         actions.push({
           icon: <CheckCircle className="w-4 h-4" />,
           label: 'Quick Paid',
@@ -3828,6 +4123,35 @@ const InvoiceManagement: React.FC = () => {
       ];
       console.log('Quotation stat cards:', cards);
       return cards;
+    } else if (invoiceType === 'proforma') {
+      const cards = [
+        {
+          title: 'Total Proforma Invoices',
+          value: stats.totalProformaInvoices || 0,
+          icon: <FileText className="w-6 h-6" />,
+          color: 'blue'
+        },
+        {
+          title: 'Paid Invoices',
+          value: stats.paidProformaInvoices || 0,
+          icon: <CheckCircle className="w-6 h-6" />,
+          color: 'green'
+        },
+        {
+          title: 'Overdue',
+          value: stats.overdueProformaInvoices || 0,
+          icon: <AlertTriangle className="w-6 h-6" />,
+          color: 'red'
+        },
+        {
+          title: 'Total Revenue',
+          value: `₹${(stats.totalProformaRevenue || 0).toLocaleString()}`,
+          icon: <IndianRupee className="w-6 h-6" />,
+          color: 'purple'
+        }
+      ];
+      console.log('Proforma invoice stat cards:', cards);
+      return cards;
     } else if (invoiceType === 'purchase') {
       const cards = [
         {
@@ -3969,6 +4293,7 @@ const InvoiceManagement: React.FC = () => {
   const getInvoiceTypeLabel = (type: string) => {
     const typeMap: { [key: string]: string } = {
       'quotation': 'Quotation',
+      'proforma': 'Proforma Invoice',
       'sale': 'Sales Invoice',
       'purchase': 'Purchase Invoice',
       'challan': 'Delivery Challan'
@@ -3977,7 +4302,7 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const getStatusFilterLabel = (value: string) => {
-    const options = (invoiceType === 'quotation' || invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'challan') ?
+    const options = (invoiceType === 'quotation' || invoiceType === 'proforma' || invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'challan') ?
       (invoiceType === 'quotation' ? [
         { value: 'all', label: 'All Status' },
         { value: 'draft', label: 'Draft' },
@@ -4004,7 +4329,7 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const getPaymentFilterLabel = (value: string) => {
-    const options = (invoiceType === 'quotation' || invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'challan') ?
+    const options = (invoiceType === 'quotation' || invoiceType === 'proforma' || invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'challan') ?
       (invoiceType === 'quotation' ? [
         { value: 'all', label: 'All Payments' },
         { value: 'pending', label: 'Pending' },
@@ -6089,6 +6414,24 @@ const printQuotation = (quotation: any) => {
             </Button>
           </>
         )}
+        {invoiceType === 'proforma' && (
+          <>
+            <Button
+              onClick={() => handleCreateInvoice('proforma')}
+              className="bg-gradient-to-r mr-3 from-purple-600 to-purple-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-purple-700 hover:to-purple-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create Proforma Invoice</span>
+            </Button>
+            <Button
+              onClick={handleExportProformaInvoices}
+              className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              <FileText className="w-4 h-4" />
+              <span>Export Excel</span>
+            </Button>
+          </>
+        )}
         {invoiceType === 'sale' && (
           <>
             <Button
@@ -6146,6 +6489,33 @@ const printQuotation = (quotation: any) => {
         )}
       </PageHeader>
 
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="border-b border-gray-200">
+          <nav className="flex space-x-8 px-6" aria-label="Tabs">
+            <button
+              onClick={() => handleSubTabChange('Spare')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeSubTab === 'Spare'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Spare
+            </button>
+            <button
+              onClick={() => handleSubTabChange('AMC')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeSubTab === 'AMC'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              AMC
+            </button>
+          </nav>
+        </div>
+      </div>
+
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -6195,7 +6565,7 @@ const printQuotation = (quotation: any) => {
                 <button
                   key={type.value}
                   onClick={() => {
-                    const selectedType = type.value as 'quotation' | 'sale' | 'purchase' | 'challan';
+                    const selectedType = type.value as 'quotation' | 'sale' | 'purchase' | 'challan' | 'proforma';
                     updateInvoiceType(selectedType);
                     setNewInvoice(prev => ({ ...prev, invoiceType: selectedType }));
                     setShowInvoiceTypeDropdown(false);
@@ -6227,7 +6597,7 @@ const printQuotation = (quotation: any) => {
         <div className="p-4 border-b border-gray-100 relative">
           <div className="flex flex-wrap items-center gap-4">
             {/* Date Range Filter */}
-            {(invoiceType === 'quotation' || invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'challan') && (
+            {(invoiceType === 'quotation' || invoiceType === 'proforma' || invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'challan') && (
               <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
                 <div className="flex items-center gap-2">
                   <Calendar className="w-4 h-4 text-gray-500" />
@@ -6239,9 +6609,10 @@ const printQuotation = (quotation: any) => {
                     placeholder="From Date"
                     value={
                       invoiceType === 'quotation' ? fromDate :
-                        invoiceType === 'sale' ? fromDateSale :
-                          invoiceType === 'purchase' ? fromDatePurchase :
-                            fromDateChallan
+                        invoiceType === 'proforma' ? fromDateProforma :
+                          invoiceType === 'sale' ? fromDateSale :
+                            invoiceType === 'purchase' ? fromDatePurchase :
+                              fromDateChallan
                     }
                     onChange={(e) => {
                       const newFromDate = e.target.value;
@@ -6255,6 +6626,16 @@ const printQuotation = (quotation: any) => {
                           setToDate(endDate.toISOString().split('T')[0]);
                         }
                         validateDateRange(newFromDate, toDate);
+                      } else if (invoiceType === 'proforma') {
+                        setFromDateProforma(newFromDate);
+                        // Auto-adjust toDateProforma if it's earlier than the new fromDateProforma
+                        if (toDateProforma && newFromDate && new Date(newFromDate) >= new Date(toDateProforma)) {
+                          const startDate = new Date(newFromDate);
+                          const endDate = new Date(startDate);
+                          endDate.setFullYear(endDate.getFullYear() + 1);
+                          setToDateProforma(endDate.toISOString().split('T')[0]);
+                        }
+                        validateDateRange(newFromDate, toDateProforma);
                       } else if (invoiceType === 'sale') {
                         setFromDateSale(newFromDate);
                         // Auto-adjust toDateSale if it's earlier than the new fromDateSale
@@ -6295,21 +6676,26 @@ const printQuotation = (quotation: any) => {
                     placeholder="To Date"
                     min={
                       invoiceType === 'quotation' ? fromDate :
-                        invoiceType === 'sale' ? fromDateSale :
-                          invoiceType === 'purchase' ? fromDatePurchase :
-                            fromDateChallan
+                        invoiceType === 'proforma' ? fromDateProforma :
+                          invoiceType === 'sale' ? fromDateSale :
+                            invoiceType === 'purchase' ? fromDatePurchase :
+                              fromDateChallan
                     }
                     value={
                       invoiceType === 'quotation' ? toDate :
-                        invoiceType === 'sale' ? toDateSale :
-                          invoiceType === 'purchase' ? toDatePurchase :
-                            toDateChallan
+                        invoiceType === 'proforma' ? toDateProforma :
+                          invoiceType === 'sale' ? toDateSale :
+                            invoiceType === 'purchase' ? toDatePurchase :
+                              toDateChallan
                     }
                     onChange={(e) => {
                       const newToDate = e.target.value;
                       if (invoiceType === 'quotation') {
                         setToDate(newToDate);
                         validateDateRange(fromDate, newToDate);
+                      } else if (invoiceType === 'proforma') {
+                        setToDateProforma(newToDate);
+                        validateDateRange(fromDateProforma, newToDate);
                       } else if (invoiceType === 'sale') {
                         setToDateSale(newToDate);
                         validateDateRange(fromDateSale, newToDate);
@@ -6331,6 +6717,7 @@ const printQuotation = (quotation: any) => {
                   )}
                   {(
                     (invoiceType === 'quotation' && (fromDate || toDate)) ||
+                    (invoiceType === 'proforma' && (fromDateProforma || toDateProforma)) ||
                     (invoiceType === 'sale' && (fromDateSale || toDateSale)) ||
                     (invoiceType === 'purchase' && (fromDatePurchase || toDatePurchase)) ||
                     (invoiceType === 'challan' && (fromDateChallan || toDateChallan))
@@ -6340,6 +6727,9 @@ const printQuotation = (quotation: any) => {
                           if (invoiceType === 'quotation') {
                             setFromDate('');
                             setToDate('');
+                          } else if (invoiceType === 'proforma') {
+                            setFromDateProforma('');
+                            setToDateProforma('');
                           } else if (invoiceType === 'sale') {
                             setFromDateSale('');
                             setToDateSale('');
@@ -6381,6 +6771,13 @@ const printQuotation = (quotation: any) => {
                     { value: 'accepted', label: 'Accepted' },
                     { value: 'rejected', label: 'Rejected' },
                     { value: 'expired', label: 'Expired' }
+                  ] : (invoiceType === 'proforma' || invoiceType === 'sale' || invoiceType === 'purchase') ? [
+                    { value: 'all', label: 'All Status' },
+                    { value: 'draft', label: 'Draft' },
+                    { value: 'sent', label: 'Sent' },
+                    { value: 'paid', label: 'Paid' },
+                    { value: 'overdue', label: 'Overdue' },
+                    { value: 'cancelled', label: 'Cancelled' }
                   ] : [
                     { value: 'all', label: 'All Status' },
                     { value: 'draft', label: 'Draft' },
@@ -6422,6 +6819,12 @@ const printQuotation = (quotation: any) => {
                     { value: 'partial', label: 'Partial' },
                     { value: 'paid', label: 'Paid' },
                     { value: 'advance', label: 'Advance' },
+                    { value: 'gst_pending', label: 'GST Pending' }
+                  ] : (invoiceType === 'proforma' || invoiceType === 'sale' || invoiceType === 'purchase') ? [
+                    { value: 'all', label: 'All Payments' },
+                    { value: 'pending', label: 'Pending' },
+                    { value: 'partial', label: 'Partial' },
+                    { value: 'paid', label: 'Paid' },
                     { value: 'gst_pending', label: 'GST Pending' }
                   ] : [
                     { value: 'all', label: 'All Payments' },
@@ -6481,7 +6884,7 @@ const printQuotation = (quotation: any) => {
         <div className="px-4 py-3 bg-gray-50">
           <div className="flex items-center justify-between">
             <span className="text-sm text-gray-600">
-              Showing <span className="font-medium text-gray-900">{invoiceType === 'quotation' ? filteredQuotations.length : filteredInvoices.length}</span> of <span className="font-medium text-gray-900">{invoiceType === 'quotation' ? quotations.length : invoices.length}</span> {invoiceType === 'quotation' ? 'quotations' : 'invoices'}
+              Showing <span className="font-medium text-gray-900">{invoiceType === 'quotation' ? filteredQuotations.length : filteredInvoices.length}</span> of <span className="font-medium text-gray-900">{invoiceType === 'quotation' ? totalDatas : invoiceType === 'proforma' ? totalDatas : totalDatas}</span> {invoiceType === 'quotation' ? 'quotations' : invoiceType === 'proforma' ? 'proformas' : 'invoices'}
             </span>
             <div className="flex items-center gap-2 text-xs text-gray-500">
               <Filter className="w-3 h-3" />
@@ -6507,6 +6910,7 @@ const printQuotation = (quotation: any) => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {invoiceType === 'quotation' ? 'Quotation No' :
                     invoiceType === 'challan' ? 'Challan No' :
+                    invoiceType === 'proforma' ? 'Proforma No' :
                       'Invoice No'}
                 </th>
                 {invoiceType === 'challan' &&
@@ -6535,16 +6939,16 @@ const printQuotation = (quotation: any) => {
                     {invoiceType === 'quotation' ? 'Total Amount' : 'Amount'}
                   </th>
                 )}
-                {(invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'quotation') &&
+                {(invoiceType === 'proforma' || invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'quotation') &&
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>
                 }
-                {(invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'quotation') &&
+                {(invoiceType === 'proforma' || invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'quotation') &&
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>
                 }
-                {(invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase') &&
+                {(invoiceType === 'proforma' || invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase') &&
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 }
-                {(invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase') &&
+                {(invoiceType === 'proforma' || invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase') &&
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
                 }
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -6919,13 +7323,13 @@ const printQuotation = (quotation: any) => {
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
                       ₹{(invoice.totalAmount || 0).toFixed(2)}
                     </td>
-                    {(invoiceType === 'sale' || invoiceType === 'purchase') && <td className="px-4 py-3 text-sm font-medium text-green-600">
+                    {(invoiceType === 'proforma' || invoiceType === 'sale' || invoiceType === 'purchase') && <td className="px-4 py-3 text-sm font-medium text-green-600">
                       ₹{(invoice.paidAmount || 0).toLocaleString()}
                     </td>}
-                    {(invoiceType === 'sale' || invoiceType === 'purchase') && <td className="px-4 py-3 text-sm font-medium text-red-600">
+                    {(invoiceType === 'proforma' || invoiceType === 'sale' || invoiceType === 'purchase') && <td className="px-4 py-3 text-sm font-medium text-red-600">
                       ₹{((invoice.remainingAmount || 0).toFixed(2) || (invoice.totalAmount || 0) - (invoice.paidAmount || 0)).toLocaleString()}
                     </td>}
-                    {(invoice.invoiceType === 'sale') ? <td className="px-4 py-3">
+                    {(invoice.invoiceType === 'sale' || invoice.invoiceType === 'proforma') ? <td className="px-4 py-3">
                       <div className="flex items-center space-x-2">
                         {/* {getStatusIcon(invoice.status)} */}
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
@@ -6944,7 +7348,7 @@ const printQuotation = (quotation: any) => {
                           </span>}
                         </div>
                       </td>}
-                    {(invoiceType === 'sale' || invoiceType === 'purchase') && <td className="px-4 py-3">
+                    {(invoiceType === 'proforma' || invoiceType === 'sale' || invoiceType === 'purchase') && <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(invoice.paymentStatus)}`}>
                         {invoice.paymentStatus.charAt(0).toUpperCase() + invoice.paymentStatus.slice(1)}
                       </span>
@@ -6998,6 +7402,7 @@ const printQuotation = (quotation: any) => {
         document={selectedInvoice}
         documentType="invoice"
         onPrint={printInvoice}
+        onCreateInvoice={handleCreateInvoiceFromProforma}
         onCreateChallan={(invoice) => {
           setShowViewModal(false);
           navigate('/billing/challan/create', {
@@ -8129,6 +8534,7 @@ const printQuotation = (quotation: any) => {
         documentType="quotation"
         onPrint={printQuotation}
         onCreateInvoice={handleCreateInvoiceFromQuotation}
+        onCreateProforma={handleCreateProformaFromQuotation}
         onSendEmail={handleSendQuotationEmail}
         paymentHistory={quotationPaymentHistory}
         onRefreshPayments={() => fetchQuotationPaymentHistory(selectedQuotation?._id)}
