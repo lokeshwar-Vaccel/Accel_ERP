@@ -14,11 +14,17 @@ export const protect = async (
     // Get token from header
     let token: string | undefined;
 
+    console.log('Protect middleware - Authorization header:', req.headers.authorization);
+    console.log('Protect middleware - Request URL:', req.url);
+    console.log('Protect middleware - Request method:', req.method);
+
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
       token = req.headers.authorization.split(' ')[1];
+      console.log('Protect middleware - Token extracted:', token ? 'Yes' : 'No');
     }
 
     if (!token) {
+      console.log('Protect middleware - No token found');
       return next(new AppError('Not authorized to access this route', 401));
     }
 
@@ -67,8 +73,15 @@ export const checkModuleAccess = (module: string) => {
       return next(new AppError('Not authorized', 401));
     }
 
+    console.log('Module access check:', {
+      module,
+      userRole: req.user.role,
+      moduleAccess: req.user.moduleAccess
+    });
+
     // Super admin and admin have access to all modules
     if (req.user.role === UserRole.SUPER_ADMIN || req.user.role === UserRole.ADMIN) {
+      console.log('Admin access granted');
       return next();
     }
 
@@ -77,7 +90,10 @@ export const checkModuleAccess = (module: string) => {
       m => m.module === module && m.access
     );
 
+    console.log('Module access result:', hasAccess);
+
     if (!hasAccess) {
+      console.log('Module access denied for:', module);
       return next(new AppError(`You do not have access to ${module} module`, 403));
     }
 
