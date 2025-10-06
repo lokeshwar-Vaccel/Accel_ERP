@@ -169,7 +169,7 @@ class ApiClient {
       }),
 
     restore: (id: string) =>
-      this.makeRequest<{ success: boolean; data: any; message: string }>(`/users/${id}/restore`, {
+      this.makeRequest<{ success: boolean; data: any }>(`/users/${id}/restore`, {
         method: 'PUT',
       }),
 

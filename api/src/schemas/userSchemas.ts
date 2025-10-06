@@ -1,20 +1,6 @@
 import Joi from 'joi';
 import { UserRole, UserStatus } from '../types';
 
-// Password strength validation - 8-16 characters, one caps, one special character, no spacing
-const validatePassword = () => {
-  return Joi.string()
-    .min(8)
-    .max(16)
-    .pattern(/^(?=.*[A-Z])(?=.*[a-z])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).*$/)
-    .pattern(/^\S*$/)
-    .messages({
-      'string.min': 'Password must be at least 8 characters long',
-      'string.max': 'Password must not exceed 16 characters',
-      'string.pattern.base': 'Password must contain at least one uppercase letter, one lowercase letter, and one special character. No spaces allowed.'
-    });
-};
-
 // TypeScript interfaces for validation results
 export interface RegisterUserInput {
   firstName: string;
@@ -78,7 +64,7 @@ export const registerUserSchema = Joi.object<RegisterUserInput>({
   firstName: baseUserFields.firstName.required(),
   lastName: baseUserFields.lastName.required(),
   email: baseUserFields.email.required(),
-  password: validatePassword().required(),
+  password: Joi.string().min(6).max(128).required(),
   role: Joi.string().valid(...Object.values(UserRole)).default(UserRole.VIEWER),
   phone: baseUserFields.phone,
   address: baseUserFields.address,
@@ -151,12 +137,12 @@ export const updateUserSchema = Joi.object<UpdateUserInput>({
 // Change password schema
 export const changePasswordSchema = Joi.object<ChangePasswordInput>({
   currentPassword: Joi.string().required(),
-  newPassword: validatePassword().required()
+  newPassword: Joi.string().min(6).max(128).required()
 });
 
 // Reset password schema (admin only)
 export const resetPasswordSchema = Joi.object({
-  newPassword: validatePassword().required()
+  newPassword: Joi.string().min(6).max(128).required()
 });
 
 // User query parameters schema

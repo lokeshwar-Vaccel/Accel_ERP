@@ -2,7 +2,6 @@ import React from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import Dashboard from "../pages/Dashboard";
 import NotFound from "../pages/NotFound";
-import AccessDenied from "../pages/AccessDenied";
 import { UserManagement } from "../pages/UserManagement";
 import CustomerManagement from "../pages/CustomerManagement";
 import ProductManagement from "../pages/ProductManagement";
@@ -39,7 +38,6 @@ import AMCQuotationManagement from "pages/AMCQuotationManagement";
 import AMCQuotationForm from "components/quotations/AMCQuotationForm";
 import AMCQuotationPrintPage from "pages/AMCQuotationPrintPage";
 import OEMOrderManagement from "pages/OEMOrderManagement";
-import ProtectedRoute from "./ProtectedRoute";
 
 const AppRoutes: React.FC = () => {
     return (
@@ -47,271 +45,96 @@ const AppRoutes: React.FC = () => {
             {/* Default route - redirect to dashboard */}
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-            {/* Access Denied Route */}
-            <Route path="/access-denied" element={<AccessDenied />} />
+            {/* Main application routes */}
+            <Route path="/dashboard" element={<Dashboard />} />
 
-            {/* Dashboard */}
-            <Route path="/dashboard" element={
-                <ProtectedRoute>
-                    <Dashboard />
-                </ProtectedRoute>
-            } />
+            {/* User Management */}
+            <Route path="/user-management" element={<UserManagement />} />
 
-            {/* User Management - Requires admin permission */}
-            <Route path="/user-management" element={
-                <ProtectedRoute requiredPermission="admin">
-                    <UserManagement />
-                </ProtectedRoute>
-            } />
-
-            {/* CRM - Lead Management */}
-            <Route path="/lead-management" element={
-                <ProtectedRoute>
-                    <CustomerManagement />
-                </ProtectedRoute>
-            } />
+            {/* CRM */}
+            <Route path="/lead-management" element={<CustomerManagement />} />
 
             {/* Product Management */}
-            <Route path="/product-management" element={
-                <ProtectedRoute>
-                    <ProductManagement />
-                </ProtectedRoute>
-            } />
+            <Route path="/product-management" element={<ProductManagement />} />
 
             {/* Inventory Management */}
-            <Route path="/inventory-management" element={
-                <ProtectedRoute>
-                    <InventoryManagement />
-                </ProtectedRoute>
-            } />
+            <Route path="/inventory-management" element={<InventoryManagement />} />
 
             {/* Billing */}
-            <Route path="/billing" element={
-                <ProtectedRoute>
-                    <InvoiceManagement />
-                </ProtectedRoute>
-            } />
-            <Route path="/billing/create" element={
-                <ProtectedRoute>
-                    <InvoiceForm />
-                </ProtectedRoute>
-            } />
-            <Route path="/billing/edit/:id" element={
-                <ProtectedRoute>
-                    <InvoiceForm />
-                </ProtectedRoute>
-            } />
-            <Route path="/billing/quotation" element={
-                <ProtectedRoute>
-                    <QuotationPage />
-                </ProtectedRoute>
-            } />
-            <Route path="/billing/quotation/create" element={
-                <ProtectedRoute>
-                    <QuotationFormPage />
-                </ProtectedRoute>
-            } />
-            <Route path="/billing/quotation/edit" element={
-                <ProtectedRoute>
-                    <QuotationFormPage />
-                </ProtectedRoute>
-            } />
-            <Route path="/billing/challan/create" element={
-                <ProtectedRoute>
-                    <DeliveryChallanForm />
-                </ProtectedRoute>
-            } />
-            <Route path="/billing/challan/edit/:id" element={
-                <ProtectedRoute>
-                    <DeliveryChallanForm />
-                </ProtectedRoute>
-            } />
+            <Route path="/billing" element={<InvoiceManagement />} />
+            <Route path="/billing/create" element={<InvoiceForm />} />
+            <Route path="/billing/edit/:id" element={<InvoiceForm />} />
+            <Route path="/billing/quotation" element={<QuotationPage />} />
+            <Route path="/billing/quotation/create" element={<QuotationFormPage />} />
+            <Route path="/billing/quotation/edit" element={<QuotationFormPage />} />
+            <Route path="/billing/challan/create" element={<DeliveryChallanForm />} />
+            <Route path="/billing/challan/edit/:id" element={<DeliveryChallanForm />} />
 
             {/* AMC Quotation Management */}
-            <Route path="/amc-quotations" element={
-                <ProtectedRoute>
-                    <AMCQuotationManagement />
-                </ProtectedRoute>
-            } />
-            <Route path="/amc-quotations/create" element={
-                <ProtectedRoute>
-                    <AMCQuotationForm />
-                </ProtectedRoute>
-            } />
-            <Route path="/amc-quotations/edit/:id" element={
-                <ProtectedRoute>
-                    <AMCQuotationForm />
-                </ProtectedRoute>
-            } />
-            <Route path="/amc-quotations/:id/print" element={
-                <ProtectedRoute>
-                    <AMCQuotationPrintPage />
-                </ProtectedRoute>
-            } />
+            <Route path="/amc-quotations" element={<AMCQuotationManagement />} />
+            <Route path="/amc-quotations/create" element={<AMCQuotationForm />} />
+            <Route path="/amc-quotations/edit/:id" element={<AMCQuotationForm />} />
+            <Route path="/amc-quotations/:id/print" element={<AMCQuotationPrintPage />} />
 
             {/* Purchase Invoice Management */}
-            <Route path="/purchase-invoice/create" element={
-                <ProtectedRoute>
-                    <CreatePurchaseinvoiceForm />
-                </ProtectedRoute>
-            } />
-            <Route path="/purchase-invoice/edit/:id" element={
-                <ProtectedRoute>
-                    <CreatePurchaseinvoiceForm />
-                </ProtectedRoute>
-            } />
+            <Route path="/purchase-invoice/create" element={<CreatePurchaseinvoiceForm />} />
+            <Route path="/purchase-invoice/edit/:id" element={<CreatePurchaseinvoiceForm />} />
 
             {/* PO From Customer Management */}
-            <Route path="/po-from-customer-management" element={
-                <ProtectedRoute>
-                    <POFromCustomerManagement />
-                </ProtectedRoute>
-            } />
-            <Route path="/po-from-customer/create" element={
-                <ProtectedRoute>
-                    <CreatePOFromCustomerForm />
-                </ProtectedRoute>
-            } />
-            <Route path="/po-from-customer/edit/:id" element={
-                <ProtectedRoute>
-                    <CreatePOFromCustomerForm />
-                </ProtectedRoute>
-            } />
-            <Route path="/po-from-customer/:id" element={
-                <ProtectedRoute>
-                    <CreatePOFromCustomerForm />
-                </ProtectedRoute>
-            } />
+            <Route path="/po-from-customer-management" element={<POFromCustomerManagement />} />
+            <Route path="/po-from-customer/create" element={<CreatePOFromCustomerForm />} />
+            <Route path="/po-from-customer/edit/:id" element={<CreatePOFromCustomerForm />} />
+            <Route path="/po-from-customer/:id" element={<CreatePOFromCustomerForm />} />
 
             {/* Service Management */}
-            <Route path="/service-management" element={
-                <ProtectedRoute>
-                    <ServiceManagement />
-                </ProtectedRoute>
-            } />
+            <Route path="/service-management" element={<ServiceManagement />} />
 
             {/* AMC Management */}
-            <Route path="/amc-management" element={
-                <ProtectedRoute>
-                    <AMCManagement />
-                </ProtectedRoute>
-            } />
+            <Route path="/amc-management" element={<AMCManagement />} />
 
             {/* Purchase Order Management */}
-            <Route path="/purchase-order-management" element={
-                <ProtectedRoute>
-                    <PurchaseOrderManagement />
-                </ProtectedRoute>
-            } />
-            <Route path="/purchase-order-management/create" element={
-                <ProtectedRoute>
-                    <CreatePurchaseOrder />
-                </ProtectedRoute>
-            } />
-            <Route path="/purchase-order-management/edit" element={
-                <ProtectedRoute>
-                    <CreatePurchaseOrder />
-                </ProtectedRoute>
-            } />
+            <Route path="/purchase-order-management" element={<PurchaseOrderManagement />} />
+            <Route path="/purchase-order-management/create" element={<CreatePurchaseOrder />} />
+            <Route path="/purchase-order-management/edit" element={<CreatePurchaseOrder />} />
 
             {/* DG Purchase Order Management */}
-            <Route path="/dg-purchase-order-management" element={
-                <ProtectedRoute>
-                    <DGPurchaseOrderManagement />
-                </ProtectedRoute>
-            } />
+            <Route path="/dg-purchase-order-management" element={<DGPurchaseOrderManagement />} />
 
             {/* Reports & Analytics */}
-            <Route path="/reports-management" element={
-                <ProtectedRoute>
-                    <ReportsManagement />
-                </ProtectedRoute>
-            } />
+            <Route path="/reports-management" element={<ReportsManagement />} />
 
             {/* File Management */}
-            <Route path="/file-management" element={
-                <ProtectedRoute>
-                    <FileManagement />
-                </ProtectedRoute>
-            } />
+            <Route path="/file-management" element={<FileManagement />} />
 
             {/* Communication Management */}
-            <Route path="/communication-management" element={
-                <ProtectedRoute>
-                    <CommunicationManagement />
-                </ProtectedRoute>
-            } />
+            <Route path="/communication-management" element={<CommunicationManagement />} />
 
-            {/* Admin Settings - Requires admin permission */}
-            <Route path="/admin-settings" element={
-                <ProtectedRoute requiredPermission="admin">
-                    <AdminSettings />
-                </ProtectedRoute>
-            } />
+            {/* Admin Settings */}
+            <Route path="/admin-settings" element={<AdminSettings />} />
 
             {/* Payment Page - Public route for email payment links */}
             {/* <Route path="/pay/:token" element={<PaymentPage />} />
             <Route path="/payment-success" element={<PaymentSuccess />} /> */}
 
             {/* DG Sales */}
-            <Route path="/dg-sales" element={
-                <ProtectedRoute>
-                    <DGSales />
-                </ProtectedRoute>
-            } />
+            <Route path="/dg-sales" element={<DGSales />} />
             
             {/* DG Quotation Management */}
-            <Route path="/dg-quotation-management" element={
-                <ProtectedRoute>
-                    <DGQuotationManagement />
-                </ProtectedRoute>
-            } />
-            <Route path="/dg-quotation/create" element={
-                <ProtectedRoute>
-                    <DGQuotationForm />
-                </ProtectedRoute>
-            } />
-            <Route path="/dg-quotation/edit/:id" element={
-                <ProtectedRoute>
-                    <DGQuotationForm />
-                </ProtectedRoute>
-            } />
+            <Route path="/dg-quotation-management" element={<DGQuotationManagement />} />
+            <Route path="/dg-quotation/create" element={<DGQuotationForm />} />
+            <Route path="/dg-quotation/edit/:id" element={<DGQuotationForm />} />
             
             {/* DG Invoice Management */}
-            <Route path="/dg-sales/invoice/create" element={
-                <ProtectedRoute>
-                    <CreateDGInvoiceForm />
-                </ProtectedRoute>
-            } />
-            <Route path="/dg-sales/invoice/edit/:id" element={
-                <ProtectedRoute>
-                    <CreateDGInvoiceForm />
-                </ProtectedRoute>
-            } />
+            <Route path="/dg-sales/invoice/create" element={<CreateDGInvoiceForm />} />
+            <Route path="/dg-sales/invoice/edit/:id" element={<CreateDGInvoiceForm />} />
 
             {/* DG Proforma Forms */}
-            <Route path="/dg-proforma/create" element={
-                <ProtectedRoute>
-                    <CreateDGProformaForm />
-                </ProtectedRoute>
-            } />
-            <Route path="/dg-proforma/edit/:id" element={
-                <ProtectedRoute>
-                    <CreateDGProformaForm />
-                </ProtectedRoute>
-            } />
-            <Route path="/dg-proforma/:id" element={
-                <ProtectedRoute>
-                    <CreateDGProformaForm />
-                </ProtectedRoute>
-            } />
+            <Route path="/dg-proforma/create" element={<CreateDGProformaForm />} />
+            <Route path="/dg-proforma/edit/:id" element={<CreateDGProformaForm />} />
+            <Route path="/dg-proforma/:id" element={<CreateDGProformaForm />} />
 
             {/* OEM Order Management */}
-            <Route path="/oem-order-management" element={
-                <ProtectedRoute>
-                    <OEMOrderManagement />
-                </ProtectedRoute>
-            } />
+            <Route path="/oem-order-management" element={<OEMOrderManagement />} />
 
             {/* 404 - Page not found */}
             <Route path="*" element={<NotFound />} />

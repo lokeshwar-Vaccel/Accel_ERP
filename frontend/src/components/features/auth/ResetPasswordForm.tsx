@@ -11,11 +11,9 @@ import { AppDispatch, RootState } from '../../../store';
 const resetPasswordSchema = z.object({
   password: z.string()
     .min(8, { message: 'Password must be at least 8 characters long' })
-    .max(16, { message: 'Password must not exceed 16 characters' })
-    .regex(/^(?=.*[A-Z])(?=.*[a-z])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).*$/, { 
-      message: 'Password must contain at least one uppercase letter, one lowercase letter, and one special character' 
-    })
-    .regex(/^\S*$/, { message: 'Password cannot contain spaces' }),
+    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, { 
+      message: 'Password must contain at least one uppercase letter, one lowercase letter, and one number' 
+    }),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",

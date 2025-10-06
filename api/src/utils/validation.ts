@@ -298,17 +298,14 @@ export const validateDateRange = (fromField: string = 'from', toField: string = 
   });
 };
 
-// Password strength validation - 8-16 characters, one caps, one special character, no spacing
+// Password strength validation
 export const validatePassword = () => {
   return Joi.string()
     .min(8)
-    .max(16)
-    .pattern(/^(?=.*[A-Z])(?=.*[a-z])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).*$/)
-    .pattern(/^\S*$/)
+    .max(128)
+    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/)
     .messages({
-      'string.min': 'Password must be at least 8 characters long',
-      'string.max': 'Password must not exceed 16 characters',
-      'string.pattern.base': 'Password must contain at least one uppercase letter, one lowercase letter, and one special character. No spaces allowed.'
+      'string.pattern.base': 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'
     });
 };
 
