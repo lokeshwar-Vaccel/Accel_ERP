@@ -5,6 +5,7 @@ import {
   Filter, Download, UserPlus, X, ChevronDown, RotateCcw,
   Info,
   Eye,
+  EyeOff,
   Save
 } from 'lucide-react';
 import { setBreadcrumbs } from 'redux/auth/navigationSlice';
@@ -73,6 +74,7 @@ interface UserFormData {
   lastName: string;
   email: string;
   password?: string;
+  confirmPassword?: string;
   role: string;
   department?: string;
   phone?: string;
@@ -109,6 +111,7 @@ export const UserManagement: React.FC = () => {
     lastName: '',
     email: '',
     password: '',
+    confirmPassword: '',
     role: "",
     department: '',
     phone: '',
@@ -116,12 +119,18 @@ export const UserManagement: React.FC = () => {
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  
+  // Password visibility states
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Status filter state
+  // Filter states
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+  const [showDepartmentDropdown, setShowDepartmentDropdown] = useState(false);
 
   const userRoles: UserModuleKey[] = ['super_admin', 'admin', 'hr', 'manager', 'field_engineer', 'sales_engineer', 'viewer'];
   const allModules: ModuleKey[] = [
@@ -191,6 +200,7 @@ export const UserManagement: React.FC = () => {
     { value: 'all', label: 'All Status' },
     { value: 'active', label: 'Active' },
     { value: 'in-active', label: 'In Active' },
+    { value: 'deleted', label: 'Deleted' },
   ];
 
   const departmentOptions = [
@@ -215,12 +225,19 @@ export const UserManagement: React.FC = () => {
     return option ? option.label : 'All Status';
   };
 
+  // Helper for department label
+  const getDepartmentLabel = (value: string) => {
+    const option = departmentOptions.find(opt => opt.value === value);
+    return option ? option.label : 'All Departments';
+  };
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       if (!target.closest('.dropdown-container')) {
         setShowStatusDropdown(false);
         setShowRoleDropdown(false);
+        setShowDepartmentDropdown(false);
       }
     };
 
@@ -243,10 +260,20 @@ export const UserManagement: React.FC = () => {
         ...(searchTerm && { search: searchTerm }),
         ...(statusFilter !== 'all' && { status: statusFilter }),
         ...(roleFilter !== 'all' && { role: roleFilter }),
+        ...(departmentFilter !== 'all' && { department: departmentFilter }),
       };
+      
+      // When statusFilter is 'all', explicitly send 'all' to backend
+      if (statusFilter === 'all') {
+        params.status = 'all';
+      }
 
+      console.log('Fetching users with params:', params);
+      
       // Fetch users with pagination
       const response = await apiClient.users.getAll(params);
+      
+      console.log('Users response:', response.data);
 
       // Map API response to UserDisplay interface
       const usersData = response.data as any;
@@ -288,7 +315,7 @@ export const UserManagement: React.FC = () => {
     ]));
 
     fetchUsers();
-  }, [dispatch, currentPage, limit, searchTerm, statusFilter, roleFilter]);
+  }, [dispatch, currentPage, limit, searchTerm, statusFilter, roleFilter, departmentFilter]);
 
   // Handle click outside dropdown
   useEffect(() => {
@@ -328,12 +355,15 @@ export const UserManagement: React.FC = () => {
       lastName: '',
       email: '',
       password: '',
+      confirmPassword: '',
       role: '',
       department: '',
       phone: '',
       moduleAccess: []
     });
     setFormErrors({});
+    setShowPassword(false);
+    setShowConfirmPassword(false);
     setShowUserModal(true);
   };
 
@@ -351,6 +381,7 @@ export const UserManagement: React.FC = () => {
       lastName: user.name.split(' ').slice(1).join(' ') || '',
       email: user.email,
       password: '', // Not required for editing
+      confirmPassword: '', // Not required for editing
       role: user.role as UserRole,
       department: user.department || '',
       phone: user.phone || '',
@@ -362,6 +393,8 @@ export const UserManagement: React.FC = () => {
         }))
         : []
     });
+    setShowPassword(false);
+    setShowConfirmPassword(false);
 
     setFormErrors({});
     setShowUserModal(true);
@@ -382,12 +415,15 @@ export const UserManagement: React.FC = () => {
       lastName: '',
       email: '',
       password: '',
+      confirmPassword: '',
       role: '',
       department: '',
       phone: '',
       moduleAccess: []
     });
     setFormErrors({});
+    setShowPassword(false);
+    setShowConfirmPassword(false);
   };
 
   const openDeleteConfirm = (user: UserDisplay) => {
@@ -404,23 +440,67 @@ export const UserManagement: React.FC = () => {
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
+    // First Name Validation
     if (!formData.firstName.trim()) {
       errors.firstName = 'First name is required';
+    } else if (!/^[a-zA-Z\s]+$/.test(formData.firstName)) {
+      errors.firstName = 'First name can only contain letters and spaces';
+    } else if (formData.firstName.trim().length < 2) {
+      errors.firstName = 'First name must be at least 2 characters long';
+    } else if (formData.firstName.trim().length > 50) {
+      errors.firstName = 'First name cannot exceed 50 characters';
     }
 
+    // Last Name Validation
     if (!formData.lastName.trim()) {
       errors.lastName = 'Last name is required';
+    } else if (!/^[a-zA-Z\s]+$/.test(formData.lastName)) {
+      errors.lastName = 'Last name can only contain letters and spaces';
+    } else if (formData.lastName.trim().length < 1) {
+      errors.lastName = 'Last name must be at least 1 character long';
+    } else if (formData.lastName.trim().length > 50) {
+      errors.lastName = 'Last name cannot exceed 50 characters';
     }
 
+    // Email Validation
     if (!formData.email.trim()) {
       errors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      errors.email = 'Email is invalid';
+    } else if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(formData.email)) {
+      errors.email = 'Please enter a valid email address';
+    } else if (formData.email.length > 255) {
+      errors.email = 'Email cannot exceed 255 characters';
     }
 
-    // Password is required only for new users
-    if (!isEditing && (!formData.password || formData.password.trim().length < 6)) {
-      errors.password = 'Password is required (minimum 6 characters)';
+    // Phone Number Validation
+    if (formData.phone && formData.phone.trim() !== '') {
+      if (!/^[0-9]{10}$/.test(formData.phone)) {
+        errors.phone = 'Phone number must be exactly 10 digits';
+      }
+    }
+
+    // Password validation for new users
+    if (!isEditing) {
+      if (!formData.password || formData.password.trim().length === 0) {
+        errors.password = 'Password is required';
+      } else if (formData.password.length < 8 || formData.password.length > 16) {
+        errors.password = 'Password must be between 8-16 characters long';
+      } else if (/\s/.test(formData.password)) {
+        errors.password = 'Password cannot contain spaces';
+      } else {
+        const hasUppercase = /[A-Z]/.test(formData.password);
+        const hasLowercase = /[a-z]/.test(formData.password);
+        const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(formData.password);
+
+        if (!hasUppercase || !hasLowercase || !hasSpecialChar) {
+          errors.password = 'Password must contain at least one uppercase letter, one lowercase letter, and one special character';
+        }
+      }
+      
+      if (!formData.confirmPassword || formData.confirmPassword.trim().length === 0) {
+        errors.confirmPassword = 'Please confirm your password';
+      } else if (formData.password !== formData.confirmPassword) {
+        errors.confirmPassword = 'Passwords do not match';
+      }
     }
 
     if (!formData.role) {
@@ -441,11 +521,17 @@ export const UserManagement: React.FC = () => {
 
     setSubmitting(true);
     try {
+      // Prepare form data - remove empty department to avoid validation error
+      const dataToSend = {
+        ...formData,
+        department: formData.department && formData.department.trim() ? formData.department : undefined
+      };
+
       if (isEditing && selectedUser) {
-        const res = await apiClient.users.update(selectedUser.id, formData);
+        const res = await apiClient.users.update(selectedUser.id, dataToSend);
         toast.success(res?.message)
       } else {
-        const response = await apiClient.users.create(formData);
+        const response = await apiClient.users.create(dataToSend);
         toast.success(response?.message)
       }
 
@@ -505,13 +591,17 @@ export const UserManagement: React.FC = () => {
   };
 
   const handleRestore = async (user: UserDisplay) => {
+    console.log('Attempting to restore user:', user.id, user.name);
     setSubmitting(true);
     try {
-      await apiClient.users.restore(user.id);
+      const response = await apiClient.users.restore(user.id);
+      console.log('Restore response:', response);
+      toast.success(response?.message || 'User restored successfully');
       await fetchUsers();
       setError(null); // Clear any existing errors
     } catch (err: any) {
       console.error('Error restoring user:', err);
+      console.error('Error details:', err?.response?.data || err);
       
       // Extract error message from backend response
       let errorMessage = 'Failed to restore user';
@@ -531,9 +621,75 @@ export const UserManagement: React.FC = () => {
     }
   };
 
+  const sanitizeInput = (value: string, type: string): string => {
+    switch (type) {
+      case 'name':
+        // Allow only alphabets and spaces, remove numbers and special characters
+        return value.replace(/[^a-zA-Z\s]/g, '').trim();
+      case 'email':
+        // Allow email format characters and convert to lowercase
+        return value.toLowerCase().trim();
+      case 'phone':
+        // Allow only numbers
+        return value.replace(/[^0-9]/g, '');
+      case 'password':
+        // No sanitization for password - user needs to see what they type
+        return value;
+      default:
+        return value.trim();
+    }
+  };
+
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    if (formErrors[field]) {
+    let sanitizedValue = value;
+    
+    // Sanitize input based on field type
+    if (field === 'firstName' || field === 'lastName') {
+      sanitizedValue = sanitizeInput(value, 'name');
+    } else if (field === 'email') {
+      sanitizedValue = sanitizeInput(value, 'email');
+    } else if (field === 'phone') {
+      sanitizedValue = sanitizeInput(value, 'phone');
+      // Limit phone number to 10 digits
+      if (sanitizedValue.length > 10) {
+        sanitizedValue = sanitizedValue.substring(0, 10);
+      }
+    }
+    
+    setFormData(prev => ({ ...prev, [field]: sanitizedValue }));
+    
+    // Real-time validation
+    if (field === 'firstName') {
+      if (!/^[a-zA-Z\s]*$/.test(sanitizedValue)) {
+        setFormErrors(prev => ({ ...prev, firstName: 'First name can only contain letters and spaces' }));
+      } else if (sanitizedValue.trim().length > 0 && sanitizedValue.trim().length < 2) {
+        setFormErrors(prev => ({ ...prev, firstName: 'First name must be at least 2 characters long' }));
+      } else {
+        setFormErrors(prev => ({ ...prev, firstName: '' }));
+      }
+    } else if (field === 'lastName') {
+      if (!/^[a-zA-Z\s]*$/.test(sanitizedValue)) {
+        setFormErrors(prev => ({ ...prev, lastName: 'Last name can only contain letters and spaces' }));
+      } else {
+        setFormErrors(prev => ({ ...prev, lastName: '' }));
+      }
+    } else if (field === 'email') {
+      if (sanitizedValue.trim().length > 0 && !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(sanitizedValue)) {
+        setFormErrors(prev => ({ ...prev, email: 'Please enter a valid email address' }));
+      } else {
+        setFormErrors(prev => ({ ...prev, email: '' }));
+      }
+    } else if (field === 'phone') {
+      if (sanitizedValue.length > 0 && !/^[0-9]{0,10}$/.test(sanitizedValue)) {
+        setFormErrors(prev => ({ ...prev, phone: 'Phone number can only contain numbers' }));
+      } else if (sanitizedValue.length === 10 && !/^[0-9]{10}$/.test(sanitizedValue)) {
+        setFormErrors(prev => ({ ...prev, phone: 'Phone number must be exactly 10 digits' }));
+      } else {
+        setFormErrors(prev => ({ ...prev, phone: '' }));
+      }
+    } else if (field === 'password' && /\s/.test(sanitizedValue)) {
+      setFormErrors(prev => ({ ...prev, password: 'Password cannot contain spaces' }));
+    } else if (formErrors[field]) {
       setFormErrors(prev => ({ ...prev, [field]: '' }));
     }
   };
@@ -574,6 +730,16 @@ export const UserManagement: React.FC = () => {
     const allowedModules = roleModuleMapping[selectedRole] || [];
     const newModuleAccess: ModuleAccess[] = allowedModules.map((module: ModuleKey) => {
       const existing = formData.moduleAccess.find((m) => m.module === module);
+      
+      // Dashboard should have read access by default
+      if (module === 'dashboard') {
+        return {
+          module,
+          access: true,
+          permission: 'read',
+        };
+      }
+      
       return {
         module,
         access: existing ? existing.access : false,
@@ -585,9 +751,19 @@ export const UserManagement: React.FC = () => {
       role: selectedRole as UserRole,
       moduleAccess: newModuleAccess
     }));
+
+    // Clear role error message when role is selected
+    if (formErrors.role) {
+      setFormErrors(prev => ({ ...prev, role: '' }));
+    }
   };
 
   const handleModuleToggle = (module: ModuleKey) => {
+    // Prevent unchecking dashboard module
+    if (module === 'dashboard') {
+      return;
+    }
+    
     setFormData(prev => ({
       ...prev,
       moduleAccess: prev.moduleAccess.map(m =>
@@ -610,7 +786,8 @@ export const UserManagement: React.FC = () => {
       user.email.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = roleFilter === 'all' || user.role === roleFilter;
     const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
-    return matchesSearch && matchesStatus && matchesRole;
+    const matchesDepartment = departmentFilter === 'all' || user.department === departmentFilter;
+    return matchesSearch && matchesStatus && matchesRole && matchesDepartment;
   });
 
   // Sort users: active users first, then deleted users at the bottom
@@ -813,7 +990,7 @@ export const UserManagement: React.FC = () => {
   const deselectAll = () => {
     const newModuleAccess = getAvailableModules().map((module) => ({
       module,
-      access: false,
+      access: module === 'dashboard' ? true : false, // Dashboard should always remain selected
       permission: 'read',
     }));
     setFormData((prev: any) => ({ ...prev, moduleAccess: newModuleAccess }));
@@ -960,6 +1137,48 @@ export const UserManagement: React.FC = () => {
               </div>
             )}
           </div>
+          
+          {/* Department Custom Dropdown */}
+          <div className="relative dropdown-container w-40">
+            <button
+              onClick={() => {
+                setShowDepartmentDropdown(!showDepartmentDropdown);
+              }}
+              className="flex items-center justify-between w-full px-2 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getDepartmentLabel(departmentFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showDepartmentDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showDepartmentDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                <button
+                  key="all"
+                  onClick={() => {
+                    setDepartmentFilter('all');
+                    setShowDepartmentDropdown(false);
+                  }}
+                  className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${departmentFilter === 'all' ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
+                >
+                  All Departments
+                </button>
+                {departmentOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setDepartmentFilter(option.value);
+                      setShowDepartmentDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${departmentFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                      }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          
           {/* <div className="flex space-x-2 ml-auto">
             <button className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 rounded-md hover:bg-gray-50 text-sm transition-colors">
               <Filter className="w-4 h-4 mr-2" />
@@ -1120,14 +1339,18 @@ export const UserManagement: React.FC = () => {
                         <td className="px-4 py-3 whitespace-nowrap text-right text-xs font-medium">
                           <div className="flex items-center justify-end space-x-2">
                             {user.status === 'deleted' ? (
-                              <button
-                                onClick={() => handleRestore(user)}
-                                disabled={submitting}
-                                className="text-green-600 hover:text-green-900 p-2 rounded-lg hover:bg-green-50 transition-colors disabled:opacity-50"
-                                title="Restore User"
-                              >
-                                <RotateCcw className="w-4 h-4" />
-                              </button>
+                              canEditUser(currentUser, user.role) ? (
+                                <button
+                                  onClick={() => handleRestore(user)}
+                                  disabled={submitting}
+                                  className="text-green-600 hover:text-green-900 p-2 rounded-lg hover:bg-green-50 transition-colors disabled:opacity-50"
+                                  title="Restore User"
+                                >
+                                  <RotateCcw className="w-4 h-4" />
+                                </button>
+                              ) : (
+                                <span className="text-gray-400 text-xs">No access</span>
+                              )
                             ) : (
                               <>
                                 {canEditUser(currentUser, user.role) ? (
@@ -1216,7 +1439,7 @@ export const UserManagement: React.FC = () => {
                       onChange={(e) => handleInputChange('firstName', e.target.value)}
                       className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.firstName ? 'border-red-500' : 'border-gray-300'
                         }`}
-                      placeholder="Enter first name"
+                      placeholder="Enter first name (letters only)"
                     />
                     {formErrors.firstName && (
                       <p className="mt-1 text-xs text-red-600">{formErrors.firstName}</p>
@@ -1233,7 +1456,7 @@ export const UserManagement: React.FC = () => {
                       onChange={(e) => handleInputChange('lastName', e.target.value)}
                       className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.lastName ? 'border-red-500' : 'border-gray-300'
                         }`}
-                      placeholder="Enter last name"
+                      placeholder="Enter last name (letters only)"
                     />
                     {formErrors.lastName && (
                       <p className="mt-1 text-xs text-red-600">{formErrors.lastName}</p>
@@ -1352,25 +1575,7 @@ export const UserManagement: React.FC = () => {
                     )}
                   </div>
 
-                  {!isEditing && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Password <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="password"
-                        value={formData.password}
-                        onChange={(e) => handleInputChange('password', e.target.value)}
-                        className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.password ? 'border-red-500' : 'border-gray-300'
-                          }`}
-                        placeholder="Enter password (min. 6 characters)"
-                      />
-                      {formErrors.password && (
-                        <p className="mt-1 text-xs text-red-600">{formErrors.password}</p>
-                      )}
-                    </div>
-                  )}
-
+                  {/* Phone Number Field */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Phone Number
@@ -1381,13 +1586,70 @@ export const UserManagement: React.FC = () => {
                       onChange={(e) => handleInputChange('phone', e.target.value)}
                       className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.phone ? 'border-red-500' : 'border-gray-300'
                         }`}
-                      placeholder="Enter phone number"
+                      placeholder="Enter 10-digit phone number"
                     />
                     {formErrors.phone && (
                       <p className="mt-1 text-xs text-red-600">{formErrors.phone}</p>
                     )}
                   </div>
                 </div>
+
+                {/* Password Fields */}
+                {!isEditing && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Password <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          value={formData.password}
+                          onChange={(e) => handleInputChange('password', e.target.value)}
+                          className={`w-full px-3 py-2 pr-10 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.password ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          placeholder="Enter password (8-16 chars, caps+special char, no spaces)"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          {showPassword ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      {formErrors.password && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.password}</p>
+                      )}
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Confirm Password <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          value={formData.confirmPassword}
+                          onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+                          className={`w-full px-3 py-2 pr-10 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.confirmPassword ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          placeholder="Confirm your password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                          {showConfirmPassword ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      {formErrors.confirmPassword && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.confirmPassword}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Role Description */}
                 {formData.role && (
@@ -1447,10 +1709,16 @@ export const UserManagement: React.FC = () => {
                                   type="checkbox"
                                   checked={config?.access || false}
                                   onChange={() => handleModuleToggle(module)}
-                                  className="w-4 h-4 text-blue-600 border-gray-300 rounded cursor-pointer"
+                                  disabled={module === 'dashboard'}
+                                  className={`w-4 h-4 text-blue-600 border-gray-300 rounded ${
+                                    module === 'dashboard' 
+                                      ? 'cursor-not-all bg-gray-100' 
+                                      : 'cursor-pointer'
+                                  }`}
                                 />
-                                <label className="ml-2 text-sm text-gray-900">
+                                <label className={`ml-2 text-sm ${module === 'dashboard' ? 'text-gray-700 font-medium' : 'text-gray-900'}`}>
                                   {moduleMap[module]}
+                                  {module === 'dashboard' && <span className="text-blue-600 text-xs ml-1">(Required)</span>}
                                 </label>
                               </div>
 
