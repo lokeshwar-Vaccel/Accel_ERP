@@ -88,7 +88,7 @@ const setup = async () => {
       {
         name: 'Diesel Generator 10KVA',
         description: 'High efficiency diesel generator suitable for commercial use',
-        category: ProductCategory.GENSET,
+        category: ProductCategory.SPARE_PART,
         brand: 'PowerGen',
         model: 'PG-10KVA',
         specifications: {

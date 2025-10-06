@@ -525,7 +525,7 @@ export const printInvoice = (invoice: any) => {
               ${invoice.items?.map((item: any) => `
                 <tr>
                   <td style="text-align: left;">
-                    <div class="item-desc">${item.kva} KVA - GENSET</div>
+                    <div class="item-desc">${item.kva} KVA - Spare</div>
                     <div>Mahindra Powerol Diesel Genset</div>
                   </td>
                   <td>${item.hsnNumber || '85021100'}</td>

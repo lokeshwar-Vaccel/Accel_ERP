@@ -241,7 +241,7 @@ const sampleProducts = [
   {
     name: 'Diesel Generator 100KVA',
     description: 'Heavy duty diesel generator suitable for commercial and industrial use',
-    category: ProductCategory.GENSET,
+    category: ProductCategory.SPARE_PART,
     brand: 'Mahindra',
     modelNumber: 'MDG-100',
     partNo: 'MDG-100-001',
@@ -262,7 +262,7 @@ const sampleProducts = [
   {
     name: 'Diesel Generator 250KVA',
     description: 'Industrial grade diesel generator for large scale operations',
-    category: ProductCategory.GENSET,
+    category: ProductCategory.SPARE_PART,
     brand: 'Cummins',
     modelNumber: 'CDG-250',
     partNo: 'CDG-250-001',
