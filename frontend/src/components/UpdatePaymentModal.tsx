@@ -107,7 +107,8 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
     if (itemType === 'quotation') {
       return item.grandTotal || 0;
     } else {
-      return item.totalAmount || 0;
+      // For invoices, check both totalAmount and grandTotal
+      return item.grandTotal || item.totalAmount || 0;
     }
   };
 
@@ -129,15 +130,25 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
 
   // Calculate total tax amount from items
   const getTotalTaxAmount = () => {
-    if (!item || !item.items) return 0;
+    if (!item) return 0;
     
-    return item.items.reduce((total: number, item: any) => {
-      const itemTotal = (item.quantity || 0) * (item.unitPrice || 0);
-      const discountAmount = (itemTotal * (item.discount || 0)) / 100;
-      const discountedAmount = itemTotal - discountAmount;
-      const taxAmount = (discountedAmount * (item.taxRate || 0)) / 100;
-      return total + taxAmount;
-    }, 0);
+    // For AMC invoices, use the pre-calculated totalTax
+    if (itemType === 'invoice' && item.totalTax) {
+      return item.totalTax;
+    }
+    
+    // For quotations or other invoices, calculate from items
+    if (item.items) {
+      return item.items.reduce((total: number, item: any) => {
+        const itemTotal = (item.quantity || 0) * (item.unitPrice || 0);
+        const discountAmount = (itemTotal * (item.discount || 0)) / 100;
+        const discountedAmount = itemTotal - discountAmount;
+        const taxAmount = (discountedAmount * (item.taxRate || 0)) / 100;
+        return total + taxAmount;
+      }, 0);
+    }
+    
+    return 0;
   };
 
   // Calculate amount without GST (for GST Pending status)

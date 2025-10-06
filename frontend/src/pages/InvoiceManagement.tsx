@@ -50,6 +50,7 @@ import apiClientQuotation from '../utils/api';
 import UpdatePaymentModal from '../components/UpdatePaymentModal';
 import QuotationPrintModal from '../components/QuotationPrintModal';
 import AMCQuotationManagement from './AMCQuotationManagement';
+import AMCInvoiceManagement from './AMCInvoiceManagement';
 import DocumentViewModal from '../components/billing/DocumentViewModal';
 import * as XLSX from 'xlsx';
 
@@ -947,6 +948,7 @@ const InvoiceManagement: React.FC = () => {
 
   // Quotation type toggle state
   const [quotationType, setQuotationType] = useState<'quotation' | 'amc'>('quotation');
+  const [salesInvoiceType, setSalesInvoiceType] = useState<'sale' | 'amc'>('sale');
 
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -6489,7 +6491,7 @@ const printQuotation = (quotation: any) => {
         )}
       </PageHeader>
 
-      {/* <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
         <div className="border-b border-gray-200">
           <nav className="flex space-x-8 px-6" aria-label="Tabs">
             <button
@@ -6514,7 +6516,7 @@ const printQuotation = (quotation: any) => {
             </button>
           </nav>
         </div>
-      </div> */}
+      </div>
 
 
       {/* Stats Cards */}
@@ -6580,7 +6582,6 @@ const printQuotation = (quotation: any) => {
                 </button>
               ))}
             </div>
-
            
             {/* PO From Customer Button */}
             <Button
@@ -6876,6 +6877,30 @@ const printQuotation = (quotation: any) => {
                 </button>
               </div>
             )}
+             {invoiceType === 'sale' && (
+              <div className="flex bg-blue-50 rounded-lg p-1 shadow-sm border border-blue-200">
+                <button
+                  onClick={() => setSalesInvoiceType('sale')}
+                  className={`px-4 py-2.5 rounded-md text-sm font-medium flex items-center space-x-2 transition-all duration-200 ${salesInvoiceType === 'sale'
+                    ? 'bg-white text-blue-700 shadow-sm'
+                    : 'text-gray-600 hover:text-blue-700 hover:bg-blue-100'
+                    }`}
+                >
+                  <TrendingUp className="w-4 h-4" />
+                  <span>Sales Invoice</span>
+                </button>
+                <button
+                  onClick={() => navigate('/amc-invoices')}
+                  className={`px-4 py-2.5 rounded-md text-sm font-medium flex items-center space-x-2 transition-all duration-200 ${salesInvoiceType === 'amc'
+                    ? 'bg-white text-blue-700 shadow-sm'
+                    : 'text-gray-600 hover:text-blue-700 hover:bg-blue-100'
+                    }`}
+                >
+                  <Settings className="w-4 h-4" />
+                  <span>AMC Invoice</span>
+                </button>
+              </div>
+            )}
 
           </div>
         </div>
@@ -6896,9 +6921,11 @@ const printQuotation = (quotation: any) => {
 
 
 
-      {/* Conditional Rendering: AMC Quotations or Regular Content */}
+      {/* Conditional Rendering: AMC Quotations, AMC Invoices, or Regular Content */}
       {invoiceType === 'quotation' && quotationType === 'amc' ? (
         <AMCQuotationManagement />
+      ) : invoiceType === 'sale' && activeSubTab === 'AMC' ? (
+        <AMCInvoiceManagement />
       ) : (
         <>
           {/* Invoices Table */}

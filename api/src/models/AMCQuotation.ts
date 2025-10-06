@@ -106,6 +106,8 @@ export interface IAMCQuotation extends Document {
   amcPeriodTo: Date;
   gstIncluded: boolean;
   selectedAddressId?: string;
+  billToAddressId?: string;
+  shipToAddressId?: string;
   
   // Standard quotation fields
   items: Array<{
@@ -275,6 +277,8 @@ const AMCQuotationSchema = new Schema<IAMCQuotation>({
   amcPeriodTo: { type: Date, required: true },
   gstIncluded: { type: Boolean, default: true },
   selectedAddressId: { type: String, required: false },
+  billToAddressId: { type: String, required: false },
+  shipToAddressId: { type: String, required: false },
   
   // Standard quotation fields
   items: [{
