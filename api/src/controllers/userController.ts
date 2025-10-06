@@ -175,8 +175,11 @@ export const createUser = async (
   try {
     const { firstName, lastName, email, password, role, department, phone, address, moduleAccess } = req.body;
 
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
+    // Check if user already exists (excluding deleted users)
+    const existingUser = await User.findOne({ 
+      email: email,
+      status: { $ne: UserStatus.DELETED }
+    });
     if (existingUser) {
       return next(new AppError('User with this email already exists', 400));
     }
@@ -401,8 +404,18 @@ export const resetPassword = async (
   try {
     const { newPassword } = req.body;
 
-    if (!newPassword || newPassword.length < 6) {
-      return next(new AppError('New password must be at least 6 characters long', 400));
+    if (!newPassword || newPassword.length < 8 || newPassword.length > 16) {
+      return next(new AppError('New password must be between 8-16 characters long', 400));
+    }
+
+    // Check for uppercase, lowercase, special character, and no spaces
+    const hasUppercase = /[A-Z]/.test(newPassword);
+    const hasLowercase = /[a-z]/.test(newPassword);
+    const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(newPassword);
+    const hasNoSpaces = !/\s/.test(newPassword);
+
+    if (!hasUppercase || !hasLowercase || !hasSpecialChar || !hasNoSpaces) {
+      return next(new AppError('Password must contain at least one uppercase letter, one lowercase letter, one special character, and no spaces', 400));
     }
 
     const user = await User.findById(req.params.id);
