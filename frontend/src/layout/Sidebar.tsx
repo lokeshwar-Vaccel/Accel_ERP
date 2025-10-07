@@ -171,20 +171,6 @@ function getActiveKeyFromPath(pathname: string): string {
   return activeItem?.key || 'dashboard';
 }
 
-// Hook to get current module permission
-function useCurrentModulePermission() {
-  const { user } = useSelector((state: RootState) => state.auth);
-  const location = useLocation();
-  const currentModuleKey = getActiveKeyFromPath(location.pathname);
-  const moduleEntry = user?.moduleAccess?.find(
-    (entry: any) => entry.module === currentModuleKey
-  );
-  
-  return moduleEntry?.permission ?? null; // "read", "write", "admin", or null
-}
-
-// Export the hook separately to avoid Fast Refresh issues
-export { useCurrentModulePermission };
 
 export default function Sidebar({
   currentPanel,
