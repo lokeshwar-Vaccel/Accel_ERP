@@ -1,0 +1,21 @@
+  const handleCustomerSelect = (customerId: string) => {
+    const customer = customers.find(c => c._id === customerId);
+    if (customer) {
+      setFormData(prev => ({
+        ...prev,
+        customer: {
+          _id: customer._id,
+          name: customer.name,
+          email: customer.email || '',
+          phone: customer.phone || '',
+          pan: customer.pan || '',
+          corporateName: customer.corporateName || '',
+          address: customer.address || '',
+          pinCode: customer.pinCode || '',
+          tehsil: customer.tehsil || '',
+          district: customer.district || ''
+        }
+      }));
+      setShowCustomerDropdown(false);
+    }
+  };

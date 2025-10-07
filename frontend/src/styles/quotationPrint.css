@@ -1,0 +1,468 @@
+/* Quotation Print Styles */
+@media print {
+  /* Hide all non-essential elements */
+  body * {
+    visibility: hidden;
+  }
+  
+  .quotation-view,
+  .quotation-view * {
+    visibility: visible;
+  }
+  
+  .quotation-view {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background: white;
+  }
+  
+  /* Hide action buttons when printing */
+  .action-buttons {
+    display: none !important;
+  }
+  
+  /* Print-specific header */
+  .print-header {
+    display: block !important;
+    text-align: center;
+    margin-bottom: 20px;
+    padding: 20px 0;
+    border-bottom: 2px solid black;
+  }
+  
+  .print-header h1 {
+    font-size: 24px;
+    font-weight: bold;
+    color: black;
+    margin: 0;
+  }
+  
+  /* Quotation container styling for print */
+  .quotation-container {
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  /* Header section */
+  .quotation-header {
+    border-bottom: 2px solid black !important;
+    padding: 20px !important;
+    margin-bottom: 20px;
+  }
+  
+  /* Left and right header blocks */
+  .left-header,
+  .right-header {
+    margin: 0 !important;
+  }
+  
+  /* Yellow highlighted fields */
+  .bg-yellow-100 {
+    background-color: #fef3c7 !important;
+    border: 1px solid #f59e0b !important;
+  }
+  
+  /* Table styling for print */
+  .items-table {
+    padding: 20px !important;
+    margin-bottom: 20px;
+  }
+  
+  .items-table table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    font-size: 10px !important;
+  }
+  
+  .items-table th,
+  .items-table td {
+    border: 1px solid #d1d5db !important;
+    padding: 4px 6px !important;
+    text-align: left !important;
+    vertical-align: top !important;
+  }
+  
+  .items-table th {
+    background-color: #f3f4f6 !important;
+    font-weight: bold !important;
+    text-align: center !important;
+  }
+  
+  /* Number columns right-aligned */
+  .items-table td:nth-child(7),
+  .items-table td:nth-child(8),
+  .items-table td:nth-child(10),
+  .items-table td:nth-child(11),
+  .items-table td:nth-child(12) {
+    text-align: right !important;
+  }
+  
+  /* Subject section */
+  .subject-section {
+    padding: 20px !important;
+    border-bottom: 1px solid #d1d5db !important;
+    margin-bottom: 20px;
+  }
+  
+  .subject-line h2 {
+    font-size: 16px !important;
+    font-weight: bold !important;
+    color: black !important;
+    margin: 0 !important;
+  }
+  
+  .salutation p {
+    font-size: 14px !important;
+    color: #374151 !important;
+    margin: 10px 0 0 0 !important;
+  }
+  
+  /* Terms section */
+  .terms-section {
+    padding: 20px !important;
+    border-bottom: 1px solid #d1d5db !important;
+    margin-bottom: 20px;
+  }
+  
+  .terms-section h3 {
+    font-size: 16px !important;
+    font-weight: bold !important;
+    color: black !important;
+    margin: 0 0 15px 0 !important;
+  }
+  
+  .terms-section .flex {
+    margin-bottom: 8px !important;
+  }
+  
+  .terms-section span {
+    font-size: 14px !important;
+    color: #374151 !important;
+  }
+  
+  /* Footer section */
+  .footer-section {
+    padding: 20px !important;
+  }
+  
+  .closing-remarks {
+    margin-bottom: 30px !important;
+  }
+  
+  .closing-remarks p {
+    font-size: 14px !important;
+    color: #374151 !important;
+    line-height: 1.6 !important;
+    margin: 0 !important;
+  }
+  
+  .bottom-section {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: flex-start !important;
+  }
+  
+  .bank-details,
+  .company-info {
+    flex: 1 !important;
+  }
+  
+  .bank-details h4,
+  .company-info p {
+    font-size: 12px !important;
+    margin: 0 0 5px 0 !important;
+  }
+  
+  .qr-signature-section {
+    flex: 1 !important;
+    display: flex !important;
+    justify-content: center !important;
+  }
+  
+  .qr-code-section,
+  .signature-section {
+    text-align: center !important;
+  }
+  
+  .qr-code-section .w-32 {
+    width: 128px !important;
+    height: 128px !important;
+    border: 2px solid #d1d5db !important;
+    background: white !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin-bottom: 8px !important;
+  }
+  
+  .signature-section .w-32 {
+    width: 128px !important;
+    height: 64px !important;
+    border-bottom: 2px solid #9ca3af !important;
+    margin-bottom: 8px !important;
+  }
+  
+  /* Page breaks */
+  .quotation-header,
+  .subject-section,
+  .items-table,
+  .terms-section,
+  .footer-section {
+    page-break-inside: avoid;
+  }
+  
+  /* Force page break if needed */
+  .page-break {
+    page-break-before: always;
+  }
+  
+  /* Font sizes for print */
+  .text-sm {
+    font-size: 10px !important;
+  }
+  
+  .text-xs {
+    font-size: 8px !important;
+  }
+  
+  .text-lg {
+    font-size: 14px !important;
+  }
+  
+  /* Spacing adjustments for print */
+  .space-y-4 > * + * {
+    margin-top: 16px !important;
+  }
+  
+  .space-y-2 > * + * {
+    margin-top: 8px !important;
+  }
+  
+  .mb-4 {
+    margin-bottom: 16px !important;
+  }
+  
+  .mb-6 {
+    margin-bottom: 24px !important;
+  }
+  
+  .mt-2 {
+    margin-top: 8px !important;
+  }
+  
+  .mt-4 {
+    margin-top: 16px !important;
+  }
+  
+  .p-2 {
+    padding: 8px !important;
+  }
+  
+  .p-3 {
+    padding: 12px !important;
+  }
+  
+  .p-6 {
+    padding: 24px !important;
+  }
+  
+  /* Grid adjustments for print */
+  .grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  
+  .gap-4 {
+    gap: 16px !important;
+  }
+  
+  /* Flex adjustments for print */
+  .flex {
+    display: flex !important;
+  }
+  
+  .justify-between {
+    justify-content: space-between !important;
+  }
+  
+  .justify-center {
+    justify-content: center !important;
+  }
+  
+  .items-start {
+    align-items: flex-start !important;
+  }
+  
+  .text-center {
+    text-align: center !important;
+  }
+  
+  .text-right {
+    text-align: right !important;
+  }
+  
+  .text-left {
+    text-align: left !important;
+  }
+  
+  /* Colors for print */
+  .text-black {
+    color: black !important;
+  }
+  
+  .text-gray-700 {
+    color: #374151 !important;
+  }
+  
+  .text-gray-800 {
+    color: #1f2937 !important;
+  }
+  
+  .text-gray-600 {
+    color: #4b5563 !important;
+  }
+  
+  .text-gray-400 {
+    color: #9ca3af !important;
+  }
+  
+  /* Background colors for print */
+  .bg-gray-50 {
+    background-color: #f9fafb !important;
+  }
+  
+  .bg-gray-100 {
+    background-color: #f3f4f6 !important;
+  }
+  
+  .bg-gray-200 {
+    background-color: #e5e7eb !important;
+  }
+  
+  .bg-blue-50 {
+    background-color: #eff6ff !important;
+  }
+  
+  .bg-green-50 {
+    background-color: #f0fdf4 !important;
+  }
+  
+  /* Border colors for print */
+  .border-gray-300 {
+    border-color: #d1d5db !important;
+  }
+  
+  .border-yellow-300 {
+    border-color: #f59e0b !important;
+  }
+  
+  .border-gray-400 {
+    border-color: #9ca3af !important;
+  }
+  
+  /* Border styles for print */
+  .border {
+    border-width: 1px !important;
+  }
+  
+  .border-2 {
+    border-width: 2px !important;
+  }
+  
+  .border-b {
+    border-bottom-width: 1px !important;
+  }
+  
+  .border-b-2 {
+    border-bottom-width: 2px !important;
+  }
+  
+  /* Rounded corners for print */
+  .rounded {
+    border-radius: 4px !important;
+  }
+  
+  /* Shadow removal for print */
+  .shadow-lg {
+    box-shadow: none !important;
+  }
+  
+  /* Hover effects removal for print */
+  .hover\:bg-gray-50:hover {
+    background-color: #f9fafb !important;
+  }
+  
+  /* Min height adjustments for print */
+  .min-h-\[40px\] {
+    min-height: 40px !important;
+  }
+  
+  .min-h-\[80px\] {
+    min-height: 80px !important;
+  }
+  
+  /* Width adjustments for print */
+  .w-32 {
+    width: 128px !important;
+  }
+  
+  .h-32 {
+    height: 128px !important;
+  }
+  
+  .h-16 {
+    height: 64px !important;
+  }
+  
+  /* Margin adjustments for print */
+  .ml-8 {
+    margin-left: 32px !important;
+  }
+  
+  .mr-2 {
+    margin-right: 8px !important;
+  }
+  
+  .space-x-8 > * + * {
+    margin-left: 32px !important;
+  }
+  
+  .space-x-2 > * + * {
+    margin-left: 8px !important;
+  }
+  
+  /* Font weight adjustments for print */
+  .font-medium {
+    font-weight: 500 !important;
+  }
+  
+  .font-bold {
+    font-weight: 700 !important;
+  }
+  
+  /* Leading adjustments for print */
+  .leading-relaxed {
+    line-height: 1.625 !important;
+  }
+  
+  /* Object fit for images in print */
+  .object-contain {
+    object-fit: contain !important;
+  }
+  
+  /* Overflow handling for print */
+  .overflow-x-auto {
+    overflow-x: visible !important;
+  }
+  
+  /* Table container adjustments for print */
+  .table-container {
+    overflow-x: visible !important;
+  }
+} 
