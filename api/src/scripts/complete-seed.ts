@@ -969,7 +969,7 @@ async function createCompleteSeedData() {
     // Insert stock locations directly into the database
     const stockLocationResults = [];
     for (const locationData of stockLocationsData) {
-      const result = await mongoose.connection.db.collection('stocklocations').insertOne({
+      const result = await mongoose.connection.db!.collection('stocklocations').insertOne({
         ...locationData,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -1073,7 +1073,7 @@ async function createCompleteSeedData() {
     // Insert rooms directly into the database
     const roomResults = [];
     for (const roomData of roomsData) {
-      const result = await mongoose.connection.db.collection('rooms').insertOne({
+      const result = await mongoose.connection.db!.collection('rooms').insertOne({
         ...roomData,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -1252,7 +1252,7 @@ async function createCompleteSeedData() {
     // Insert racks directly into the database
     const rackResults = [];
     for (const rackData of racksData) {
-      const result = await mongoose.connection.db.collection('racks').insertOne({
+      const result = await mongoose.connection.db!.collection('racks').insertOne({
         ...rackData,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -1649,7 +1649,7 @@ async function createCompleteSeedData() {
     console.log('\n📋 Sample created data:');
     console.log('Suppliers:');
     createdSuppliers.forEach(supplier => {
-      console.log(`  - ${supplier.name} (${supplier.email})`);
+      console.log(`  - ${supplier.name} (${supplier.email || 'No email'})`);
     });
     
     console.log('Products:');

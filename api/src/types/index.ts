@@ -91,7 +91,8 @@ export enum TypeOfVisit {
   FSC_VISIT = 'fsc_visit',
   PAID_VISIT = 'paid_visit',
   EV = 'EV',
-  WARRANTY = 'Warranty'
+  WARRANTY = 'Warranty',
+  INSTALLATION_VISIT = 'installation_visit'
 }
 
 export enum NatureOfWork {
@@ -258,6 +259,8 @@ export interface DGRequirements {
 export interface ICustomer extends Document {
   name: string;
   alice?: string;
+  email?: string;
+  phone?: string;
   panNumber?: string;
   addresses: Address[];
   siteAddress?: string;
