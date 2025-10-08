@@ -202,16 +202,6 @@ export default function DGSales() {
     fetchData();
   }, []);
 
-  // Development helper - set test auth token if not present
-  useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    if (!token) {
-      // Set a test token for development
-      const testToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY4NmExYmExOGQ5NTM2OTYzODhkMzYwMyIsImVtYWlsIjoiYWRtaW5Ac3VucG93ZXJzZXJ2aWNlcy5jb20iLCJyb2xlIjoic3VwZXJfYWRtaW4iLCJpYXQiOjE3NTMyNDU1NjcsImV4cCI6MTc1Mzg1MDM2N30.CiIezy-7UA3nlFV8zArF8EuaAgF6B7EQd6mLfYiSQkM';
-      localStorage.setItem('authToken', testToken);
-      console.log('Development: Auth token set for testing');
-    }
-  }, []);
 
   // Helper function to handle page changes
   const handlePageChange = (page: number) => {
