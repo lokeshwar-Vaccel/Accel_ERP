@@ -112,7 +112,7 @@ const DGProductFormModal: React.FC<DGProductFormModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-900">
-            {isEditing ? 'Edit DG Product' : 'Add New DG Product'}
+            {isEditing ? 'Edit Equipment Product' : 'Add New Equipment Product'}
           </h2>
           <button
             onClick={onClose}

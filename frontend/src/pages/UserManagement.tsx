@@ -28,7 +28,7 @@ const moduleMap = {
   amc_management: 'AMC Management',
   purchase_orders: 'Purchase Orders',
   billing: 'Billing',
-  dg_sales: 'DG Sales',
+  sales: 'Sales',
   reports_analytics: 'Reports & Analytics',
   file_management: 'File Management',
   communications: 'Communications',
@@ -134,7 +134,7 @@ export const UserManagement: React.FC = () => {
     'amc_management',
     'purchase_orders',
     'billing',
-    'dg_sales',
+    'sales',
     'reports_analytics',
     'file_management',
     'communications',
@@ -150,7 +150,7 @@ export const UserManagement: React.FC = () => {
       'inventory_management',
       'purchase_orders',
       'lead_management',
-      'dg_sales',
+      'sales',
     ],
     manager: allModules.filter(m => m !== 'admin_settings'),
     field_engineer: [
@@ -162,7 +162,7 @@ export const UserManagement: React.FC = () => {
     ],
     sales_engineer: [
       'dashboard',
-      'dg_sales',
+      'sales',
       'product_management',
       'lead_management',
     ],
@@ -196,7 +196,7 @@ export const UserManagement: React.FC = () => {
   const departmentOptions = [
     { value: 'accounts', label: 'Accounts' },
     { value: 'stores', label: 'Stores' },
-    { value: 'dg_sales', label: 'DG Sales' },
+    { value: 'sales', label: 'Sales' },
     { value: 'ev', label: 'EV' },
     { value: 'telecom', label: 'Telecom' },
     { value: 'admin', label: 'Admin' },
@@ -652,7 +652,7 @@ export const UserManagement: React.FC = () => {
     const colors: { [key: string]: string } = {
       'accounts': 'bg-emerald-100 text-emerald-800',
       'stores': 'bg-amber-100 text-amber-800',
-      'dg_sales': 'bg-blue-100 text-blue-800',
+      'sales': 'bg-blue-100 text-blue-800',
       'ev': 'bg-green-100 text-green-800',
       'telecom': 'bg-violet-100 text-violet-800',
       'admin': 'bg-red-100 text-red-800',
@@ -678,7 +678,7 @@ export const UserManagement: React.FC = () => {
     const departmentMap: { [key: string]: string } = {
       'accounts': 'Accounts',
       'stores': 'Stores',
-      'dg_sales': 'DG Sales',
+      'sales': 'Sales',
       'ev': 'EV',
       'telecom': 'Telecom',
       'admin': 'Admin',

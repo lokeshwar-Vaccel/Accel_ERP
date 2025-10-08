@@ -419,7 +419,7 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
 
   const fetchQuotations = async () => {
     try {
-      const response = await apiClient.dgSales.dgQuotations.getAll({
+      const response = await apiClient.sales.dgQuotations.getAll({
         limit: 100,
         page: 1
       });
@@ -442,7 +442,7 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
 
   const fetchEnquiries = async () => {
     try {
-      const response = await apiClient.dgSales.enquiries.getAll({
+      const response = await apiClient.sales.enquiries.getAll({
         limit: 100,
         page: 1
       });
@@ -483,7 +483,7 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
 
     try {
       setLoading(true);
-      const response = await apiClient.dgSales.dgPoFromCustomers.getById(poId);
+      const response = await apiClient.sales.dgPoFromCustomers.getById(poId);
 
       if (response.success && response.data) {
         const po = response.data;
@@ -494,7 +494,7 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
       console.error('Error fetching DG PO data:', error);
       toast.error('Failed to load DG PO from customer data');
       if (!onClose) { // Only navigate if not in modal mode
-        navigate('/dg-sales');
+        navigate('/sales');
       }
     } finally {
       setLoading(false);
@@ -735,7 +735,7 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
 
     // Fetch full enquiry details to populate form
     try {
-      const response = await apiClient.dgSales.enquiries.getById(enquiryId);
+      const response = await apiClient.sales.enquiries.getById(enquiryId);
       console.log('Enquiry response:', response); // Debug log
       
       if (response && response.success) {
@@ -906,7 +906,7 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
 
     // Fetch full quotation details to get items
     try {
-      const response = await apiClient.dgSales.dgQuotations.getById(quotationId) as any;
+      const response = await apiClient.sales.dgQuotations.getById(quotationId) as any;
       console.log('DG Quotation response:', response); // Debug log
       if (response && response.success) {
         const quotationData = response.data;
@@ -1322,11 +1322,11 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
       let response;
       if (isEditMode && editingPO) {
         // Update existing DG PO from customer
-        response = await apiClient.dgSales.dgPoFromCustomers.update(editingPO._id, poData);
+        response = await apiClient.sales.dgPoFromCustomers.update(editingPO._id, poData);
         toast.success('DG PO from customer updated successfully!');
       } else {
         // Create new DG PO from customer
-        response = await apiClient.dgSales.dgPoFromCustomers.create(poData);
+        response = await apiClient.sales.dgPoFromCustomers.create(poData);
         toast.success('DG PO from customer created successfully!');
       }
 
@@ -1334,7 +1334,7 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
       if (onSuccess) {
         onSuccess();
       } else {
-        navigate('/dg-sales');
+        navigate('/sales');
       }
     } catch (error: any) {
       console.error('Error saving DG PO from customer:', error);
@@ -1381,13 +1381,13 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
               if (onClose) {
                 onClose();
               } else {
-                navigate('/dg-sales');
+                navigate('/sales');
               }
             }}
             className="bg-gray-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-700 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Back to DG Sales</span>
+            <span>Back to Sales</span>
           </button>
           {isViewMode && (
             <button
@@ -2557,7 +2557,7 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
                   if (onClose) {
                     onClose();
                   } else {
-                    navigate('/dg-sales');
+                    navigate('/sales');
                   }
                 }}
                 disabled={submitting}

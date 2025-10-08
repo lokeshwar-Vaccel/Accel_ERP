@@ -271,7 +271,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({
 
   const generateQuotationNumber = async () => {
     try {
-      const response = await apiClient.dgSales.dgQuotations.generateNumber();
+      const response = await apiClient.sales.dgQuotations.generateNumber();
       if (response.success) {
         setFormData(prev => ({
           ...prev,
@@ -546,9 +546,9 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({
 
       let response;
       if (mode === 'create') {
-        response = await apiClient.dgSales.dgQuotations.create(submitData);
+        response = await apiClient.sales.dgQuotations.create(submitData);
       } else {
-        response = await apiClient.dgSales.dgQuotations.update(quotationId!, submitData);
+        response = await apiClient.sales.dgQuotations.update(quotationId!, submitData);
       }
 
       if (response.success) {

@@ -27,7 +27,7 @@ export enum UserRole {
 export enum UserDepartment {
   ACCOUNTS = 'accounts',
   STORES = 'stores',
-  DG_SALES = 'dg_sales',
+  SALES = 'sales',
   EV = 'ev',
   TELECOM = 'telecom',
   ADMIN = 'admin',

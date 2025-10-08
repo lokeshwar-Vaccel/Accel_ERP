@@ -24,7 +24,7 @@ export enum UserStatus {
 export enum UserDepartment {
   ACCOUNTS = 'accounts',
   STORES = 'stores',
-  DG_SALES = 'dg_sales',
+  SALES = 'sales',
   EV = 'ev',
   TELECOM = 'telecom',
   ADMIN = 'admin',
@@ -148,7 +148,18 @@ export enum ProductCategory {
   ACCESSORY = 'accessory',
   DG_PRODUCT = 'dg_product',
   DG_SPARE = 'dg_spare',
-  DG_ACCESSORY = 'dg_accessory'
+  DG_ACCESSORY = 'dg_accessory',
+  // Software and Hardware Categories
+  DESKTOP_COMPUTERS = 'desktop_computers',
+  LAPTOPS = 'laptops',
+  NETWORKING = 'networking',
+  STORAGE = 'storage',
+  SOFTWARE = 'software',
+  MONITORS = 'monitors',
+  PERIPHERALS = 'peripherals',
+  SECURITY = 'security',
+  COMPONENTS = 'components',
+  CLOUD_SERVICES = 'cloud_services'
 }
 
 // Stock Unit Type
@@ -287,13 +298,22 @@ export interface IProduct extends Document {
   category: ProductCategory;
   brand?: string;
   modelNumber?: string;
-  partNo?: string;
+  partNo: string;
   hsnNumber?: string;
+  productType1?: string;
+  productType2?: string;
+  productType3?: string;
+  make?: string;
+  price?: number;
+  gst?: number;
+  gndp?: number;
+  gndpTotal?: number;
+  uom?: 'kg' | 'litre' | 'meter' | 'sq.ft' | 'hour' | 'set' | 'box' | 'can' | 'roll' | 'nos' | 'eu';
+  cpcbNo?: string;
   specifications?: Record<string, any>;
-  price: number;
-  gst: number;
   minStockLevel: number;
   maxStockLevel?: number;
+  quantity: number;
   isActive: boolean;
   createdBy: string;
   stockUnit?: StockUnit;

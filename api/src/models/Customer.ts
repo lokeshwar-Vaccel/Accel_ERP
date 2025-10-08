@@ -100,6 +100,17 @@ const customerSchema = new Schema({
     trim: true,
     maxlength: [100, 'Customer alias cannot exceed 100 characters']
   },
+  email: {
+    type: String,
+    lowercase: true,
+    trim: true,
+    maxlength: [100, 'Email cannot exceed 100 characters']
+  },
+  phone: {
+    type: String,
+    trim: true,
+    maxlength: [20, 'Phone cannot exceed 20 characters']
+  },
   panNumber: {
     type: String,
     trim: true,

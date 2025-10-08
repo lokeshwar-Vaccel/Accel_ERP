@@ -42,7 +42,7 @@ const sampleUsers = [
       { module: 'amc_management', access: true, permission: 'admin' },
       { module: 'purchase_orders', access: true, permission: 'admin' },
       { module: 'billing', access: true, permission: 'admin' },
-      { module: 'dg_sales', access: true, permission: 'admin' },
+      { module: 'sales', access: true, permission: 'admin' },
       { module: 'reports_analytics', access: true, permission: 'admin' },
       { module: 'file_management', access: true, permission: 'admin' },
       { module: 'communications', access: true, permission: 'admin' },
@@ -67,7 +67,7 @@ const sampleUsers = [
       { module: 'amc_management', access: true, permission: 'write' },
       { module: 'purchase_orders', access: true, permission: 'write' },
       { module: 'billing', access: true, permission: 'write' },
-      { module: 'dg_sales', access: true, permission: 'write' },
+      { module: 'sales', access: true, permission: 'write' },
       { module: 'reports_analytics', access: true, permission: 'read' },
       { module: 'file_management', access: true, permission: 'write' },
       { module: 'communications', access: true, permission: 'write' }
@@ -127,7 +127,7 @@ const sampleUsers = [
     status: 'active',
     moduleAccess: [
       { module: 'dashboard', access: true, permission: 'read' },
-      { module: 'dg_sales', access: true, permission: 'write' },
+      { module: 'sales', access: true, permission: 'write' },
       { module: 'product_management', access: true, permission: 'write' },
       { module: 'lead_management', access: true, permission: 'write' }
     ]

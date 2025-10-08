@@ -16,7 +16,7 @@ const router = Router();
 
 // Apply authentication and module access middleware
 router.use(protect);
-router.use(checkModuleAccess('dg_sales'));
+router.use(checkModuleAccess('sales'));
 
 // Generate quotation number
 router.get('/generate-number', checkPermission('read'), generateQuotationNumber);

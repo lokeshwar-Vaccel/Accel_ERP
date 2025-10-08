@@ -17,7 +17,7 @@ const router = Router();
 
 // All routes are protected
 router.use(protect);
-router.use(checkModuleAccess('dg_sales'));
+router.use(checkModuleAccess('sales'));
 
 // DG Purchase Order routes
 router.get('/generate-number', checkPermission('read'), generatePONumber);

@@ -494,7 +494,7 @@ const CreateDGInvoiceForm: React.FC<CreateDGInvoiceFormProps> = ({
 
   const fetchQuotations = async () => {
     try {
-      const response = await apiClient.dgSales.dgQuotations.getAll({
+      const response = await apiClient.sales.dgQuotations.getAll({
         limit: 100,
         page: 1
       });
@@ -517,7 +517,7 @@ const CreateDGInvoiceForm: React.FC<CreateDGInvoiceFormProps> = ({
 
   const fetchEnquiries = async () => {
     try {
-      const response = await apiClient.dgSales.enquiries.getAll({
+      const response = await apiClient.sales.enquiries.getAll({
         limit: 100,
         page: 1
       });
@@ -540,7 +540,7 @@ const CreateDGInvoiceForm: React.FC<CreateDGInvoiceFormProps> = ({
 
   const fetchPOFromCustomers = async () => {
     try {
-      const response = await apiClient.dgSales.dgPoFromCustomers.getAll({
+      const response = await apiClient.sales.dgPoFromCustomers.getAll({
         limit: 100,
         page: 1
       });
@@ -592,7 +592,7 @@ const CreateDGInvoiceForm: React.FC<CreateDGInvoiceFormProps> = ({
       console.error('Error fetching DG Invoice data:', error);
       toast.error('Failed to load DG Invoice data');
       if (!onClose) { // Only navigate if not in modal mode
-        navigate('/dg-sales');
+        navigate('/sales');
       }
     } finally {
       setLoading(false);
@@ -1015,7 +1015,7 @@ const CreateDGInvoiceForm: React.FC<CreateDGInvoiceFormProps> = ({
 
     // Fetch full quotation details to get items
     try {
-      const response = await apiClient.dgSales.dgQuotations.getById(quotationId) as any;
+      const response = await apiClient.sales.dgQuotations.getById(quotationId) as any;
       console.log('DG Quotation response:', response); // Debug log
       if (response && response.success) {
         const quotationData = response.data;
@@ -1619,7 +1619,7 @@ const CreateDGInvoiceForm: React.FC<CreateDGInvoiceFormProps> = ({
       if (onSuccess) {
         onSuccess();
       } else {
-        navigate('/dg-sales');
+        navigate('/sales');
       }
     } catch (error: any) {
       console.error('Error saving DG Invoice:', error);
@@ -1668,13 +1668,13 @@ const CreateDGInvoiceForm: React.FC<CreateDGInvoiceFormProps> = ({
               if (onClose) {
                 onClose();
               } else {
-                navigate('/dg-sales');
+                navigate('/sales');
               }
             }}
             className="bg-gray-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-700 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Back to DG Sales</span>
+            <span>Back to Sales</span>
           </button>
           {isViewMode && (
             <button
@@ -3215,7 +3215,7 @@ const CreateDGInvoiceForm: React.FC<CreateDGInvoiceFormProps> = ({
                   if (onClose) {
                     onClose();
                   } else {
-                    navigate('/dg-sales');
+                    navigate('/sales');
                   }
                 }}
                 disabled={submitting}

@@ -26,7 +26,7 @@ const DGPurchaseOrderViewModal: React.FC<DGPurchaseOrderViewModalProps> = ({
 
     setUpdatingStatus(true);
     try {
-      const response = await apiClient.dgSales.purchaseOrders.updateStatus(purchaseOrder._id, newStatus, 'Status updated from view modal');
+      const response = await apiClient.sales.purchaseOrders.updateStatus(purchaseOrder._id, newStatus, 'Status updated from view modal');
       if (response.success) {
         toast.success(`Purchase Order status updated to ${newStatus}`);
         onSuccess();

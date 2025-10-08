@@ -632,7 +632,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
 
       if (mode === 'create') {
         console.log('Creating new DG Enquiry...');
-        response = await apiClient.dgSales.enquiries.create(payload);
+        response = await apiClient.sales.enquiries.create(payload);
         if (response.success) {
           toast.success('DG Enquiry and Customer created successfully!');
         }
@@ -646,7 +646,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
         }
 
         try {
-          response = await apiClient.dgSales.enquiries.update(initialData._id, payload);
+          response = await apiClient.sales.enquiries.update(initialData._id, payload);
           console.log('Update response:', response);
 
           if (response.success) {

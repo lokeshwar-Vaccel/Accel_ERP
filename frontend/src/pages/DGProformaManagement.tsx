@@ -159,7 +159,7 @@ const DGProformaManagement: React.FC = () => {
         ...(dateRange.end && { endDate: dateRange.end }),
       });
 
-      const response = await apiClient.dgSales.dgProformas.getAll(params.toString());
+      const response = await apiClient.sales.dgProformas.getAll(params.toString());
       
       if (response.success) {
         setProformas(response.data);
@@ -231,7 +231,7 @@ const DGProformaManagement: React.FC = () => {
   const handleDeleteProforma = async (proformaId: string) => {
     if (window.confirm('Are you sure you want to delete this proforma?')) {
       try {
-        const response = await apiClient.dgSales.dgProformas.delete(proformaId);
+        const response = await apiClient.sales.dgProformas.delete(proformaId);
         if (response.success) {
           toast.success('Proforma deleted successfully');
           fetchProformas();
@@ -254,7 +254,7 @@ const DGProformaManagement: React.FC = () => {
         ...(dateRange.end && { endDate: dateRange.end }),
       });
 
-      const response = await apiClient.dgSales.dgProformas.export(params.toString());
+      const response = await apiClient.sales.dgProformas.export(params.toString());
       
       if (response.success) {
         // Convert to Excel

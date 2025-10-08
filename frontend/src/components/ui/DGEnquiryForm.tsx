@@ -314,7 +314,7 @@ export default function DGEnquiryForm({ isOpen, onClose, onSuccess, initialData,
       if (mode === 'create') {
         // Create new enquiry
         console.log('Creating new enquiry with payload:', payload);
-        response = await apiClient.dgSales.enquiries.create(payload);
+        response = await apiClient.sales.enquiries.create(payload);
         console.log('Create response:', response);
         
         if (response.success) {
@@ -329,7 +329,7 @@ export default function DGEnquiryForm({ isOpen, onClose, onSuccess, initialData,
           throw new Error('Enquiry ID is required for update');
         }
         console.log('Updating enquiry with ID:', initialData._id, 'payload:', payload);
-        response = await apiClient.dgSales.enquiries.update(initialData._id, payload);
+        response = await apiClient.sales.enquiries.update(initialData._id, payload);
         console.log('Update response:', response);
         
         if (response.success) {

@@ -12,9 +12,9 @@ function getActiveKeyFromPath(pathname: string): string {
   }
 
   if (pathname.startsWith('/dg-quotation') || 
-      pathname.startsWith('/dg-sales') ||
+      pathname.startsWith('/sales') ||
       pathname.startsWith('/dg-purchase-order')) {
-    return 'dg_sales';
+    return 'sales';
   }
 
   if (pathname.startsWith('/dashboard')) return 'dashboard';

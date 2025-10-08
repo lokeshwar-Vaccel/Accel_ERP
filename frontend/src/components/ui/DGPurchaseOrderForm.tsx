@@ -167,7 +167,7 @@ const DGPurchaseOrderForm: React.FC<DGPurchaseOrderFormProps> = ({
 
   const generatePONumber = async () => {
     try {
-      const response = await apiClient.dgSales.purchaseOrders.generateNumber();
+      const response = await apiClient.sales.purchaseOrders.generateNumber();
       if (response.success) {
         setFormData(prev => ({
           ...prev,
@@ -384,9 +384,9 @@ const DGPurchaseOrderForm: React.FC<DGPurchaseOrderFormProps> = ({
 
       let response;
       if (mode === 'create') {
-        response = await apiClient.dgSales.purchaseOrders.create(submitData);
+        response = await apiClient.sales.purchaseOrders.create(submitData);
       } else {
-        response = await apiClient.dgSales.purchaseOrders.update(purchaseOrderId!, submitData);
+        response = await apiClient.sales.purchaseOrders.update(purchaseOrderId!, submitData);
       }
 
       if (response.success) {

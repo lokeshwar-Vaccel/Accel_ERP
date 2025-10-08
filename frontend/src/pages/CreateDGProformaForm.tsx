@@ -472,7 +472,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
 
   const fetchQuotations = async () => {
     try {
-      const response = await apiClient.dgSales.dgQuotations.getAll({
+      const response = await apiClient.sales.dgQuotations.getAll({
         limit: 100,
         page: 1
       });
@@ -495,7 +495,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
 
   const fetchEnquiries = async () => {
     try {
-      const response = await apiClient.dgSales.enquiries.getAll({
+      const response = await apiClient.sales.enquiries.getAll({
         limit: 100,
         page: 1
       });
@@ -518,7 +518,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
 
   const fetchPOFromCustomers = async () => {
     try {
-      const response = await apiClient.dgSales.dgPoFromCustomers.getAll({
+      const response = await apiClient.sales.dgPoFromCustomers.getAll({
         limit: 100,
         page: 1
       });
@@ -559,7 +559,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
 
     try {
       setLoading(true);
-      const response = await apiClient.dgSales.dgProformas.getById(proformaId);
+      const response = await apiClient.sales.dgProformas.getById(proformaId);
 
       if (response.success && response.data) {
         const po = response.data;
@@ -570,7 +570,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
       console.error('Error fetching DG PO data:', error);
       toast.error('Failed to load DG PO from customer data');
       if (!onClose) { // Only navigate if not in modal mode
-        navigate('/dg-sales');
+        navigate('/sales');
       }
     } finally {
       setLoading(false);
@@ -793,7 +793,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
 
     // Fetch full quotation details to get items
     try {
-      const response = await apiClient.dgSales.dgQuotations.getById(quotationId) as any;
+      const response = await apiClient.sales.dgQuotations.getById(quotationId) as any;
       console.log('DG Quotation response:', response); // Debug log
       if (response && response.success) {
         const quotationData = response.data;
@@ -1339,11 +1339,11 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
       let response;
       if (isEditMode && editingPO) {
         // Update existing DG PO from customer
-        response = await apiClient.dgSales.dgProformas.update(editingPO._id, proformaData);
+        response = await apiClient.sales.dgProformas.update(editingPO._id, proformaData);
         toast.success('DG Proforma updated successfully!');
       } else {
         // Create new DG Proforma
-        response = await apiClient.dgSales.dgProformas.create(proformaData);
+        response = await apiClient.sales.dgProformas.create(proformaData);
         toast.success('DG Proforma created successfully!');
       }
 
@@ -1351,7 +1351,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
       if (onSuccess) {
         onSuccess();
       } else {
-        navigate('/dg-sales');
+        navigate('/sales');
       }
     } catch (error: any) {
       console.error('Error saving DG PO from customer:', error);
@@ -1398,13 +1398,13 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
               if (onClose) {
                 onClose();
               } else {
-                navigate('/dg-sales');
+                navigate('/sales');
               }
             }}
             className="bg-gray-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-700 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Back to DG Sales</span>
+            <span>Back to Sales</span>
           </button>
           {isViewMode && (
             <button
@@ -2833,7 +2833,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
                   if (onClose) {
                     onClose();
                   } else {
-                    navigate('/dg-sales');
+                    navigate('/sales');
                   }
                 }}
                 disabled={submitting}

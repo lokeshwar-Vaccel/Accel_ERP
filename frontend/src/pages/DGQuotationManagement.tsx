@@ -187,7 +187,7 @@ const DGQuotationManagement: React.FC = () => {
         ...(dateRange.end && { endDate: dateRange.end }),
       });
 
-      const response = await apiClient.dgSales.dgQuotations.getAll(params.toString());
+      const response = await apiClient.sales.dgQuotations.getAll(params.toString());
       
       if (response.success) {
         const data = response.data as any;
@@ -263,7 +263,7 @@ const DGQuotationManagement: React.FC = () => {
   const handleDeleteQuotation = async (quotationId: string) => {
     if (window.confirm('Are you sure you want to delete this quotation?')) {
       try {
-        const response = await apiClient.dgSales.dgQuotations.delete(quotationId);
+        const response = await apiClient.sales.dgQuotations.delete(quotationId);
         if (response.success) {
           toast.success('Quotation deleted successfully');
           fetchQuotations();
@@ -296,7 +296,7 @@ const DGQuotationManagement: React.FC = () => {
         receiptNumber: paymentData.receiptNumber || `RCP-${Date.now()}`
       };
 
-      const response = await apiClient.dgSales.dgQuotationPayments.create(paymentRecord);
+      const response = await apiClient.sales.dgQuotationPayments.create(paymentRecord);
       
       if (response.success) {
         toast.success('Payment created successfully');
@@ -329,7 +329,7 @@ const DGQuotationManagement: React.FC = () => {
         ...(dateRange.end && { endDate: dateRange.end }),
       });
 
-      const response = await apiClient.dgSales.dgQuotations.getAll(params.toString());
+      const response = await apiClient.sales.dgQuotations.getAll(params.toString());
         
       if (response.success) {
         // Convert to Excel
@@ -747,7 +747,7 @@ const DGQuotationManagement: React.FC = () => {
           quotation={selectedQuotation}
           onStatusUpdate={async (newStatus) => {
             try {
-              const response = await apiClient.dgSales.dgQuotations.update(selectedQuotation._id, { status: newStatus });
+              const response = await apiClient.sales.dgQuotations.update(selectedQuotation._id, { status: newStatus });
               if (response.success) {
                 toast.success(`Quotation status updated to ${newStatus}`);
                 setSelectedQuotation({ ...selectedQuotation, status: newStatus as 'Draft' | 'Sent' | 'Accepted' | 'Rejected' | 'Expired' });

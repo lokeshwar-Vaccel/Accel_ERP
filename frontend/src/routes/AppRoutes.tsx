@@ -25,7 +25,7 @@ import PaymentSuccess from "../pages/PaymentSuccess";
 import { ForgotPasswordForm } from "components/features/auth/ForgotPasswordForm";
 import { LoginForm } from "components/features/auth/LoginForm";
 import { ResetPasswordForm } from "components/features/auth/ResetPasswordForm";
-import DGSales from "pages/DGSales";
+import Sales from "pages/Sales";
 import DGInvoiceForm from "pages/DGInvoiceForm";
 import DGQuotationForm from "pages/DGQuotationForm";
 import DeliveryChallanForm from "../components/DeliveryChallanForm";
@@ -116,17 +116,17 @@ const AppRoutes: React.FC = () => {
             {/* <Route path="/pay/:token" element={<PaymentPage />} />
             <Route path="/payment-success" element={<PaymentSuccess />} /> */}
 
-            {/* DG Sales */}
-            <Route path="/dg-sales" element={<DGSales />} />
+            {/* Sales */}
+            <Route path="/sales" element={<Sales />} />
             
             {/* DG Quotation Management */}
             <Route path="/dg-quotation-management" element={<DGQuotationManagement />} />
             <Route path="/dg-quotation/create" element={<DGQuotationForm />} />
             <Route path="/dg-quotation/edit/:id" element={<DGQuotationForm />} />
             
-            {/* DG Invoice Management */}
-            <Route path="/dg-sales/invoice/create" element={<CreateDGInvoiceForm />} />
-            <Route path="/dg-sales/invoice/edit/:id" element={<CreateDGInvoiceForm />} />
+            {/* Sales Invoice Management */}
+            <Route path="/sales/invoice/create" element={<CreateDGInvoiceForm />} />
+            <Route path="/sales/invoice/edit/:id" element={<CreateDGInvoiceForm />} />
 
             {/* DG Proforma Forms */}
             <Route path="/dg-proforma/create" element={<CreateDGProformaForm />} />

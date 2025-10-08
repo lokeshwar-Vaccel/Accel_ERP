@@ -1663,8 +1663,8 @@ class ApiClient {
     },
   };
 
-  // DG Sales APIs
-  dgSales = {
+  // Sales APIs
+  sales = {
     // DG Enquiries
     enquiries: {
       previewImport: (file: File) => {
@@ -2101,7 +2101,7 @@ class ApiClient {
 
 
 
-    // DG Sales Quotations
+    // Sales Quotations
     dgQuotations: {
       getAll: (params?: any) =>
         this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/dg-quotations${params ? `?${new URLSearchParams(params)}` : ''}`),

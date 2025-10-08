@@ -59,7 +59,7 @@ import PageHeader from 'components/ui/PageHeader';
 import OEMOrderManagement from './OEMOrderManagement';
 import DGQuotationManagement from './DGQuotationManagement';
 
-export default function DGSales() {
+export default function Sales() {
   const navigate = useNavigate();
   const [activeStep, setActiveStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -97,7 +97,7 @@ export default function DGSales() {
   console.log("previewData", previewData);
 
 
-  // Step 2: DG Quotations
+  // Step 2: Quotations
   const [dgQuotations, setDgQuotations] = useState<any[]>([]);
   const [showDGQuotationForm, setShowDGQuotationForm] = useState(false);
   const [dgQuotationFormMode, setDgQuotationFormMode] = useState<'create' | 'edit'>('create');
@@ -227,7 +227,7 @@ export default function DGSales() {
       switch (step) {
         case 1: // DG Enquiries
           try {
-            const enquiriesResponse: any = await apiClient.dgSales.enquiries.getAll(params);
+            const enquiriesResponse: any = await apiClient.sales.enquiries.getAll(params);
             console.log("enquiriesResponse:", enquiriesResponse);
             console.log("enquiriesResponse.pagination:", enquiriesResponse.pagination);
             
@@ -272,7 +272,7 @@ export default function DGSales() {
           break;
         case 2: // Quotations
           try {
-            const quotationsResponse: any = await apiClient.dgSales.dgQuotations.getAll(params);
+            const quotationsResponse: any = await apiClient.sales.dgQuotations.getAll(params);
             setDgQuotations(quotationsResponse.data || []);
             
             // Set pagination data from response
@@ -292,7 +292,7 @@ export default function DGSales() {
           break;
         case 4: // Proformas
           try {
-            const proformaResponse: any = await apiClient.dgSales.dgProformaInvoices.getAll(params);
+            const proformaResponse: any = await apiClient.sales.dgProformaInvoices.getAll(params);
             setProformaInvoices(proformaResponse.data || []);
             
             // Set pagination data from response
@@ -310,7 +310,7 @@ export default function DGSales() {
           break;
         case 5: // Final Invoices
           try {
-            const invoicesResponse: any = await apiClient.dgSales.invoices.getAll(params);
+            const invoicesResponse: any = await apiClient.sales.invoices.getAll(params);
             setFinalInvoices(invoicesResponse.data || []);
             
             // Set pagination data from response
@@ -328,7 +328,7 @@ export default function DGSales() {
           break;
         case 6: // OEMs
           try {
-            const oemsResponse: any = await apiClient.dgSales.oems.getAll(params);
+            const oemsResponse: any = await apiClient.sales.oems.getAll(params);
             setOems(oemsResponse.data || []);
             
             // Set pagination data from response
@@ -346,7 +346,7 @@ export default function DGSales() {
           break;
         case 7: // OEM Orders
           try {
-            const oemOrdersResponse: any = await apiClient.dgSales.oemOrders.getAll(params);
+            const oemOrdersResponse: any = await apiClient.sales.oemOrders.getAll(params);
             setOemOrders(oemOrdersResponse.data || []);
             
             // Set pagination data from response
@@ -385,7 +385,7 @@ export default function DGSales() {
         case 21:
         case 22:
           try {
-            const dashboardResponse = await apiClient.dgSales.reports.getDashboard(params);
+            const dashboardResponse = await apiClient.sales.reports.getDashboard(params);
             setDashboardData(dashboardResponse.data);
           } catch (err) {
             console.warn('Failed to load dashboard data');
@@ -462,7 +462,7 @@ export default function DGSales() {
     setLoading(true);
     setImporting(true);
     try {
-      const response = await apiClient.dgSales.enquiries.previewImport(selectedFile);
+      const response = await apiClient.sales.enquiries.previewImport(selectedFile);
       setPreviewData(response.data);
       setShowPreviewModal(true);
       setError(null);
@@ -481,7 +481,7 @@ export default function DGSales() {
     if (!selectedFile) return;
     setLoading(true);
     try {
-      const response = await apiClient.dgSales.enquiries.import(selectedFile);
+      const response = await apiClient.sales.enquiries.import(selectedFile);
       setImportResult(response.results);
       setSelectedFile(null);
       setPreview(null);
@@ -701,7 +701,7 @@ export default function DGSales() {
 
                             setImporting(true);
                             try {
-                              const result = await apiClient.dgSales.enquiries.previewImport(selectedFile);
+                              const result = await apiClient.sales.enquiries.previewImport(selectedFile);
 
                               setPreviewData(result.data);
                               setShowPreviewModal(true);
@@ -971,9 +971,9 @@ export default function DGSales() {
                                   state: { enquiry } 
                                 });
                               }}
-                              title={enquiry.customer?.status !== 'converted' ? 'Customer must be converted to create quotation' : 'Create DG Quotation'}
+                              title={enquiry.customer?.status !== 'converted' ? 'Customer must be converted to create quotation' : 'Create Quotation'}
                             >
-                              Create DG Quotation
+                              Create Quotation
                             </Button>
                             {/* <span className="text-sm text-gray-500">
                               {enquiry.customer?.status !== 'converted' ? 'Customer must be converted to create quotation' : 'Create DG Quotation'}
@@ -1008,11 +1008,11 @@ export default function DGSales() {
                     </div>
                     <div className="ml-3">
                       <h3 className="text-sm font-medium text-blue-800">
-                        Create DG Quotation Button
+                        Create Quotation Button
                       </h3>
                       <div className="mt-2 text-sm text-blue-700">
                         <p>
-                          The "Create DG Quotation" button is only enabled when the customer status is <strong>Converted</strong>. 
+                          The "Create Quotation" button is only enabled when the customer status is <strong>Converted</strong>. 
                           This ensures that quotations are only created for qualified customers who have been successfully converted from enquiries.
                         </p>
                         <p className="mt-1">
@@ -1027,7 +1027,7 @@ export default function DGSales() {
           </div>
         );
 
-      case 2: // DG Quotations
+      case 2: // Quotations
         return <DGQuotationManagement />;
 
       case 3: // Purchase Orders
@@ -1186,14 +1186,14 @@ export default function DGSales() {
               {/* Title with gradient underline */}
               <div className="relative inline-block">
                 <h1 className="text-3xl font-bold text-gray-900 mb-1.5">
-                  DG Sales Management
+                  Sales Management
                 </h1>
                 {/* Straight thick gradient underline */}
                 <div className="w-full h-1 bg-gradient-to-r from-orange-300 via-orange-500 to-orange-600 rounded-full"></div>
               </div>
               
               <p className="text-gray-600 mt-1.5 text-sm max-w-2xl">
-                Complete Diesel Generator Sales Workflow - 22 Steps
+                Complete Sales Workflow - 22 Steps
               </p>
             </div>
           </div>
@@ -1218,7 +1218,7 @@ export default function DGSales() {
       {/* Dynamic Progress Tracker */}
       {/* <div className="mb-8">
         <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">DG Sales Progress Tracker</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Sales Progress Tracker</h3>
           <div className="space-y-4"> */}
             {/* Main Process Steps */}
             {/* <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
@@ -1309,7 +1309,7 @@ export default function DGSales() {
               </div>
               <div className="bg-purple-50 p-3 rounded-lg text-center">
                 <div className="text-2xl font-bold text-purple-600">{dgQuotations.length}</div>
-                <div className="text-xs text-purple-700">DG Quotations</div>
+                <div className="text-xs text-purple-700">Quotations</div>
               </div>
               <div className="bg-orange-50 p-3 rounded-lg text-center">
                 <div className="text-2xl font-bold text-orange-600">-</div>
@@ -1378,7 +1378,7 @@ export default function DGSales() {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <div>
-                <h2 className="text-2xl font-semibold text-gray-900">Preview DG Enquiry Import</h2>
+                <h2 className="text-2xl font-semibold text-gray-900">Preview Enquiry Import</h2>
                 <p className="text-gray-600 mt-1">
                   Review what will be imported before confirming
                 </p>
@@ -1800,7 +1800,7 @@ export default function DGSales() {
                     const xhr = new XMLHttpRequest();
                     xhr.open('POST', '/api/v1/dg-enquiries/import', true);
                     // Add Authorization header from localStorage
-                    const token = localStorage.getItem('authToken');
+                    const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
                     if (token) {
                       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
                     }
@@ -1858,7 +1858,7 @@ export default function DGSales() {
         </div>
       )}
 
-      {/* DG Quotation Form Modal */}
+      {/* Quotation Form Modal */}
       {showDGQuotationForm && (
         <DGQuotationForm
           isOpen={showDGQuotationForm}
@@ -1880,7 +1880,7 @@ export default function DGSales() {
         />
       )}
 
-      {/* DG Quotation View Modal */}
+      {/* Quotation View Modal */}
       {showDGQuotationViewModal && selectedDGQuotation && (
         <DGQuotationViewModal
           isOpen={showDGQuotationViewModal}
@@ -1891,7 +1891,7 @@ export default function DGSales() {
           quotation={selectedDGQuotation}
           onStatusUpdate={async (newStatus) => {
             try {
-              const response = await apiClient.dgSales.dgQuotations.update(selectedDGQuotation._id, { status: newStatus });
+              const response = await apiClient.sales.dgQuotations.update(selectedDGQuotation._id, { status: newStatus });
               if (response.success) {
                 toast.success(`Quotation status updated to ${newStatus}`);
                 setSelectedDGQuotation({ ...selectedDGQuotation, status: newStatus });
@@ -1932,7 +1932,7 @@ export default function DGSales() {
                 receiptNumber: paymentData.receiptNumber || `RCP-${Date.now()}`
               };
 
-              const response = await apiClient.dgSales.dgQuotationPayments.create(paymentRecord);
+              const response = await apiClient.sales.dgQuotationPayments.create(paymentRecord);
               
               if (response.success) {
                 toast.success('Payment created successfully');
@@ -1983,7 +1983,7 @@ export default function DGSales() {
         />
       )}
 
-      {/* DG Enquiry Form Modal */}
+      {/* Enquiry Form Modal */}
       {showEnquiryForm && (
         <ComprehensiveDGEnquiryForm
           isOpen={showEnquiryForm}
@@ -2001,7 +2001,7 @@ export default function DGSales() {
         />
       )}
 
-      {/* DG Enquiry View Modal */}
+      {/* Enquiry View Modal */}
       {showEnquiryViewModal && (
         <DGEnquiryViewModal
           isOpen={showEnquiryViewModal}

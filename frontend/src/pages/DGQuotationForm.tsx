@@ -392,7 +392,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
 
   const generateQuotationNumber = async () => {
     try {
-      const response = await apiClient.dgSales.dgQuotations.generateNumber();
+      const response = await apiClient.sales.dgQuotations.generateNumber();
       if (response.success) {
         setFormData(prev => ({
           ...prev,
@@ -1493,10 +1493,10 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
 
       console.log('Payload being sent:', payload);
 
-      const response = await apiClient.dgSales.dgQuotations.create(payload);
+      const response = await apiClient.sales.dgQuotations.create(payload);
       if (response.success) {
-        toast.success('DG Quotation created successfully');
-        navigate('/dg-sales');
+        toast.success('Sales Quotation created successfully');
+        navigate('/sales');
               } else {
           throw new Error('Failed to create quotation');
         }
@@ -1962,7 +1962,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back to Edit
                 </Button>
-                <h1 className="text-xl font-semibold">DG Quotation Preview</h1>
+                <h1 className="text-xl font-semibold">Sales Quotation Preview</h1>
               </div>
               <div className="flex space-x-2">
                 <Button onClick={handleSubmit} disabled={submitting}>
@@ -2009,7 +2009,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
             </div>
             <div className="ml-3">
               <h3 className="text-sm font-medium text-blue-800">
-                DG Quotation Creation
+                Sales Quotation Creation
               </h3>
               <div className="mt-1 text-sm text-blue-700">
                 <p>
@@ -2028,12 +2028,12 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
             <div className="flex items-center space-x-4">
               <Button
                 variant="outline"
-                onClick={() => navigate('/dg-sales')}
+                onClick={() => navigate('/sales')}
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to DG Sales
+                Back to Sales
               </Button>
-              <h1 className="text-xl font-semibold">Create DG Quotation</h1>
+              <h1 className="text-xl font-semibold">Create Sales Quotation</h1>
               {enquiry && (
                 <div className="flex items-center space-x-2">
                   {/* <Badge variant="info">
@@ -2094,9 +2094,9 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
         {/* Display Validation Errors */}
         {displayValidationErrors()}
 
-        {/* DG Product Selection - At the Top */}
+        {/* Equipment Product Selection - At the Top */}
         <div className="bg-white rounded-lg shadow p-6 mb-8">
-          <h2 className="text-lg font-semibold mb-4">DG Product Selection</h2>
+          <h2 className="text-lg font-semibold mb-4">Equipment Product Selection</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -3806,9 +3806,9 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
             )}
           </div>
 
-          {/* DG Specifications */}
+          {/* Equipment Specifications */}
           <div className="mb-8">
-            <h2 className="text-lg font-semibold mb-4">DG Specifications</h2>
+            <h2 className="text-lg font-semibold mb-4">Equipment Specifications</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Input
                 label="KVA Rating"
@@ -3863,7 +3863,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
               <div className="flex space-x-2">
                 <Button variant="outline" onClick={() => setShowDgProductSelector(true)}>
                   <Plus className="h-4 w-4 mr-2" />
-                  Add DG Product
+                  Add Equipment Product
                 </Button>
                 <Button variant="outline" onClick={addItem}>
                   <Plus className="h-4 w-4 mr-2" />
@@ -4111,13 +4111,13 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
 
 
 
-        {/* DG Product Selector Modal */}
+        {/* Equipment Product Selector Modal */}
         {showDgProductSelector && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-[90vh] flex flex-col">
               <div className="flex items-center justify-between p-6 border-b border-gray-200">
                 <h2 className="text-xl font-semibold text-gray-900">
-                  Select DG Product
+                  Select Equipment Product
                 </h2>
                 <button
                   onClick={() => setShowDgProductSelector(false)}
@@ -4129,7 +4129,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
               <div className="flex-1 overflow-y-auto p-6">
                 <div className="mb-4 flex justify-between items-center">
                   <Input
-                    label="Search DG Products"
+                    label="Search Equipment Products"
                     placeholder="Search by KVA, phase, model..."
                     value={dgProductSearchTerm}
                     onChange={(e) => setDgProductSearchTerm(e.target.value)}

@@ -113,10 +113,10 @@ const menuItems = [
   },
   {
     id: 11,
-    name: 'DG Sales',
+    name: 'Sales',
     icon: <Zap className="w-4 h-4" />,
-    path: '/dg-sales',
-    key: 'dg_sales',
+    path: '/sales',
+    key: 'sales',
     // submodules: dgSalesSubmodules,
   },
   {
@@ -159,11 +159,11 @@ function getActiveKeyFromPath(pathname: string): string {
     return 'billing';
   }
   
-  // Special cases for DG Sales routes
+  // Special cases for Sales routes
   if (pathname.startsWith('/dg-quotation') || 
-      pathname.startsWith('/dg-sales') ||
+      pathname.startsWith('/sales') ||
       pathname.startsWith('/dg-purchase-order')) {
-    return 'dg_sales';
+    return 'sales';
   }
   
   // Find the menu item whose path is a prefix of the current pathname

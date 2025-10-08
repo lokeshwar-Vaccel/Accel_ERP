@@ -496,7 +496,7 @@ const CustomerManagement: React.FC = () => {
   const tabOptions = [
     { label: 'Customer', value: 'customer' },
     { label: 'Supplier', value: 'supplier' },
-    { label: 'DG Customer', value: 'dg_customer' },
+    { label: 'Sales Customer', value: 'dg_customer' },
     { label: 'OEM', value: 'oem' },
     // Add more tabs here if needed
   ];
@@ -506,7 +506,7 @@ const CustomerManagement: React.FC = () => {
   // Add at the top, after useState imports
   const [customerTypeTab, setCustomerTypeTab] = useState<'customer' | 'supplier' | 'dg_customer' | 'oem'>(searchParams.get('action') !== 'create-supplier' ? 'customer' : 'supplier');
   // Dynamic entity labels for shared UI between Customer and Supplier
-  const entityLabel = customerTypeTab === 'supplier' ? 'Supplier' : (customerTypeTab === 'dg_customer' ? 'DG Customer' : 'Customer');
+  const entityLabel = customerTypeTab === 'supplier' ? 'Supplier' : (customerTypeTab === 'dg_customer' ? 'Sales Customer' : 'Customer');
   const entityLabelLower = entityLabel.toLowerCase();
 
 
@@ -1110,10 +1110,10 @@ const CustomerManagement: React.FC = () => {
       params.status = statusFilter;
     }
 
-    // Special handling for DG Customer tab - show only converted customers
+    // Special handling for Sales Customer tab - show only converted customers
     if (customerTypeTab === 'dg_customer') {
       params.status = 'converted';
-      params.type = 'customer'; // DG users are still of type 'customer'
+      params.type = 'customer'; // Sales users are still of type 'customer'
     }
 
     console.log('Fetching customers with type:', customerTypeTab);
@@ -1123,7 +1123,7 @@ const CustomerManagement: React.FC = () => {
       const response = await apiClient.customers.getAll(params);
       console.log('API response data:', response);
       
-      // Handle DG Customer statistics specially
+      // Handle Sales Customer statistics specially
       if (customerTypeTab === 'dg_customer') {
         let customersData: Customer[] = [];
         if (response && response.data) {
@@ -1134,24 +1134,24 @@ const CustomerManagement: React.FC = () => {
           }
         }
         
-        const totalDG = customersData.length;
-        const convertedDG = customersData.filter(c => c.status === 'converted').length;
+        const totalSales = customersData.length;
+        const convertedSales = customersData.filter(c => c.status === 'converted').length;
         
         setCounts({
-          totalCustomers: totalDG,
-          newLeads: 0, // DG customers are shown only when converted
-          qualified: 0, // DG customers are shown only when converted
-          converted: convertedDG,
-          lost: 0, // Filtered out for DG customer view
+          totalCustomers: totalSales,
+          newLeads: 0, // Sales customers are shown only when converted
+          qualified: 0, // Sales customers are shown only when converted
+          converted: convertedSales,
+          lost: 0, // Filtered out for Sales customer view
           contacted: 0,
         });
         
         setNewLeadStatusCount(0);
         setQualifiedStatusCount(0);
-        setConvertedStatusCount(convertedDG);
+        setConvertedStatusCount(convertedSales);
         setLostStatusCount(0);
         setContactedStatusCount(0);
-        setTotalCustomersCount(totalDG);
+        setTotalCustomersCount(totalSales);
       } else {
         setCounts(response.data.counts);
 
@@ -1206,7 +1206,7 @@ const CustomerManagement: React.FC = () => {
     if (!customerToDelete) return;
     
     const entityName = customerTypeTab === 'supplier' ? 'Supplier' : 
-                       customerTypeTab === 'dg_customer' ? 'DG Customer' : 
+                       customerTypeTab === 'dg_customer' ? 'Sales Customer' : 
                        customerTypeTab === 'oem' ? 'OEM Customer' : 'Customer';
     
     try {
@@ -1250,9 +1250,9 @@ const CustomerManagement: React.FC = () => {
   //   return matchesSearch && matchesStatus && matchesType;
   // }) : [];
 
-  // Helper function to check if DG details should be required
-  const isDGDetailRequired = (dgDetail: any): boolean => {
-    return !!(dgDetail.dgSerialNumbers?.trim() || dgDetail.engineSerialNumber?.trim());
+  // Helper function to check if Equipment details should be required
+  const isEquipmentDetailRequired = (equipmentDetail: any): boolean => {
+    return !!(equipmentDetail.dgSerialNumbers?.trim() || equipmentDetail.engineSerialNumber?.trim());
   };
 
   // Helper function to check if a specific field should show required asterisk
@@ -1477,75 +1477,75 @@ const CustomerManagement: React.FC = () => {
       }
     }
 
-    // DG Details validation (only for customer type)
+    // Equipment Details validation (only for customer type)
     if (customerTypeTab === 'customer' && customerFormData.dgDetails && customerFormData.dgDetails.length > 0) {
       const dgDetailsErrors: Record<number, Record<string, string>> = {};
       
       customerFormData.dgDetails.forEach((dgDetail, index) => {
         const dgErrors: Record<string, string> = {};
         
-        // Check if any DG detail has been started (either serial number field has content)
+        // Check if any Equipment detail has been started (either serial number field has content)
         const hasSerialNumber = dgDetail.dgSerialNumbers.trim() || dgDetail.engineSerialNumber.trim();
         
-        // Only validate if user has started filling DG details
+        // Only validate if user has started filling Equipment details
         if (hasSerialNumber) {
-          // Special validation: Either DG Serial Number OR Engine Serial Number required
+          // Special validation: Either Equipment Serial Number OR Engine Serial Number required
           if (!dgDetail.dgSerialNumbers.trim() && !dgDetail.engineSerialNumber.trim()) {
-            dgErrors.dgSerialNumbers = 'DG Serial Number is required';
+            dgErrors.dgSerialNumbers = 'Equipment Serial Number is required';
             dgErrors.engineSerialNumber = 'Engine Serial Number is required';
-            missingFields.push(`DG Details #${index + 1} - Serial Number`);
+            missingFields.push(`Equipment Details #${index + 1} - Serial Number`);
           } else if (dgDetail.dgSerialNumbers.trim() && !dgDetail.engineSerialNumber.trim()) {
-            // If DG Serial Number is filled but Engine Serial Number is empty, show error for Engine Serial Number
+            // If Equipment Serial Number is filled but Engine Serial Number is empty, show error for Engine Serial Number
             dgErrors.engineSerialNumber = 'Engine Serial Number is required';
-            missingFields.push(`DG Details #${index + 1} - Engine Serial Number`);
+            missingFields.push(`Equipment Details #${index + 1} - Engine Serial Number`);
           } else if (!dgDetail.dgSerialNumbers.trim() && dgDetail.engineSerialNumber.trim()) {
-            // If Engine Serial Number is filled but DG Serial Number is empty, show error for DG Serial Number
-            dgErrors.dgSerialNumbers = 'DG Serial Number is required';
-            missingFields.push(`DG Details #${index + 1} - DG Serial Number`);
+            // If Engine Serial Number is filled but Equipment Serial Number is empty, show error for Equipment Serial Number
+            dgErrors.dgSerialNumbers = 'Equipment Serial Number is required';
+            missingFields.push(`Equipment Details #${index + 1} - Equipment Serial Number`);
           }
           
           // Standard mandatory field validations
           if (!dgDetail.dgMake.trim()) {
-            dgErrors.dgMake = 'DG Make is required';
-            missingFields.push(`DG Details #${index + 1} - DG Make`);
+            dgErrors.dgMake = 'Equipment Make is required';
+            missingFields.push(`Equipment Details #${index + 1} - Equipment Make`);
           }
           
           if (!dgDetail.dgModel.trim()) {
-            dgErrors.dgModel = 'DG Model is required';
-            missingFields.push(`DG Details #${index + 1} - DG Model`);
+            dgErrors.dgModel = 'Equipment Model is required';
+            missingFields.push(`Equipment Details #${index + 1} - Equipment Model`);
           }
           
           if (!dgDetail.dgRatingKVA || dgDetail.dgRatingKVA <= 0) {
-            dgErrors.dgRatingKVA = 'DG Rating (KVA) must be greater than 0';
-            missingFields.push(`DG Details #${index + 1} - DG Rating`);
+            dgErrors.dgRatingKVA = 'Equipment Rating (KVA) must be greater than 0';
+            missingFields.push(`Equipment Details #${index + 1} - Equipment Rating`);
           }
           
           if (!dgDetail.warrantyStatus) {
             dgErrors.warrantyStatus = 'Warranty Status is required';
-            missingFields.push(`DG Details #${index + 1} - Warranty Status`);
+            missingFields.push(`Equipment Details #${index + 1} - Warranty Status`);
           }
           
           if (!dgDetail.cluster.trim()) {
             dgErrors.cluster = 'Service Cluster is required';
-            missingFields.push(`DG Details #${index + 1} - Service Cluster`);
+            missingFields.push(`Equipment Details #${index + 1} - Service Cluster`);
           }
           
           if (!(dgDetail as any).locationAddress) {
-            dgErrors.locationAddress = 'DG Location (Address) is required';
-            missingFields.push(`DG Details #${index + 1} - DG Location`);
+            dgErrors.locationAddress = 'Equipment Location (Address) is required';
+            missingFields.push(`Equipment Details #${index + 1} - Equipment Location`);
           }
 
           // Uniqueness validation for serial numbers
           if (dgDetail.dgSerialNumbers.trim()) {
-            // Check for duplicate DG Serial Numbers within the same form
-            const duplicateDGSerial = customerFormData.dgDetails?.find((otherDg, otherIndex) => 
+            // Check for duplicate Equipment Serial Numbers within the same form
+            const duplicateEquipmentSerial = customerFormData.dgDetails?.find((otherDg, otherIndex) => 
               otherIndex !== index && 
               otherDg.dgSerialNumbers.trim() === dgDetail.dgSerialNumbers.trim()
             );
-            if (duplicateDGSerial) {
-              dgErrors.dgSerialNumbers = 'DG Serial Number already exists in this form';
+            if (duplicateEquipmentSerial) {
+              dgErrors.dgSerialNumbers = 'Equipment Serial Number already exists in this form';
             } else {
-              // Check for duplicate DG Serial Numbers in existing customers
+              // Check for duplicate Equipment Serial Numbers in existing customers
               const existingCustomer = allCustomers.find(customer =>
                 customer.dgDetails?.some(existingDg => 
                   existingDg.dgSerialNumbers === dgDetail.dgSerialNumbers.trim() &&
@@ -1553,7 +1553,7 @@ const CustomerManagement: React.FC = () => {
                 )
               );
               if (existingCustomer) {
-                dgErrors.dgSerialNumbers = 'DG Serial Number already exists with another customer';
+                dgErrors.dgSerialNumbers = 'Equipment Serial Number already exists with another customer';
               }
             }
           }
@@ -1656,7 +1656,7 @@ const CustomerManagement: React.FC = () => {
       
       // Show success toast with contextual message
       const entityName = customerTypeTab === 'supplier' ? 'Supplier' : 
-                         customerTypeTab === 'dg_customer' ? 'DG Customer' : 
+                         customerTypeTab === 'dg_customer' ? 'Sales Customer' : 
                          customerTypeTab === 'oem' ? 'OEM Customer' : 'Customer';
       toast.success(`${entityName} added successfully!`);
       
@@ -1672,7 +1672,7 @@ const CustomerManagement: React.FC = () => {
       
       // Show error toast with contextual message
       const entityName = customerTypeTab === 'supplier' ? 'Supplier' : 
-                         customerTypeTab === 'dg_customer' ? 'DG Customer' : 
+                         customerTypeTab === 'dg_customer' ? 'Sales Customer' : 
                          customerTypeTab === 'oem' ? 'OEM Customer' : 'Customer';
       toast.error(`Failed to add ${entityName.toLowerCase()}. Please try again.`);
     } finally {
@@ -1707,7 +1707,7 @@ const CustomerManagement: React.FC = () => {
       
       // Show success toast with contextual message
       const entityName = customerTypeTab === 'supplier' ? 'Supplier' : 
-                         customerTypeTab === 'dg_customer' ? 'DG Customer' : 
+                         customerTypeTab === 'dg_customer' ? 'Sales Customer' : 
                          customerTypeTab === 'oem' ? 'OEM Customer' : 'Customer';
       toast.success(`${entityName} updated successfully!`);
       
@@ -1724,7 +1724,7 @@ const CustomerManagement: React.FC = () => {
       
       // Show error toast with contextual message
       const entityName = customerTypeTab === 'supplier' ? 'Supplier' : 
-                         customerTypeTab === 'dg_customer' ? 'DG Customer' : 
+                         customerTypeTab === 'dg_customer' ? 'Sales Customer' : 
                          customerTypeTab === 'oem' ? 'OEM Customer' : 'Customer';
       toast.error(`Failed to update ${entityName.toLowerCase()}. Please try again.`);
     } finally {
@@ -2362,7 +2362,7 @@ const CustomerManagement: React.FC = () => {
               <span className="text-sm">
                 {customerTypeTab === 'customer' ? 'Add Customer' : 
                  customerTypeTab === 'supplier' ? 'Add Supplier' : 
-                 customerTypeTab === 'dg_customer' ? 'Add DG Customer' :
+                 customerTypeTab === 'dg_customer' ? 'Add Sales Customer' :
                  'Add OEM Customer'}
               </span>
             </button>
@@ -3052,12 +3052,12 @@ const CustomerManagement: React.FC = () => {
                           <th className="px-3 py-2 text-left font-medium">Contact Person</th>
                           <th className="px-3 py-2 text-left font-medium">Designation</th>
                           <th className="px-3 py-2 text-left font-medium">Site Address</th>
-                          {customerTypeTab === 'customer' && (
+                          {false && customerTypeTab === 'customer' && (
                             <>
-                              <th className="px-3 py-2 text-left font-medium">DG Count</th>
+                              <th className="px-3 py-2 text-left font-medium">Equipment Count</th>
                               <th className="px-3 py-2 text-left font-medium">
-                                DG Details
-                                <span className="ml-1 text-xs text-gray-500" title="Click on 'Yes' to view detailed DG information">
+                                Equipment Details
+                                <span className="ml-1 text-xs text-gray-500" title="Click on 'Yes' to view detailed Equipment information">
                                   ℹ️
                                 </span>
                               </th>
@@ -3082,18 +3082,18 @@ const CustomerManagement: React.FC = () => {
                               })()}
                             </td>
                             <td className="px-3 py-2">{customer.siteAddress || '-'}</td>
-                            {customerTypeTab === 'customer' && (
+                            {false && customerTypeTab === 'customer' && (
                               <>
                                 <td className="px-3 py-2">{customer.numberOfDG || 0}</td>
                                 <td className="px-3 py-2">
                                   {customer.hasDGDetails ? (
                                     <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full cursor-pointer hover:bg-blue-200" 
-                                          title="Click to view DG details"
+                                          title="Click to view Equipment details"
                                           onClick={() => {
                                             const dgDetails = customer.dgDetails || [];
                                             if (dgDetails.length > 0) {
-                                              alert(`DG Details:\n${dgDetails.map((dg: any, idx: number) => 
-                                                `DG ${idx + 1}:\n` +
+                                              alert(`Equipment Details:\n${dgDetails.map((dg: any, idx: number) => 
+                                                `Equipment ${idx + 1}:\n` +
                                                 `  Serial: ${dg.dgSerialNumbers}\n` +
                                                 `  Make: ${dg.dgMake}\n` +
                                                 `  Model: ${dg.dgModel}\n` +
@@ -3115,7 +3115,7 @@ const CustomerManagement: React.FC = () => {
                                   </span>
                                 )}
                               </td>
-                              </>
+                            </>
                             )}
                           </tr>
                         ))}
@@ -3163,7 +3163,7 @@ const CustomerManagement: React.FC = () => {
                             <td className="px-3 py-2">{customer.alice || '-'}</td>
                             <td className="px-3 py-2">{customer.phone || '-'}</td>
                             <td className="px-3 py-2">{customer.siteAddress || '-'}</td>
-                            {customerTypeTab === 'customer' && (
+                            {false && customerTypeTab === 'customer' && (
                               <td className="px-3 py-2">{customer.numberOfDG || 0}</td>
                             )}
                           </tr>
@@ -3210,12 +3210,12 @@ const CustomerManagement: React.FC = () => {
                       </div>
                       <div className="text-gray-600">With Site Address</div>
                     </div>
-                    {customerTypeTab === 'customer' && (
+                    {false && customerTypeTab === 'customer' && (
                       <div className="text-center">
                         <div className="text-lg font-bold text-orange-600">
                           {previewData.customersToCreate.filter((c: any) => c.hasDGDetails).length}
                         </div>
-                        <div className="text-gray-600">With DG Details</div>
+                        <div className="text-gray-600">With Equipment Details</div>
                       </div>
                     )}
                   </div>
@@ -3258,8 +3258,8 @@ const CustomerManagement: React.FC = () => {
                               <h4 className="font-medium text-gray-900 mb-2">Address & Location</h4>
                               <div className="space-y-2 text-sm">
                                 <div><span className="font-medium">Site Address:</span> {firstCustomer.siteAddress || 'Not provided'}</div>
-                                {customerTypeTab === 'customer' && (
-                                  <div><span className="font-medium">Number of DG:</span> {firstCustomer.numberOfDG || 0}</div>
+                                {false && customerTypeTab === 'customer' && (
+                                  <div><span className="font-medium">Number of Equipment:</span> {firstCustomer.numberOfDG || 0}</div>
                                 )}
                                 <div><span className="font-medium">GST Number:</span> {firstCustomer.gstNumber || 'Not provided'}</div>
                               </div>
@@ -3343,7 +3343,7 @@ const CustomerManagement: React.FC = () => {
                 <h2 className="text-2xl font-bold text-gray-900">Add New {
                   customerTypeTab === 'customer' ? 'Customer' : 
                   customerTypeTab === 'supplier' ? 'Supplier' : 
-                  customerTypeTab === 'dg_customer' ? 'DG Customer' :
+                  customerTypeTab === 'dg_customer' ? 'Sales Customer' :
                   'OEM Customer'
                 }</h2>
                 <p className="text-sm text-gray-600 mt-1">Fill in the details below to create a new {entityLabelLower}</p>
@@ -3768,19 +3768,19 @@ const CustomerManagement: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* DG Details Section - Only show for DG Customers */}
-                  {customerTypeTab === 'customer' && (
+                  {/* Equipment Details Section - HIDDEN FOR NOW */}
+                  {false && customerTypeTab === 'customer' && (
                     <div className="w-full border-t border-gray-200 p-4 bg-gray-50">
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-gray-800">DG Technical Details</h3>
+                        <h3 className="text-lg font-semibold text-gray-800">Equipment Technical Details</h3>
                         <span className="text-sm text-gray-600">Service Team Information</span>
                       </div>
                       
-                      {/* DG Details Management */}
+                      {/* Equipment Details Management */}
                       <div className="mt-6">
                         <div className="flex items-center justify-between mb-3">
                           <label className="block text-sm font-medium text-gray-700">
-                            DG Details ({customerFormData.dgDetails?.length || 0})
+                            Equipment Details ({customerFormData.dgDetails?.length || 0})
                           </label>
                           <button
                             type="button"
@@ -3829,7 +3829,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* DG Serial Number */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Serial Number {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
+                                    Equipment Serial Number {isEquipmentDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
@@ -3847,7 +3847,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* DG Make */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Make {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
+                                    Equipment Make {isEquipmentDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
@@ -3879,7 +3879,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* DG Model */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Model {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
+                                    Equipment Model {isEquipmentDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
@@ -3897,7 +3897,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* DG Rating KVA */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Rating (KVA) {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
+                                    Equipment Rating (KVA) {isEquipmentDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="number"
@@ -3945,7 +3945,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* Engine Serial Number */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Engine Serial Number {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
+                                    Engine Serial Number {isEquipmentDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
@@ -3990,7 +3990,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* Warranty Status */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Warranty Status {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
+                                    Warranty Status {isEquipmentDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <div className="relative">
                                     <select
@@ -4013,7 +4013,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* Cluster */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Service Cluster {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
+                                    Service Cluster {isEquipmentDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
@@ -4614,7 +4614,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* DG Serial Number */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Serial Number {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
+                                    Equipment Serial Number {isEquipmentDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
@@ -4632,7 +4632,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* DG Make */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Make {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
+                                    Equipment Make {isEquipmentDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
@@ -4664,7 +4664,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* DG Model */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Model {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
+                                    Equipment Model {isEquipmentDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
@@ -4682,7 +4682,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* DG Rating KVA */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    DG Rating (KVA) {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
+                                    Equipment Rating (KVA) {isEquipmentDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="number"
@@ -4730,7 +4730,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* Engine Serial Number */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Engine Serial Number {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
+                                    Engine Serial Number {isEquipmentDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
@@ -4775,7 +4775,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* Warranty Status */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Warranty Status {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
+                                    Warranty Status {isEquipmentDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                     <span className="text-xs text-gray-500 ml-1">(Auto-calculated)</span>
                                   </label>
                                   <div className="relative">
@@ -4798,7 +4798,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* Cluster */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Service Cluster {isDGDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
+                                    Service Cluster {isEquipmentDetailRequired(dgDetail) && <span className="text-red-500">*</span>}
                                   </label>
                                   <input
                                     type="text"
@@ -5356,22 +5356,23 @@ const CustomerManagement: React.FC = () => {
                 </div>
               )}
 
-              {/* DG Details Section - Only show for Customers, not Suppliers */}
-              {customerTypeTab === 'customer' && selectedCustomer.dgDetails && Array.isArray(selectedCustomer.dgDetails) && selectedCustomer.dgDetails.length > 0 && (
+              {/* Equipment Details Section - HIDDEN FOR NOW */}
+              {/* 
+              {customerTypeTab === 'customer' && selectedCustomer && selectedCustomer.dgDetails && Array.isArray(selectedCustomer.dgDetails) && selectedCustomer.dgDetails.length > 0 && (
                 <div className="space-y-6 mb-6">
                   <div className="space-y-3">
-                    <h3 className="text-lg font-medium text-gray-900 border-b pb-2">DG Technical Details ({selectedCustomer.dgDetails.length})</h3>
+                    <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Equipment Technical Details ({selectedCustomer.dgDetails.length})</h3>
                     
                     {selectedCustomer.dgDetails.map((dgDetail, index) => (
                       <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                        <h4 className="text-sm font-medium text-gray-700 mb-3">DG Details #{index + 1}</h4>
+                        <h4 className="text-sm font-medium text-gray-700 mb-3">Equipment Details #{index + 1}</h4>
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <p className="text-xs text-gray-500">DG Serial Number</p>
+                            <p className="text-xs text-gray-500">Equipment Serial Number</p>
                             <p className="font-medium text-sm">{dgDetail.dgSerialNumbers}</p>
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500">DG Make</p>
+                            <p className="text-xs text-gray-500">Equipment Make</p>
                             <p className="font-medium text-sm">{dgDetail.dgMake}</p>
                           </div>
                           {dgDetail.oemMake && (
@@ -5381,11 +5382,11 @@ const CustomerManagement: React.FC = () => {
                             </div>
                           )}
                           <div>
-                            <p className="text-xs text-gray-500">DG Model</p>
+                            <p className="text-xs text-gray-500">Equipment Model</p>
                             <p className="font-medium text-sm">{dgDetail.dgModel}</p>
                           </div>
                           <div>
-                            <p className="text-xs text-gray-500">DG Rating (KVA)</p>
+                            <p className="text-xs text-gray-500">Equipment Rating (KVA)</p>
                             <p className="font-medium text-sm">{dgDetail.dgRatingKVA}</p>
                           </div>
                           <div>
@@ -5434,6 +5435,7 @@ const CustomerManagement: React.FC = () => {
                   </div>
                 </div>
               )}
+              */}
 
               {/* Contact History removed as per requirement */}
             </div>

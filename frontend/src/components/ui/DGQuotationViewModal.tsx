@@ -116,7 +116,7 @@ const DGQuotationViewModal: React.FC<DGQuotationViewModalProps> = ({
   const fetchDGQuotationPaymentHistory = async (quotationId: string) => {
     try {
       setLoadingPayments(true);
-      const response = await apiClient.dgSales.dgQuotationPayments.getByQuotation(quotationId);
+      const response = await apiClient.sales.dgQuotationPayments.getByQuotation(quotationId);
       console.log('DG Quotation Payment History Response:', response);
       if (response.success) {
         // Handle different possible response structures
@@ -602,9 +602,9 @@ const DGQuotationViewModal: React.FC<DGQuotationViewModalProps> = ({
             </div>
 
 
-            {/* DG Specifications */}
+            {/* Equipment Specifications */}
             <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">DG Specifications</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Equipment Specifications</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-4">
                   <div>
@@ -620,7 +620,7 @@ const DGQuotationViewModal: React.FC<DGQuotationViewModalProps> = ({
                     <p className="mt-1 text-sm text-gray-900">{quotation.dgSpecifications?.quantity || '-'}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">DG Model</label>
+                    <label className="block text-sm font-medium text-gray-700">Equipment Model</label>
                     <p className="mt-1 text-sm text-gray-900">{quotation.dgSpecifications?.dgModel || quotation.dgSpecifications?.model || '-'}</p>
                   </div>
                 </div>

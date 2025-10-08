@@ -264,7 +264,7 @@ const DGInvoiceManagement: React.FC = () => {
 
   // Handle edit invoice
   const handleEditInvoice = (invoice: DGInvoice) => {
-    navigate(`/dg-sales/invoice/edit/${invoice._id}`);
+    navigate(`/sales/invoice/edit/${invoice._id}`);
   };
 
   // Handle delete invoice
@@ -430,7 +430,7 @@ const DGInvoiceManagement: React.FC = () => {
               Export
             </Button>
             <Button
-              onClick={() => navigate('/dg-sales/invoice/create')}
+              onClick={() => navigate('/sales/invoice/create')}
               className="flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />

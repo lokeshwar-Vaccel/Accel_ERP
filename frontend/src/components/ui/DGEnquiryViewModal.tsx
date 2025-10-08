@@ -344,11 +344,11 @@ export default function DGEnquiryViewModal({ isOpen, onClose, onSuccess, enquiry
               )}
             </div>
 
-            {/* DG Requirements */}
+            {/* Equipment Requirements */}
             <div className="bg-gray-50 rounded-lg p-6">
               <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
                 <Settings className="h-5 w-5 mr-2 text-blue-600" />
-                DG Requirements
+                Equipment Requirements
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-white rounded-lg p-4 border border-gray-200">

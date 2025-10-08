@@ -170,11 +170,11 @@ const DGInvoiceForm: React.FC<DGInvoiceFormProps> = ({
 
     try {
       if (mode === 'from-po' && purchaseOrder) {
-        await apiClient.dgSales.invoices.createFromPO(purchaseOrder._id, formData);
+        await apiClient.sales.invoices.createFromPO(purchaseOrder._id, formData);
       } else if (mode === 'edit' && initialData) {
-        await apiClient.dgSales.invoices.update(initialData._id, formData);
+        await apiClient.sales.invoices.update(initialData._id, formData);
       } else {
-        await apiClient.dgSales.invoices.create(formData);
+        await apiClient.sales.invoices.create(formData);
       }
 
       onSuccess();

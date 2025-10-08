@@ -26,8 +26,8 @@ const router = Router();
 // All routes are protected
 router.use(protect);
 
-// Check module access for DG sales
-router.use(checkModuleAccess('dg_sales'));
+// Check module access for Sales
+router.use(checkModuleAccess('sales'));
 
 // OEM Order routes
 router.route('/')

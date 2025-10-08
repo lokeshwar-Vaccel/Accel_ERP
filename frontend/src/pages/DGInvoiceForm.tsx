@@ -1139,7 +1139,7 @@ const DGInvoiceFormPage: React.FC = () => {
         toast.success(`${getInvoiceTypeTitle()} created successfully!`);
       }
 
-      navigate('/dg-sales');
+      navigate('/sales');
     } catch (error) {
       console.error(`Error saving ${getInvoiceTypeTitle().toLowerCase()}:`, error);
       toast.error(`Failed to ${isEditMode ? 'update' : 'create'} ${getInvoiceTypeTitle().toLowerCase()}. Please try again.`);
@@ -1776,11 +1776,11 @@ const DGInvoiceFormPage: React.FC = () => {
       >
         <div className="flex space-x-3">
           <Button
-            onClick={() => navigate('/dg-sales')}
+            onClick={() => navigate('/sales')}
             className="bg-gray-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-700 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Back to DG Sales</span>
+            <span>Back to Sales</span>
           </Button>
         </div>
       </PageHeader>

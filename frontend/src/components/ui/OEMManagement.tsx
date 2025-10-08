@@ -80,7 +80,7 @@ const OEMManagement: React.FC<OEMManagementProps> = ({
         ...(searchTerm && { search: searchTerm })
       };
 
-      const response = await apiClient.dgSales.oems.getAll(params);
+      const response = await apiClient.sales.oems.getAll(params);
       setOems(response.data || []);
       setTotalPages(response.totalPages || 1);
       setTotalItems(response.total || 0);
@@ -99,7 +99,7 @@ const OEMManagement: React.FC<OEMManagementProps> = ({
   // Handle OEM creation
   const handleCreateOEM = async (oemData: any) => {
     try {
-      await apiClient.dgSales.oems.create(oemData);
+      await apiClient.sales.oems.create(oemData);
       toast.success('OEM created successfully');
       setShowCreateModal(false);
       fetchOEMs();
@@ -113,7 +113,7 @@ const OEMManagement: React.FC<OEMManagementProps> = ({
     if (!selectedOEM) return;
     
     try {
-      await apiClient.dgSales.oems.update(selectedOEM._id, oemData);
+      await apiClient.sales.oems.update(selectedOEM._id, oemData);
       toast.success('OEM updated successfully');
       setShowEditModal(false);
       setSelectedOEM(null);
@@ -128,7 +128,7 @@ const OEMManagement: React.FC<OEMManagementProps> = ({
     if (!selectedOEM) return;
     
     try {
-      await apiClient.dgSales.oems.delete(selectedOEM._id);
+      await apiClient.sales.oems.delete(selectedOEM._id);
       toast.success('OEM deleted successfully');
       setShowDeleteModal(false);
       setSelectedOEM(null);
@@ -142,7 +142,7 @@ const OEMManagement: React.FC<OEMManagementProps> = ({
   // Handle status update
   const handleStatusUpdate = async (oemId: string, status: string) => {
     try {
-      await apiClient.dgSales.oems.updateStatus(oemId, status);
+      await apiClient.sales.oems.updateStatus(oemId, status);
       toast.success('Status updated successfully');
       fetchOEMs();
     } catch (error: any) {

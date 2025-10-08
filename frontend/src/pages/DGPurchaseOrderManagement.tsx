@@ -229,7 +229,7 @@ const DGPurchaseOrderManagement: React.FC = () => {
       if (fromDate) params.startDate = fromDate;
       if (toDate) params.endDate = toDate;
 
-      const response = await apiClient.dgSales.dgPoFromCustomers.getAll(params);
+      const response = await apiClient.sales.dgPoFromCustomers.getAll(params);
       
       if (response.success) {
         setDGPoFromCustomers(response.data || []);
@@ -350,7 +350,7 @@ const DGPurchaseOrderManagement: React.FC = () => {
   const handleDeletePO = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this DG PO from customer?')) {
       try {
-        const response = await apiClient.dgSales.dgPoFromCustomers.delete(id);
+        const response = await apiClient.sales.dgPoFromCustomers.delete(id);
       if (response.success) {
           toast.success('DG PO from customer deleted successfully');
           fetchDGPoFromCustomers();
@@ -378,7 +378,7 @@ const DGPurchaseOrderManagement: React.FC = () => {
 
   const handleStatusUpdate = async (id: string, newStatus: string) => {
     try {
-      const response = await apiClient.dgSales.dgPoFromCustomers.updateStatus(id, { status: newStatus });
+      const response = await apiClient.sales.dgPoFromCustomers.updateStatus(id, { status: newStatus });
       if (response.success) {
         toast.success('Status updated successfully');
         fetchDGPoFromCustomers();
@@ -401,7 +401,7 @@ const DGPurchaseOrderManagement: React.FC = () => {
       if (fromDate) params.startDate = fromDate;
       if (toDate) params.endDate = toDate;
 
-      const response = await apiClient.dgSales.dgPoFromCustomers.export(params);
+      const response = await apiClient.sales.dgPoFromCustomers.export(params);
       
       if (response.success) {
         // Convert to Excel format
