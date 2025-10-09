@@ -85,6 +85,13 @@ const AppRoutes: React.FC = () => {
             <Route path="/amc-invoices/edit/:id" element={<AMCInvoiceForm />} />
             <Route path="/amc-invoices/:id" element={<AMCInvoiceView />} />
             <Route path="/amc-invoices/:id/print" element={<AMCInvoiceView />} />
+            
+            {/* AMC Proforma Management */}
+            <Route path="/amc-proforma" element={<AMCInvoiceManagement />} />
+            <Route path="/amc-proforma/create" element={<AMCInvoiceForm />} />
+            <Route path="/amc-proforma/edit/:id" element={<AMCInvoiceForm />} />
+            <Route path="/amc-proforma/:id" element={<AMCInvoiceView />} />
+            <Route path="/amc-proforma/:id/print" element={<AMCInvoiceView />} />
 
             {/* Purchase Invoice Management */}
             <Route path="/purchase-invoice/create" element={<CreatePurchaseinvoiceForm />} />

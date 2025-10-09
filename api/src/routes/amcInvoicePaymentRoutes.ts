@@ -48,10 +48,6 @@ router.get('/:invoiceId/payments', getAMCInvoicePayments);
 // @access  Private
 router.get('/:invoiceId/payment-summary', getAMCInvoicePaymentSummary);
 
-// @route   POST /api/v1/amc-invoice-payments/:invoiceId/payments
-// @desc    Create a new payment for an AMC invoice
-// @access  Private
-router.post('/:invoiceId/payments', createAMCInvoicePayment);
 
 // @route   PUT /api/v1/amc-invoice-payments/:id/status
 // @desc    Update AMC invoice payment status

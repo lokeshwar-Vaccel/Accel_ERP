@@ -1490,7 +1490,7 @@ const CreateDGInvoiceForm: React.FC<CreateDGInvoiceFormProps> = ({
       if (formData.invoicePdf && formData.invoicePdf instanceof File) {
         // New file upload - upload the file and get URL
         // Check if user is authenticated
-        const token = localStorage.getItem('authToken');
+        const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
         if (!token) {
           toast.error('Please log in to upload files.');
           setSubmitting(false);
@@ -1528,7 +1528,7 @@ const CreateDGInvoiceForm: React.FC<CreateDGInvoiceFormProps> = ({
         } else if (formData.qrCodeInvoice instanceof File) {
           // New file upload - upload the file and get URL
           // Check if user is authenticated
-          const token = localStorage.getItem('authToken');
+          const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
           if (!token) {
             toast.error('Please log in to upload files.');
             setSubmitting(false);

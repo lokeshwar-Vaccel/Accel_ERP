@@ -65,7 +65,7 @@ const DGProductImportModal: React.FC<DGProductImportModalProps> = ({
   // Check authentication status when modal opens
   React.useEffect(() => {
     if (isOpen) {
-      const token = localStorage.getItem('authToken');
+      const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
       console.log('🔐 Modal Opened - Auth Status:', {
         hasToken: !!token,
         tokenLength: token ? token.length : 0,
@@ -95,7 +95,7 @@ const DGProductImportModal: React.FC<DGProductImportModalProps> = ({
       }
       
       // Debug: Check authentication status
-      const token = localStorage.getItem('authToken');
+      const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
       console.log('🔐 Auth Token Status:', {
         hasToken: !!token,
         tokenLength: token ? token.length : 0,
@@ -225,7 +225,7 @@ const DGProductImportModal: React.FC<DGProductImportModalProps> = ({
         <div className="p-6 space-y-6">
           {/* Authentication Status */}
           {(() => {
-            const token = localStorage.getItem('authToken');
+            const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
             return token ? (
               <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                 <div className="flex items-center space-x-2">
@@ -288,7 +288,7 @@ const DGProductImportModal: React.FC<DGProductImportModalProps> = ({
 
           {/* File Upload */}
           <div className={`border-2 border-dashed rounded-lg p-6 text-center ${
-            localStorage.getItem('authToken') 
+            localStorage.getItem('authToken') || sessionStorage.getItem('authToken')
               ? 'border-gray-300' 
               : 'border-gray-200 bg-gray-50 opacity-50'
           }`}>
@@ -297,7 +297,7 @@ const DGProductImportModal: React.FC<DGProductImportModalProps> = ({
               type="file"
               accept=".xls,.xlsx,.csv"
               onChange={handleFileChange}
-              disabled={!localStorage.getItem('authToken')}
+              // disabled={!localStorage.getItem('authToken') || !sessionStorage.getItem('authToken')}
               className="hidden"
             />
             
@@ -306,7 +306,7 @@ const DGProductImportModal: React.FC<DGProductImportModalProps> = ({
                 <Upload className="w-12 h-12 text-gray-400 mx-auto" />
                 <div>
                   <p className="text-sm font-medium text-gray-700">
-                    {localStorage.getItem('authToken') 
+                    {localStorage.getItem('authToken') || sessionStorage.getItem('authToken')
                       ? 'Click to upload or drag and drop' 
                       : 'Please login first to upload files'
                     }
@@ -315,10 +315,10 @@ const DGProductImportModal: React.FC<DGProductImportModalProps> = ({
                 </div>
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={!localStorage.getItem('authToken')}
+                  // disabled={!localStorage.getItem('authToken') || !sessionStorage.getItem('authToken')}
                   className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {localStorage.getItem('authToken') ? 'Select File' : 'Login Required'}
+                  {localStorage.getItem('authToken') || sessionStorage.getItem('authToken') ? 'Select File' : 'Login Required'}
                 </button>
               </div>
             ) : (

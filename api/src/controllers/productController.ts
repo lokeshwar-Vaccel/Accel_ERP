@@ -391,11 +391,23 @@ export const deleteProduct = async (
       return next(new AppError('Product not found', 404));
     }
 
+    // Delete all stock entries associated with the same part number
+    try {
+      const productsWithSamePartNo = await Product.find({ partNo: product.partNo }).select('_id');
+      const productIdsWithSamePartNo = productsWithSamePartNo.map((p) => p._id);
+      if (productIdsWithSamePartNo.length > 0) {
+        await Stock.deleteMany({ product: { $in: productIdsWithSamePartNo } });
+      }
+    } catch (stockDeleteError) {
+      // If stock deletion fails, surface the error to the error handler
+      return next(stockDeleteError);
+    }
+
     await Product.findByIdAndDelete(req.params.id);
 
     const response: APIResponse = {
       success: true,
-      message: 'Product deleted successfully'
+      message: 'Product and associated stocks deleted successfully'
     };
 
     res.status(200).json(response);

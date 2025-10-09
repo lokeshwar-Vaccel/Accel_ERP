@@ -4932,8 +4932,6 @@ const InventoryManagement: React.FC = () => {
                   <button
                     onClick={async () => {
                       try {
-                        const token = localStorage.getItem('authToken');
-
                         const blob = await apiClient.inventory.downloadTemplate();
 
                         const url = window.URL.createObjectURL(blob);
@@ -5367,7 +5365,7 @@ const InventoryManagement: React.FC = () => {
                     const xhr = new XMLHttpRequest();
                     xhr.open('POST', '/api/v1/inventory/import', true);
                     // Add Authorization header from localStorage
-                    const token = localStorage.getItem('authToken');
+                    const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
                     if (token) {
                       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
                     }

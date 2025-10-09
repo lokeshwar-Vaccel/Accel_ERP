@@ -2384,8 +2384,10 @@ class ApiClient {
         body: JSON.stringify(paymentData),
       }),
 
-    getStats: () =>
-      this.makeRequest<{ success: boolean; data: any }>('/amc-invoices/stats'),
+    getStats: (params?: any) => {
+      const queryString = params ? `?${new URLSearchParams(params)}` : '';
+      return this.makeRequest<{ success: boolean; data: any }>(`/amc-invoices/stats${queryString}`);
+    },
 
     sendEmail: (id: string) =>
       this.makeRequest<{ success: boolean; message: string }>(`/amc-invoices/${id}/send-email`, {

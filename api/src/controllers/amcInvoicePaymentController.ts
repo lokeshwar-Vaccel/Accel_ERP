@@ -1,10 +1,91 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthenticatedRequest } from '../types';
+import { AuthenticatedRequest, APIResponse } from '../types';
 import { AppError } from '../errors/AppError';
 import { AMCInvoice } from '../models/AMCInvoice';
 import { AMCInvoicePayment, IAMCInvoicePayment } from '../models/AMCInvoicePayment';
 import { Customer } from '../models/Customer';
 import { generateAMCInvoicePaymentReceiptPDF } from '../utils/paymentReceiptPdf';
+import mongoose from 'mongoose';
+
+// Helper function to validate payment method details
+const validatePaymentMethodDetails = (paymentMethod: string, details: any): string | null => {
+  if (!details) {
+    return 'Payment method details are required';
+  }
+
+  switch (paymentMethod) {
+    case 'cash':
+      // Received by field is optional for cash payments
+      break;
+
+    case 'cheque':
+      if (!details.cheque?.chequeNumber || !details.cheque?.bankName || !details.cheque?.issueDate) {
+        return 'Cheque number, bank name, and issue date are required for cheque payments';
+      }
+      break;
+
+    case 'bank_transfer':
+    case 'bankTransfer':
+      if (!details.bankTransfer?.transferDate) {
+        return 'Transfer date is required for bank transfer payments';
+      }
+      break;
+
+    case 'upi':
+      // No required fields for UPI - transaction ID is optional
+      break;
+
+    case 'card':
+      // No required fields for card - transaction ID is optional
+      break;
+
+    case 'other':
+      if (!details.other?.methodName) {
+        return 'Method name is required for other payment methods';
+      }
+      break;
+
+    default:
+      return 'Invalid payment method';
+  }
+
+  return null;
+};
+
+// Helper function to recalculate AMC invoice payment totals (similar to regular quotations)
+const recalculateAMCInvoicePayments = async (amcInvoiceId: string): Promise<void> => {
+  try {
+    // Get all payments for this AMC invoice
+    const payments = await AMCInvoicePayment.find({ amcInvoiceId });
+    const totalPaidAmount = payments.reduce((sum, payment) => sum + payment.amount, 0);
+
+    // Get AMC invoice details
+    const amcInvoice = await AMCInvoice.findById(amcInvoiceId);
+    if (!amcInvoice) return;
+
+    const totalAmount = amcInvoice.grandTotal || 0;
+    const remainingAmount = Math.max(0, totalAmount - totalPaidAmount);
+
+    // Determine payment status
+    let paymentStatus: 'pending' | 'partial' | 'paid' | 'gst_pending';
+    if (totalPaidAmount === 0) {
+      paymentStatus = 'pending';
+    } else if (totalPaidAmount >= totalAmount) {
+      paymentStatus = 'paid';
+    } else {
+      paymentStatus = 'partial';
+    }
+
+    // Update AMC invoice with new payment totals
+    await AMCInvoice.findByIdAndUpdate(amcInvoiceId, {
+      paidAmount: totalPaidAmount,
+      remainingAmount: remainingAmount,
+      paymentStatus: paymentStatus
+    });
+  } catch (error) {
+    console.error('Error updating AMC invoice payment status:', error);
+  }
+};
 
 // @desc    Get all payments for a specific AMC invoice
 // @route   GET /api/v1/amc-invoice-payments/:invoiceId/payments
@@ -38,8 +119,8 @@ export const getAMCInvoicePayments = async (
   }
 };
 
-// @desc    Create a new payment for an AMC invoice
-// @route   POST /api/v1/amc-invoice-payments/:invoiceId/payments
+// @desc    Create a new AMC invoice payment with detailed method info
+// @route   POST /api/v1/amc-invoice-payments
 // @access  Private
 export const createAMCInvoicePayment = async (
   req: AuthenticatedRequest,
@@ -47,82 +128,149 @@ export const createAMCInvoicePayment = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { invoiceId } = req.params;
-    const paymentData = req.body;
+    const {
+      amcInvoiceId,
+      invoiceNumber,
+      customerId,
+      amount,
+      currency = 'INR',
+      paymentMethod,
+      paymentMethodDetails,
+      paymentDate,
+      notes,
+      receiptNumber
+    } = req.body;
 
-    console.log("paymentData", paymentData);
-    
-    
-    // Verify invoice exists
-    const invoice = await AMCInvoice.findById(invoiceId);
-    if (!invoice) {
-      return next(new AppError('AMC invoice not found', 404));
+    // Validate required fields
+    if (!amcInvoiceId || !invoiceNumber || !customerId || !amount || !paymentMethod) {
+      return next(new AppError('Missing required fields', 400));
     }
-    console.log("invoice123", invoice);
 
-    // Validate payment amount
-    const paymentAmount = Number(paymentData.amount);
-    if (paymentAmount <= 0) {
+    // Validate ObjectId format
+    if (!mongoose.Types.ObjectId.isValid(customerId)) {
+      return next(new AppError('Invalid customer ID format', 400));
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(amcInvoiceId)) {
+      return next(new AppError('Invalid AMC invoice ID format', 400));
+    }
+
+    if (amount <= 0) {
       return next(new AppError('Payment amount must be greater than 0', 400));
     }
 
-    // Check if payment amount exceeds remaining amount
-    if (paymentAmount > invoice.remainingAmount) {
-      return next(new AppError('Payment amount cannot exceed remaining amount', 400));
+    // Validate payment method details based on payment method
+    const validationError = validatePaymentMethodDetails(paymentMethod, paymentMethodDetails);
+    if (validationError) {
+      return next(new AppError(validationError, 400));
     }
 
-    // Create payment record
+    // Check if AMC invoice exists
+    const amcInvoice = await AMCInvoice.findById(amcInvoiceId);
+    if (!amcInvoice) {
+      return next(new AppError('AMC Invoice not found', 404));
+    }
+
+    // Debug customer lookup
+    console.log('=== Customer Lookup Debug ===');
+    console.log('Request Customer ID:', customerId);
+    console.log('Invoice Customer ID:', amcInvoice.customer);
+    console.log('Customer ID type:', typeof customerId);
+    console.log('Customer ID length:', customerId?.length);
+    console.log('Customer ID valid format:', /^[0-9a-fA-F]{24}$/.test(customerId));
+    console.log('============================');
+
+    // Check if customer exists - try direct lookup first, then fallback to invoice customer
+    let customer = await Customer.findById(customerId);
+    console.log('Direct customer lookup result:', customer ? 'Found' : 'Not found');
+    
+    // If customer not found with provided ID, try using invoice's customer
+    if (!customer && amcInvoice.customer) {
+      console.log('Customer not found with provided ID, trying invoice customer...');
+      customer = await Customer.findById(amcInvoice.customer);
+      console.log('Invoice customer lookup result:', customer ? 'Found' : 'Not found');
+    }
+
+    if (!customer) {
+      console.error('Customer not found with ID:', customerId);
+      return next(new AppError(`Customer not found with ID: ${customerId}`, 404));
+    }
+
+    console.log('Customer found:', customer.name, customer.addresses?.[0]?.email || 'No email');
+
+    // Structure payment method details based on the selected payment method
+    // Convert frontend keys to backend keys
+    const keyMapping: { [key: string]: string } = {
+      'bank_transfer': 'bankTransfer',
+      'bankTransfer': 'bankTransfer',
+      'cheque': 'cheque',
+      'upi': 'upi',
+      'card': 'card',
+      'cash': 'cash',
+      'other': 'other'
+    };
+    
+    const backendKey = keyMapping[paymentMethod] || paymentMethod;
+    
+    // Get the payment method details from the correct key
+    let methodDetails = {};
+    if (paymentMethodDetails[paymentMethod]) {
+      // If data is in the payment method key (e.g., bank_transfer)
+      methodDetails = paymentMethodDetails[paymentMethod];
+    } else if (paymentMethodDetails[backendKey]) {
+      // If data is in the backend key (e.g., bankTransfer)
+      methodDetails = paymentMethodDetails[backendKey];
+    }
+    
+    // Debug logging
+    console.log('=== AMC Invoice Payment Method Details Debug ===');
+    console.log('Payment Method:', paymentMethod);
+    console.log('Backend Key:', backendKey);
+    console.log('Payment Method Details:', JSON.stringify(paymentMethodDetails, null, 2));
+    console.log('Method Details:', JSON.stringify(methodDetails, null, 2));
+    console.log('==============================================');
+    
+    const structuredPaymentMethodDetails = {
+      [backendKey]: methodDetails
+    };
+
+    // Create the payment record
     const payment = new AMCInvoicePayment({
-      amcInvoiceId: invoiceId,
-      invoiceNumber: invoice.invoiceNumber,
-      customerId: invoice.customer,
-      amount: paymentAmount,
-      currency: paymentData.currency || 'INR',
-      paymentMethod: paymentData.paymentMethod,
-      paymentMethodDetails: paymentData.paymentMethodDetails || {},
-      paymentStatus: paymentData.paymentStatus || 'completed',
-      paymentDate: paymentData.paymentDate ? new Date(paymentData.paymentDate) : new Date(),
-      notes: paymentData.notes,
-      receiptNumber: paymentData.receiptNumber,
-      createdBy: req.user!.id
+      amcInvoiceId,
+      invoiceNumber,
+      customerId: customer._id, // Use the found customer's ID
+      amount,
+      currency,
+      paymentMethod,
+      paymentMethodDetails: structuredPaymentMethodDetails,
+      paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
+      notes,
+      receiptNumber,
+      createdBy: req.user?.id,
+      paymentStatus: 'completed' // Set to completed like regular quotations
     });
 
     await payment.save();
 
-    // Update invoice payment status
-    const totalPaidAmount = await AMCInvoicePayment.aggregate([
-      { $match: { amcInvoiceId: invoice._id, paymentStatus: 'completed' } },
-      { $group: { _id: null, total: { $sum: '$amount' } } }
-    ]);
+    // Update AMC invoice payment status using the same pattern as regular quotations
+    await recalculateAMCInvoicePayments(amcInvoiceId);
 
-    const newPaidAmount = totalPaidAmount.length > 0 ? totalPaidAmount[0].total : 0;
-    const newRemainingAmount = invoice.grandTotal - newPaidAmount;
-    
-    let newPaymentStatus = 'pending';
-    if (newPaidAmount >= invoice.grandTotal) {
-      newPaymentStatus = 'paid';
-    } else if (newPaidAmount > 0) {
-      newPaymentStatus = 'partial';
-    }
-
-    await AMCInvoice.findByIdAndUpdate(invoiceId, {
-      paidAmount: newPaidAmount,
-      remainingAmount: newRemainingAmount,
-      paymentStatus: newPaymentStatus
-    });
-
-    // Populate and return
+    // Populate the response
     const populatedPayment = await AMCInvoicePayment.findById(payment._id)
+      .populate('amcInvoiceId', 'invoiceNumber customer grandTotal')
+      .populate('customerId', 'name email phone')
       .populate('createdBy', 'firstName lastName email');
 
-    res.status(201).json({
+    const response: APIResponse = {
       success: true,
-      message: 'Payment recorded successfully',
-      data: { payment: populatedPayment }
-    });
+      message: 'AMC Invoice payment created successfully',
+      data: populatedPayment
+    };
+
+    res.status(201).json(response);
   } catch (error) {
     console.error('Error creating AMC invoice payment:', error);
-    next(new AppError('Failed to record payment', 500));
+    next(new AppError('Failed to create AMC invoice payment', 500));
   }
 };
 
@@ -160,29 +308,7 @@ export const updateAMCInvoicePayment = async (
     ).populate('createdBy', 'firstName lastName email');
 
     // Recalculate invoice payment status
-    const invoice = await AMCInvoice.findById(invoiceId);
-    if (invoice) {
-      const totalPaidAmount = await AMCInvoicePayment.aggregate([
-        { $match: { amcInvoiceId: invoice._id, paymentStatus: 'completed' } },
-        { $group: { _id: null, total: { $sum: '$amount' } } }
-      ]);
-
-      const newPaidAmount = totalPaidAmount.length > 0 ? totalPaidAmount[0].total : 0;
-      const newRemainingAmount = invoice.grandTotal - newPaidAmount;
-      
-      let newPaymentStatus = 'pending';
-      if (newPaidAmount >= invoice.grandTotal) {
-        newPaymentStatus = 'paid';
-      } else if (newPaidAmount > 0) {
-        newPaymentStatus = 'partial';
-      }
-
-      await AMCInvoice.findByIdAndUpdate(invoiceId, {
-        paidAmount: newPaidAmount,
-        remainingAmount: newRemainingAmount,
-        paymentStatus: newPaymentStatus
-      });
-    }
+    await recalculateAMCInvoicePayments(invoiceId);
 
     res.status(200).json({
       success: true,
@@ -220,29 +346,7 @@ export const deleteAMCInvoicePayment = async (
     await AMCInvoicePayment.findByIdAndDelete(paymentId);
 
     // Recalculate invoice payment status
-    const invoice = await AMCInvoice.findById(invoiceId);
-    if (invoice) {
-      const totalPaidAmount = await AMCInvoicePayment.aggregate([
-        { $match: { amcInvoiceId: invoice._id, paymentStatus: 'completed' } },
-        { $group: { _id: null, total: { $sum: '$amount' } } }
-      ]);
-
-      const newPaidAmount = totalPaidAmount.length > 0 ? totalPaidAmount[0].total : 0;
-      const newRemainingAmount = invoice.grandTotal - newPaidAmount;
-      
-      let newPaymentStatus = 'pending';
-      if (newPaidAmount >= invoice.grandTotal) {
-        newPaymentStatus = 'paid';
-      } else if (newPaidAmount > 0) {
-        newPaymentStatus = 'partial';
-      }
-
-      await AMCInvoice.findByIdAndUpdate(invoiceId, {
-        paidAmount: newPaidAmount,
-        remainingAmount: newRemainingAmount,
-        paymentStatus: newPaymentStatus
-      });
-    }
+    await recalculateAMCInvoicePayments(invoiceId);
 
     res.status(200).json({
       success: true,
@@ -477,29 +581,7 @@ export const updateAMCInvoicePaymentStatus = async (
     ).populate('createdBy', 'firstName lastName email');
 
     // Recalculate invoice payment totals
-    const invoice = await AMCInvoice.findById(payment.amcInvoiceId);
-    if (invoice) {
-      const totalPaidAmount = await AMCInvoicePayment.aggregate([
-        { $match: { amcInvoiceId: invoice._id, paymentStatus: 'completed' } },
-        { $group: { _id: null, total: { $sum: '$amount' } } }
-      ]);
-
-      const newPaidAmount = totalPaidAmount.length > 0 ? totalPaidAmount[0].total : 0;
-      const newRemainingAmount = invoice.grandTotal - newPaidAmount;
-      
-      let newPaymentStatus = 'pending';
-      if (newPaidAmount >= invoice.grandTotal) {
-        newPaymentStatus = 'paid';
-      } else if (newPaidAmount > 0) {
-        newPaymentStatus = 'partial';
-      }
-
-      await AMCInvoice.findByIdAndUpdate(payment.amcInvoiceId, {
-        paidAmount: newPaidAmount,
-        remainingAmount: newRemainingAmount,
-        paymentStatus: newPaymentStatus
-      });
-    }
+    await recalculateAMCInvoicePayments(payment.amcInvoiceId.toString());
 
     res.status(200).json({
       success: true,

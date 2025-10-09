@@ -615,7 +615,7 @@ const CustomerManagement: React.FC = () => {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/v1/customers/import', true);
       // Add Authorization header from localStorage
-      const token = localStorage.getItem('authToken');
+      const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
       if (token) {
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       }

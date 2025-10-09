@@ -62,10 +62,16 @@ router.post('/import',
 );
 
 // List DG Enquiries (paginated, filtered) - Updated to use new controller
-router.get('/', getAllDGEnquiries);
+router.get('/',
+  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
+  checkPermission('write'),
+  getAllDGEnquiries);
 
 // Get DG Enquiry statistics
-router.get('/stats', getDGEnquiryStats);
+router.get('/stats',
+  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
+  checkPermission('write'),
+  getDGEnquiryStats);
 
 // Create new DG Enquiry
 router.post('/',

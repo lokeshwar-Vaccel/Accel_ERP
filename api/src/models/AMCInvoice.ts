@@ -5,6 +5,7 @@ export interface IAMCInvoice extends Document {
   // Invoice identification
   invoiceNumber: string;
   invoiceType: 'amc';
+  type: 'amcInvoice' | 'amcProforma'; // New type field to distinguish between invoice and proforma
   issueDate: Date;
   dueDate: Date;
   
@@ -173,7 +174,11 @@ export interface IAMCInvoice extends Document {
 const AMCInvoiceSchema = new Schema<IAMCInvoice>({
   // Invoice identification
   invoiceNumber: { type: String, unique: true, required: true },
-  invoiceType: { type: String, default: 'amc', enum: ['amc'] },
+  invoiceType: {
+    type: String,
+    enum: ['sale', 'proforma'],
+    required: true
+  },
   issueDate: { type: Date, required: true },
   dueDate: { type: Date, required: true },
   

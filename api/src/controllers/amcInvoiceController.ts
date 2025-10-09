@@ -22,7 +22,7 @@ export const getAMCInvoices = async (req: Request, res: Response, next: NextFunc
     const status = req.query.status as string;
     const paymentStatus = req.query.paymentStatus as string;
     const amcType = req.query.amcType as string;
-
+    const invoiceType = req.query.invoiceType as string;
     // Build filter object
     const filter: any = {};
 
@@ -50,6 +50,11 @@ export const getAMCInvoices = async (req: Request, res: Response, next: NextFunc
     // Add AMC type filter
     if (amcType && amcType !== 'all') {
       filter.amcType = amcType;
+    }
+
+    // Add invoice type filter (sale or proforma)
+    if (invoiceType && invoiceType !== 'all') {
+      filter.invoiceType = invoiceType;
     }
 
     // Add date filter
@@ -780,7 +785,7 @@ const convertQuotationToInvoice = (quotation: any, additionalData: any = {}): an
 
   return {
     // Invoice identification
-    invoiceType: 'amc',
+    invoiceType: 'sale',
     issueDate: new Date(),
     dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
     
@@ -993,6 +998,14 @@ export const getAMCInvoiceStats = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const invoiceType = req.query.invoiceType as string;
+    
+    // Build base filter for invoice type
+    const baseFilter: any = {};
+    if (invoiceType && invoiceType !== 'all') {
+      baseFilter.invoiceType = invoiceType;
+    }
+
     const [
       totalInvoices,
       draftInvoices,
@@ -1006,23 +1019,26 @@ export const getAMCInvoiceStats = async (
       amcCount,
       camcCount
     ] = await Promise.all([
-      AMCInvoice.countDocuments(),
-      AMCInvoice.countDocuments({ status: 'draft' }),
-      AMCInvoice.countDocuments({ status: 'sent' }),
-      AMCInvoice.countDocuments({ status: 'paid' }),
-      AMCInvoice.countDocuments({ status: 'overdue' }),
-      AMCInvoice.countDocuments({ status: 'cancelled' }),
+      AMCInvoice.countDocuments(baseFilter),
+      AMCInvoice.countDocuments({ ...baseFilter, status: 'draft' }),
+      AMCInvoice.countDocuments({ ...baseFilter, status: 'sent' }),
+      AMCInvoice.countDocuments({ ...baseFilter, status: 'paid' }),
+      AMCInvoice.countDocuments({ ...baseFilter, status: 'overdue' }),
+      AMCInvoice.countDocuments({ ...baseFilter, status: 'cancelled' }),
       AMCInvoice.aggregate([
+        { $match: baseFilter },
         { $group: { _id: null, total: { $sum: '$grandTotal' } } }
       ]),
       AMCInvoice.aggregate([
+        { $match: baseFilter },
         { $group: { _id: null, total: { $sum: '$paidAmount' } } }
       ]),
       AMCInvoice.aggregate([
+        { $match: baseFilter },
         { $group: { _id: null, total: { $sum: '$remainingAmount' } } }
       ]),
-      AMCInvoice.countDocuments({ amcType: 'AMC' }),
-      AMCInvoice.countDocuments({ amcType: 'CAMC' })
+      AMCInvoice.countDocuments({ ...baseFilter, amcType: 'AMC' }),
+      AMCInvoice.countDocuments({ ...baseFilter, amcType: 'CAMC' })
     ]);
 
     const response: APIResponse = {

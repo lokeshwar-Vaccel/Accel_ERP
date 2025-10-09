@@ -71,7 +71,11 @@ interface PaginationInfo {
   itemsPerPage: number;
 }
 
-const AMCInvoiceManagement: React.FC = () => {
+interface AMCInvoiceManagementProps {
+  invoiceType?: 'sale' | 'proforma';
+}
+
+const AMCInvoiceManagement: React.FC<AMCInvoiceManagementProps> = ({ invoiceType = 'sale' }) => {
   const navigate = useNavigate();
   const [invoices, setInvoices] = useState<AMCInvoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,6 +85,9 @@ const AMCInvoiceManagement: React.FC = () => {
     totalItems: 0,
     itemsPerPage: 10
   });
+
+  console.log("invoices-99992:", invoiceType);
+  
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -118,7 +125,7 @@ const AMCInvoiceManagement: React.FC = () => {
   useEffect(() => {
     fetchInvoices();
     fetchStats();
-  }, [currentPage, itemsPerPage, searchTerm, statusFilter, paymentStatusFilter, amcTypeFilter, startDate, endDate]);
+  }, [currentPage, itemsPerPage, searchTerm, statusFilter, paymentStatusFilter, amcTypeFilter, startDate, endDate, invoiceType]);
 
   const fetchInvoices = async () => {
     try {
@@ -131,7 +138,8 @@ const AMCInvoiceManagement: React.FC = () => {
         ...(paymentStatusFilter !== 'all' && { paymentStatus: paymentStatusFilter }),
         ...(amcTypeFilter !== 'all' && { amcType: amcTypeFilter }),
         ...(startDate && { startDate }),
-        ...(endDate && { endDate })
+        ...(endDate && { endDate }),
+        invoiceType: invoiceType
       });
 
       const response = await apiClient.amcInvoices.getAll(params);
@@ -152,7 +160,11 @@ const AMCInvoiceManagement: React.FC = () => {
 
   const fetchStats = async () => {
     try {
-      const response = await apiClient.amcInvoices.getStats();
+      const params = new URLSearchParams();
+      if (invoiceType) {
+        params.append('invoiceType', invoiceType);
+      }
+      const response = await apiClient.amcInvoices.getStats(params);
       if (response.success && response.data) {
         setStats(response.data);
       }
@@ -348,16 +360,20 @@ const AMCInvoiceManagement: React.FC = () => {
       {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">AMC Invoice Management</h1>
-          <p className="text-gray-600">Manage Annual Maintenance Contract invoices</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            AMC {invoiceType === 'proforma' ? 'Proforma' : 'Invoice'} Management
+          </h1>
+          <p className="text-gray-600">
+            Manage Annual Maintenance Contract {invoiceType === 'proforma' ? 'proforma invoices' : 'invoices'}
+          </p>
         </div>
         <div className="flex gap-3">
           <Button
-            onClick={() => navigate('/amc-invoices/create')}
+            onClick={() => navigate('/amc-invoices/create', { state: { invoiceType } })}
             className="flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
-            Create Invoice
+            Create {invoiceType === 'proforma' ? 'Proforma' : 'Invoice'}
           </Button>
           <Button
               // onClick={handleExportToExcel}
@@ -536,14 +552,18 @@ const AMCInvoiceManagement: React.FC = () => {
         ) : invoices.length === 0 ? (
           <div className="p-8 text-center">
             <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No AMC invoices found</h3>
-            <p className="text-gray-600 mb-4">Get started by creating your first AMC invoice.</p>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              No AMC {invoiceType === 'proforma' ? 'proforma invoices' : 'invoices'} found
+            </h3>
+            <p className="text-gray-600 mb-4">
+              Get started by creating your first AMC {invoiceType === 'proforma' ? 'proforma invoice' : 'invoice'}.
+            </p>
             <Button
-              onClick={() => navigate('/amc-invoices/create')}
+              onClick={() => navigate('/amc-invoices/create', { state: { invoiceType } })}
               className="flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
-              Create Invoice
+              Create {invoiceType === 'proforma' ? 'Proforma' : 'Invoice'}
             </Button>
           </div>
         ) : (
@@ -740,14 +760,14 @@ const AMCInvoiceManagement: React.FC = () => {
                           {(invoice.status === 'sent' || invoice.status === 'overdue') && (
                             <>
                               {/* Print Icon - Sent or overdue status */}
-                              <Tooltip content="Print Invoice" position="top">
+                              {/* <Tooltip content="Print Invoice" position="top">
                                 <button
                                   onClick={() => navigate(`/amc-invoices/${invoice._id}/print`)}
                                   className="p-2 text-gray-600 hover:bg-gray-50 hover:scale-110 transition-all duration-200 rounded-md"
                                 >
                                   <Printer className="w-4 h-4" />
                                 </button>
-                              </Tooltip>
+                              </Tooltip> */}
                             </>
                           )}
                         </div>

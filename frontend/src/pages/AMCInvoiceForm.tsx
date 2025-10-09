@@ -203,6 +203,7 @@ const AMCInvoiceForm: React.FC = () => {
     // Get quotation data from location state
     const quotationFromState = (location.state as any)?.quotation;
     const mode = (location.state as any)?.mode;
+    const invoiceType = (location.state as any)?.invoiceType || 'sale';
 
     // Determine if this is edit mode
     const isEditMode = mode === 'edit' && Boolean(quotationFromState);
@@ -1089,7 +1090,7 @@ const AMCInvoiceForm: React.FC = () => {
             // Add AMC-specific fields with calculated totals
             const amcInvoiceData = {
                 ...sanitizedData,
-                invoiceType: 'amc',
+                invoiceType: invoiceType,
                 // Override quotation-specific fields for AMC invoices
                 quotationNumber: invoiceData.invoiceNumber, // Use invoice number as quotation number
                 company: {
@@ -1191,11 +1192,11 @@ const AMCInvoiceForm: React.FC = () => {
 
             if (isEditMode && quotationFromState?._id) {
                 await apiClient.amcInvoices.update(quotationFromState._id, amcInvoiceData);
-                toast.success('AMC invoice updated successfully');
+                toast.success(`AMC ${invoiceType === 'proforma' ? 'proforma invoice' : 'invoice'} updated successfully`);
 
             } else {
                 await apiClient.amcInvoices.create(amcInvoiceData);
-                toast.success('AMC invoice created successfully');
+                toast.success(`AMC ${invoiceType === 'proforma' ? 'proforma invoice' : 'invoice'} created successfully`);
             }
             navigate('/amc-invoices');
         } catch (error: any) {
@@ -1402,10 +1403,10 @@ const AMCInvoiceForm: React.FC = () => {
 
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900">
-                                {isEditMode ? 'Edit AMC Invoice' : 'Create AMC Invoice'}
+                                {isEditMode ? `Edit AMC ${invoiceType === 'proforma' ? 'Proforma' : 'Invoice'}` : `Create AMC ${invoiceType === 'proforma' ? 'Proforma' : 'Invoice'}`}
                             </h1>
                             <p className="text-sm text-gray-600 mt-1">
-                                {isEditMode ? 'Update existing AMC invoice details' : 'Fill in the details to create a new AMC invoice'}
+                                {isEditMode ? `Update existing AMC ${invoiceType === 'proforma' ? 'proforma invoice' : 'invoice'} details` : `Fill in the details to create a new AMC ${invoiceType === 'proforma' ? 'proforma invoice' : 'invoice'}`}
                             </p>
                         </div>
                     </div>
@@ -1460,7 +1461,7 @@ const AMCInvoiceForm: React.FC = () => {
 
             {/* Document Title */}
             <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">ANNUAL MAINTENANCE ({invoiceData.amcType}) INVOICE</h1>
+                <h1 className="text-2xl font-bold text-gray-900 mb-2">ANNUAL MAINTENANCE ({invoiceData.amcType}) {invoiceType === 'proforma' ? 'PROFORMA INVOICE' : 'INVOICE'}</h1>
                 <div className="flex justify-center items-center space-x-4">
                     <div className="flex items-center">
                         <select
