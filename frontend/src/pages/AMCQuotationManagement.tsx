@@ -1493,6 +1493,14 @@ const AMCQuotationManagement: React.FC = () => {
             }
           }}
           onPrint={() => handlePrintQuotation(selectedQuotation)}
+          onConvertToInvoice={() => {
+            setShowViewModal(false);
+            if (selectedQuotation) {
+              navigate('/amc-invoices/create', {
+                state: { quotation: selectedQuotation }
+              });
+            }
+          }}
           paymentHistory={amcQuotationPaymentHistory}
           loadingPaymentHistory={loadingAmcQuotationPayments}
           onRefreshPaymentHistory={() => selectedQuotation && fetchAMCQuotationPaymentHistory(selectedQuotation._id)}

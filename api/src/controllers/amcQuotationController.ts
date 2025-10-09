@@ -735,6 +735,8 @@ const sanitizeAMCQuotationData = (data: any): any => {
     amcPeriodTo: data.amcPeriodTo ? new Date(data.amcPeriodTo) : undefined,
     gstIncluded: Boolean(data.gstIncluded),
     selectedAddressId: data.selectedAddressId ? String(data.selectedAddressId).trim() : undefined,
+    billToAddressId: data.billToAddressId ? String(data.billToAddressId).trim() : undefined,
+    shipToAddressId: data.shipToAddressId ? String(data.shipToAddressId).trim() : undefined,
     // Standard quotation fields
     items: Array.isArray(data.items) ? data.items.map((item: any) => ({
       product: String(item.product || '').trim(),

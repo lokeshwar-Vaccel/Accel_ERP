@@ -18,11 +18,12 @@ import {
     Clock,
     DollarSign,
     Trash2,
-    ArrowLeft
+    ArrowLeft,
+    Calculator
 } from 'lucide-react';
-import { Button } from '../ui/Botton';
-import { apiClient } from '../../utils/api';
-import { RootState } from '../../store';
+import { Button } from '../components/ui/Botton';
+import { apiClient } from '../utils/api';
+import { RootState } from '../store';
 import toast from 'react-hot-toast';
 import {
     calculateQuotationTotals,
@@ -34,8 +35,8 @@ import {
     type ValidationError,
     type BatteryBuyBack,
     validateQuotationData
-} from '../../utils/quotationUtils';
-import { numberToWords } from '../../utils';
+} from '../utils/quotationUtils';
+import { numberToWords } from '../utils';
 
 // Types
 interface Customer {
@@ -84,6 +85,8 @@ interface AMCOfferItem {
     dgRatingKVA?: number;
     typeOfVisits?: number;
     qty?: number;
+    hsnCode?: string;
+    uom?: string;
     amcCostPerDG?: number;
     totalAMCAmountPerDG: number;
     gst18: number;
@@ -107,8 +110,30 @@ interface AMCSpareItem {
     availableQuantity?: number;
 }
 
-interface AMCQuotationData extends Omit<QuotationData, 'batteryBuyBack'> {
-    // AMC-specific fields
+interface AMCInvoiceData extends Omit<any, 'ackDate' | 'deliveryNoteDate' | 'referenceDate' | 'buyerOrderDate' | 'paymentStatus' | 'status'> {
+    // Invoice identification
+    invoiceNumber: string;
+    issueDate: Date;
+    dueDate: Date;
+
+    // Reference fields
+    irn?: string;
+    ackNo?: string;
+    ackDate?: string;
+    deliveryNote?: string;
+    referenceNo?: string;
+    referenceDate?: string;
+    buyerOrderNo?: string;
+    buyerOrderDate?: string;
+    dispatchDocNo?: string;
+    dispatchedThrough?: string;
+    termsOfPayment?: string;
+    otherReferences?: string;
+    deliveryNoteDate?: string;
+    destination?: string;
+    termsOfDelivery?: string;
+
+    // AMC specific fields
     amcType: 'AMC' | 'CAMC';
     contractDuration: number; // in months
     contractStartDate: Date;
@@ -145,9 +170,30 @@ interface AMCQuotationData extends Omit<QuotationData, 'batteryBuyBack'> {
     selectedAddressId?: string;
     billToAddressId?: string;
     shipToAddressId?: string;
+
+    // Financial details
+    subtotal: number;
+    cgst: number;
+    sgst: number;
+    igst: number;
+    totalTax: number;
+    grandTotal: number;
+    amountInWords: string;
+
+    // Payment tracking
+    paidAmount: number;
+    remainingAmount: number;
+    paymentStatus: 'pending' | 'partial' | 'paid' | 'overdue';
+
+    // Status
+    status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
+
+    // Additional fields
+    notes?: string;
+    terms?: string;
 }
 
-const AMCQuotationForm: React.FC = () => {
+const AMCInvoiceForm: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const currentUser = useSelector((state: RootState) => state.auth.user);
@@ -157,6 +203,7 @@ const AMCQuotationForm: React.FC = () => {
     // Get quotation data from location state
     const quotationFromState = (location.state as any)?.quotation;
     const mode = (location.state as any)?.mode;
+    const invoiceType = (location.state as any)?.invoiceType || 'sale';
 
     // Determine if this is edit mode
     const isEditMode = mode === 'edit' && Boolean(quotationFromState);
@@ -172,8 +219,30 @@ const AMCQuotationForm: React.FC = () => {
     const [submitting, setSubmitting] = useState(false);
 
     // Form state
-    const [quotationData, setQuotationData] = useState<AMCQuotationData>({
+    const [invoiceData, setInvoiceData] = useState<AMCInvoiceData>({
         ...getDefaultQuotationData() as QuotationData,
+        // Invoice identification
+        invoiceNumber: '',
+        issueDate: new Date(),
+        dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+
+        // Reference fields
+        irn: '',
+        ackNo: '',
+        ackDate: '',
+        deliveryNote: '',
+        referenceNo: '',
+        referenceDate: '',
+        buyerOrderNo: '',
+        buyerOrderDate: '',
+        dispatchDocNo: '',
+        dispatchedThrough: '',
+        termsOfPayment: '',
+        otherReferences: '',
+        deliveryNoteDate: '',
+        destination: '',
+        termsOfDelivery: '',
+
         amcType: 'AMC',
         contractDuration: 12,
         contractStartDate: new Date(),
@@ -217,9 +286,30 @@ const AMCQuotationForm: React.FC = () => {
         gstIncluded: true,
         selectedAddressId: undefined,
         billToAddressId: undefined,
-        shipToAddressId: undefined
+        shipToAddressId: undefined,
+
+        // Financial details
+        subtotal: 0,
+        cgst: 0,
+        sgst: 0,
+        igst: 0,
+        totalTax: 0,
+        grandTotal: 0,
+        amountInWords: '',
+
+        // Payment tracking
+        paidAmount: 0,
+        remainingAmount: 0,
+        paymentStatus: 'pending',
+
+        // Status
+        status: 'draft',
+
+        // Additional fields
+        notes: '',
+        terms: ''
     });
-    console.log("quotationData:",quotationData);
+    console.log("invoiceData:", invoiceData);
     const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
     const [customerSearchTerm, setCustomerSearchTerm] = useState<string | undefined>(undefined);
@@ -246,6 +336,23 @@ const AMCQuotationForm: React.FC = () => {
     useEffect(() => {
         loadData();
     }, []);
+
+    // Recalculate totals when offer items change
+    useEffect(() => {
+        if (invoiceData.offerItems && invoiceData.offerItems.length > 0) {
+            const amcTotals = calculateAMCTotals(invoiceData.offerItems, invoiceData.gstIncluded);
+            setInvoiceData(prev => ({
+                ...prev,
+                subtotal: amcTotals.subtotal,
+                cgst: amcTotals.cgst,
+                sgst: amcTotals.sgst,
+                igst: amcTotals.igst,
+                totalTax: amcTotals.totalTax,
+                grandTotal: amcTotals.grandTotal,
+                amountInWords: numberToWords(amcTotals.grandTotal)
+            }));
+        }
+    }, [invoiceData.offerItems, invoiceData.gstIncluded]);
 
     // Close address dropdowns when clicking outside
     useEffect(() => {
@@ -291,7 +398,7 @@ const AMCQuotationForm: React.FC = () => {
                 amcPeriodFrom: safeDateConversion(quotationFromState.amcPeriodFrom),
                 amcPeriodTo: safeDateConversion(quotationFromState.amcPeriodTo)
             };
-            setQuotationData(processedData);
+            setInvoiceData(processedData);
         }
     }, [isEditMode, quotationFromState]);
 
@@ -378,7 +485,7 @@ const AMCQuotationForm: React.FC = () => {
                     } catch (dropdownError) {
                         prodResp = await apiClient.products.getAll({ limit: 10000, page: 1 });
                     }
-                    
+
                     const data = (prodResp as any)?.data;
                     const productsArray = Array.isArray(data)
                         ? data
@@ -520,8 +627,8 @@ const AMCQuotationForm: React.FC = () => {
         }
     };
 
-    const handleInputChange = (field: keyof AMCQuotationData, value: any) => {
-        setQuotationData(prev => ({
+    const handleInputChange = (field: keyof AMCInvoiceData, value: any) => {
+        setInvoiceData(prev => ({
             ...prev,
             [field]: value
         }));
@@ -531,7 +638,7 @@ const AMCQuotationForm: React.FC = () => {
     };
 
     const handleItemChange = (index: number, field: keyof QuotationItem, value: any) => {
-        const updatedItems = [...quotationData.items];
+        const updatedItems = [...invoiceData.items];
         updatedItems[index] = {
             ...updatedItems[index],
             [field]: value
@@ -550,8 +657,8 @@ const AMCQuotationForm: React.FC = () => {
             totalPrice
         };
 
-        setQuotationData(prev => {
-            const totals = calculateQuotationTotals(updatedItems, prev.serviceCharges, prev.batteryBuyBack, prev.overallDiscount || 0);
+        setInvoiceData(prev => {
+            const totals = calculateQuotationTotals(updatedItems, [], prev.batteryBuyBack, prev.overallDiscount || 0);
             return {
                 ...prev,
                 ...totals
@@ -576,26 +683,16 @@ const AMCQuotationForm: React.FC = () => {
             totalPrice: 0
         };
 
-        setQuotationData(prev => ({
+        setInvoiceData(prev => ({
             ...prev,
             items: [...prev.items, newItem]
         }));
     };
 
-    const removeItem = (index: number) => {
-        const updatedItems = quotationData.items.filter((_, i) => i !== index);
-        setQuotationData(prev => {
-            const totals = calculateQuotationTotals(updatedItems, prev.serviceCharges, prev.batteryBuyBack, prev.overallDiscount || 0);
-            return {
-                ...prev,
-                ...totals
-            };
-        });
-    };
 
     // AMC Offer Item handlers
     const handleOfferItemChange = (index: number, field: keyof AMCOfferItem, value: any) => {
-        const updatedItems = [...quotationData.offerItems];
+        const updatedItems = [...invoiceData.offerItems];
         updatedItems[index] = {
             ...updatedItems[index],
             [field]: value
@@ -617,9 +714,9 @@ const AMCQuotationForm: React.FC = () => {
         };
 
         // Calculate AMC totals
-        const amcTotals = calculateAMCTotals(updatedItems, quotationData.gstIncluded);
+        const amcTotals = calculateAMCTotals(updatedItems, invoiceData.gstIncluded);
 
-        setQuotationData(prev => ({
+        setInvoiceData(prev => ({
             ...prev,
             offerItems: updatedItems,
             subtotal: amcTotals.subtotal,
@@ -633,15 +730,18 @@ const AMCQuotationForm: React.FC = () => {
         let subtotal = 0;
         let totalTax = 0;
         let grandTotal = 0;
+        let cgst = 0;
+        let sgst = 0;
+        let igst = 0;
 
         items.forEach(item => {
             const qty = (item.qty !== undefined && item.qty !== null) ? Number(item.qty) : 0;
             const costPerDG = (item.amcCostPerDG !== undefined && item.amcCostPerDG !== null) ? Number(item.amcCostPerDG) : 0;
             const itemSubtotal = qty * costPerDG;
-            
+
             let itemTax = 0;
             let itemTotal = itemSubtotal;
-            
+
             if (gstIncluded) {
                 // GST is included in the cost per DG
                 itemTax = itemSubtotal * 0.18; // 18% GST
@@ -656,8 +756,18 @@ const AMCQuotationForm: React.FC = () => {
             grandTotal += itemTotal;
         });
 
+        // Calculate CGST, SGST, IGST (assuming same state for now - 9% each for CGST and SGST)
+        if (totalTax > 0) {
+            cgst = totalTax / 2; // 9% CGST
+            sgst = totalTax / 2; // 9% SGST
+            // IGST would be 18% if different states, but for same state it's 0
+        }
+
         return {
             subtotal: Math.round(subtotal * 100) / 100,
+            cgst: Math.round(cgst * 100) / 100,
+            sgst: Math.round(sgst * 100) / 100,
+            igst: Math.round(igst * 100) / 100,
             totalTax: Math.round(totalTax * 100) / 100,
             grandTotal: Math.round(grandTotal * 100) / 100
         };
@@ -670,16 +780,18 @@ const AMCQuotationForm: React.FC = () => {
             dgRatingKVA: undefined,
             typeOfVisits: undefined,
             qty: undefined,
+            hsnCode: '', // Default HSN code for maintenance services
+            uom: 'nos', // Default unit of measurement
             amcCostPerDG: undefined,
             totalAMCAmountPerDG: 0,
             gst18: 0,
             totalAMCCost: 0
         };
 
-        const updatedItems = [...quotationData.offerItems, newItem];
-        const amcTotals = calculateAMCTotals(updatedItems, quotationData.gstIncluded);
+        const updatedItems = [...invoiceData.offerItems, newItem];
+        const amcTotals = calculateAMCTotals(updatedItems, invoiceData.gstIncluded);
 
-        setQuotationData(prev => ({
+        setInvoiceData(prev => ({
             ...prev,
             offerItems: updatedItems,
             subtotal: amcTotals.subtotal,
@@ -689,10 +801,10 @@ const AMCQuotationForm: React.FC = () => {
     };
 
     const removeOfferItem = (index: number) => {
-        const updatedItems = quotationData.offerItems.filter((_, i) => i !== index);
-        const amcTotals = calculateAMCTotals(updatedItems, quotationData.gstIncluded);
+        const updatedItems = invoiceData.offerItems.filter((_, i) => i !== index);
+        const amcTotals = calculateAMCTotals(updatedItems, invoiceData.gstIncluded);
 
-        setQuotationData(prev => ({
+        setInvoiceData(prev => ({
             ...prev,
             offerItems: updatedItems,
             subtotal: amcTotals.subtotal,
@@ -703,20 +815,20 @@ const AMCQuotationForm: React.FC = () => {
 
     // AMC Spare Item handlers
     const handleSpareItemChange = (index: number, field: keyof AMCSpareItem, value: any) => {
-        const updatedItems = [...quotationData.sparesItems];
+        const updatedItems = [...invoiceData.sparesItems];
         updatedItems[index] = {
             ...updatedItems[index],
             [field]: value
         };
 
-        setQuotationData(prev => ({
+        setInvoiceData(prev => ({
             ...prev,
             sparesItems: updatedItems
         }));
     };
 
     const handleSelectSpareProduct = (index: number, product: Product) => {
-        const updatedItems = [...quotationData.sparesItems];
+        const updatedItems = [...invoiceData.sparesItems];
         const old = updatedItems[index] || {} as AMCSpareItem;
         const unitPrice = product.price || 0;
         const qty = old.qty || 1;
@@ -743,7 +855,7 @@ const AMCQuotationForm: React.FC = () => {
             taxAmount: Math.round(taxAmount * 100) / 100,
             totalPrice: Math.round(totalPrice * 100) / 100
         };
-        setQuotationData(prev => ({
+        setInvoiceData(prev => ({
             ...prev,
             sparesItems: updatedItems
         }));
@@ -771,28 +883,28 @@ const AMCQuotationForm: React.FC = () => {
 
     const addSpareItem = () => {
         const newItem: AMCSpareItem = {
-            srNo: quotationData.sparesItems.length + 1,
+            srNo: invoiceData.sparesItems.length + 1,
             partNo: '',
             description: '',
             hsnCode: '',
             qty: 1
         };
 
-        setQuotationData(prev => ({
+        setInvoiceData(prev => ({
             ...prev,
             sparesItems: [...prev.sparesItems, newItem]
         }));
     };
 
     const removeSpareItem = (index: number) => {
-        setQuotationData(prev => ({
+        setInvoiceData(prev => ({
             ...prev,
             sparesItems: prev.sparesItems.filter((_, i) => i !== index)
         }));
     };
 
     // AMC-specific validation function
-    const validateAMCQuotationData = (data: AMCQuotationData): ValidationError[] => {
+    const validateAMCInvoiceData = (data: AMCInvoiceData): ValidationError[] => {
         const errors: ValidationError[] = [];
 
         // Customer validation
@@ -831,7 +943,7 @@ const AMCQuotationForm: React.FC = () => {
         if (data.amcPeriodFrom && data.amcPeriodTo) {
             const startDate = new Date(data.amcPeriodFrom);
             const endDate = new Date(data.amcPeriodTo);
-            
+
             // Check if dates are valid
             if (isNaN(startDate.getTime())) {
                 errors.push({ field: 'amcPeriodFrom', message: 'AMC period start date is invalid' });
@@ -839,12 +951,12 @@ const AMCQuotationForm: React.FC = () => {
             if (isNaN(endDate.getTime())) {
                 errors.push({ field: 'amcPeriodTo', message: 'AMC period end date is invalid' });
             }
-            
+
             // Check if end date is after start date
             if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime()) && startDate >= endDate) {
                 errors.push({ field: 'amcPeriodTo', message: 'AMC period end date must be after start date' });
             }
-            
+
             // Check if the period is reasonable (not more than 5 years)
             if (!isNaN(startDate.getTime()) && !isNaN(endDate.getTime()) && endDate > startDate) {
                 const diffInYears = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 365);
@@ -873,11 +985,6 @@ const AMCQuotationForm: React.FC = () => {
         if (!data.responseTime || data.responseTime <= 0) {
             errors.push({ field: 'responseTime', message: 'Response time must be greater than 0 hours' });
         }
-
-        // Coverage area validation - Made optional
-        // if (!data.coverageArea?.trim()) {
-        //     errors.push({ field: 'coverageArea', message: 'Coverage area is required' });
-        // }
 
         // Emergency contact hours validation
         if (!data.emergencyContactHours?.trim()) {
@@ -948,10 +1055,10 @@ const AMCQuotationForm: React.FC = () => {
     const handleSubmit = async () => {
         try {
             // Validate AMC-specific data
-            const amcValidationErrors = validateAMCQuotationData(quotationData);
+            const amcValidationErrors = validateAMCInvoiceData(invoiceData);
 
             // Also validate basic quotation data
-            const basicValidationResult = validateQuotationData(quotationData as Partial<QuotationData>);
+            const basicValidationResult = validateQuotationData(invoiceData as Partial<QuotationData>);
 
             // Combine all validation errors
             const allErrors = [...amcValidationErrors, ...basicValidationResult.errors];
@@ -960,7 +1067,9 @@ const AMCQuotationForm: React.FC = () => {
             const ignoredFieldsForAMC = new Set([
                 'billToAddress.address',
                 'shipToAddress.address',
-                'grandTotal'
+                'grandTotal',
+                'company.name',
+                'quotationNumber',
             ]);
             const filteredErrors = allErrors.filter(err => !ignoredFieldsForAMC.has(err.field));
 
@@ -973,80 +1082,137 @@ const AMCQuotationForm: React.FC = () => {
             setSubmitting(true);
 
             // Calculate AMC totals from offer items
-            const amcTotals = calculateAMCTotals(quotationData.offerItems, quotationData.gstIncluded);
+            const amcTotals = calculateAMCTotals(invoiceData.offerItems, invoiceData.gstIncluded);
 
             // Sanitize data
-            const sanitizedData = sanitizeQuotationData(quotationData);
+            const sanitizedData = sanitizeQuotationData(invoiceData);
 
             // Add AMC-specific fields with calculated totals
-            const amcQuotationData = {
+            const amcInvoiceData = {
                 ...sanitizedData,
-                quotationType: 'amc',
+                invoiceType: invoiceType,
+                // Override quotation-specific fields for AMC invoices
+                quotationNumber: invoiceData.invoiceNumber, // Use invoice number as quotation number
+                company: {
+                    name: generalSettings?.companyName || 'Sun Power Services',
+                    address: generalSettings?.address || '',
+                    phone: generalSettings?.phone || '',
+                    email: generalSettings?.email || '',
+                    gstNumber: generalSettings?.gstNumber || '',
+                    panNumber: generalSettings?.panNumber || ''
+                },
+                // Use address IDs instead of full address objects
+                billToAddress: invoiceData.billToAddressId ? {
+                    address: getSelectedBillToAddress()?.address || '',
+                    state: getSelectedBillToAddress()?.state || '',
+                    district: getSelectedBillToAddress()?.district || '',
+                    pincode: getSelectedBillToAddress()?.pincode || '',
+                    gstNumber: ''
+                } : {
+                    address: '',
+                    state: '',
+                    district: '',
+                    pincode: '',
+                    gstNumber: ''
+                },
+                shipToAddress: invoiceData.shipToAddressId ? {
+                    address: getSelectedShipToAddress()?.address || '',
+                    state: getSelectedShipToAddress()?.state || '',
+                    district: getSelectedShipToAddress()?.district || '',
+                    pincode: getSelectedShipToAddress()?.pincode || '',
+                    gstNumber: ''
+                } : {
+                    address: '',
+                    state: '',
+                    district: '',
+                    pincode: '',
+                    gstNumber: ''
+                },
                 // AMC-specific fields
-                amcType: quotationData.amcType,
-                contractDuration: quotationData.contractDuration,
-                contractStartDate: quotationData.contractStartDate,
-                contractEndDate: quotationData.contractEndDate,
-                billingCycle: quotationData.billingCycle,
-                numberOfVisits: quotationData.numberOfVisits,
-                numberOfOilServices: quotationData.numberOfOilServices,
-                responseTime: quotationData.responseTime,
-                coverageArea: quotationData.coverageArea,
-                emergencyContactHours: quotationData.emergencyContactHours,
-                exclusions: quotationData.exclusions,
-                performanceMetrics: quotationData.performanceMetrics,
-                warrantyTerms: quotationData.warrantyTerms,
-                paymentTerms: quotationData.paymentTerms,
-                renewalTerms: quotationData.renewalTerms,
-                discountPercentage: quotationData.discountPercentage,
-                offerItems: quotationData.offerItems,
-                sparesItems: quotationData.sparesItems,
-                selectedCustomerDG: quotationData.selectedCustomerDG,
-                subject: quotationData.subject,
-                refOfQuote: quotationData.refOfQuote,
-                paymentTermsText: quotationData.paymentTermsText,
-                validityText: quotationData.validityText,
-                amcPeriodFrom: quotationData.amcPeriodFrom,
-                amcPeriodTo: quotationData.amcPeriodTo,
-                gstIncluded: quotationData.gstIncluded,
-                selectedAddressId: quotationData.selectedAddressId,
-                billToAddressId: quotationData.billToAddressId,
-                shipToAddressId: quotationData.shipToAddressId,
+                amcType: invoiceData.amcType,
+                contractDuration: invoiceData.contractDuration,
+                contractStartDate: invoiceData.contractStartDate,
+                contractEndDate: invoiceData.contractEndDate,
+                billingCycle: invoiceData.billingCycle,
+                numberOfVisits: invoiceData.numberOfVisits,
+                numberOfOilServices: invoiceData.numberOfOilServices,
+                responseTime: invoiceData.responseTime,
+                coverageArea: invoiceData.coverageArea,
+                emergencyContactHours: invoiceData.emergencyContactHours,
+                exclusions: invoiceData.exclusions,
+                performanceMetrics: invoiceData.performanceMetrics,
+                warrantyTerms: invoiceData.warrantyTerms,
+                paymentTerms: invoiceData.paymentTerms,
+                renewalTerms: invoiceData.renewalTerms,
+                discountPercentage: invoiceData.discountPercentage,
+                offerItems: invoiceData.offerItems,
+                sparesItems: invoiceData.sparesItems,
+                selectedCustomerDG: invoiceData.selectedCustomerDG,
+                subject: invoiceData.subject,
+                refOfQuote: invoiceData.refOfQuote,
+                paymentTermsText: invoiceData.paymentTermsText,
+                validityText: invoiceData.validityText,
+                amcPeriodFrom: invoiceData.amcPeriodFrom,
+                amcPeriodTo: invoiceData.amcPeriodTo,
+                gstIncluded: invoiceData.gstIncluded,
+                selectedAddressId: invoiceData.selectedAddressId,
+                billToAddressId: invoiceData.billToAddressId,
+                shipToAddressId: invoiceData.shipToAddressId,
+                // Reference fields
+                irn: invoiceData.irn,
+                ackNo: invoiceData.ackNo,
+                ackDate: invoiceData.ackDate,
+                deliveryNote: invoiceData.deliveryNote,
+                referenceNo: invoiceData.referenceNo,
+                referenceDate: invoiceData.referenceDate,
+                buyerOrderNo: invoiceData.buyerOrderNo,
+                buyerOrderDate: invoiceData.buyerOrderDate,
+                dispatchDocNo: invoiceData.dispatchDocNo,
+                dispatchedThrough: invoiceData.dispatchedThrough,
+                termsOfPayment: invoiceData.termsOfPayment,
+                otherReferences: invoiceData.otherReferences,
+                deliveryNoteDate: invoiceData.deliveryNoteDate,
+                destination: invoiceData.destination,
+                termsOfDelivery: invoiceData.termsOfDelivery,
                 // Calculated totals
                 subtotal: amcTotals.subtotal,
+                cgst: amcTotals.cgst || 0,
+                sgst: amcTotals.sgst || 0,
+                igst: amcTotals.igst || 0,
                 totalTax: amcTotals.totalTax,
                 grandTotal: amcTotals.grandTotal,
+                amountInWords: numberToWords(amcTotals.grandTotal),
                 totalDiscount: 0, // AMC doesn't use item-level discounts
                 overallDiscount: 0,
                 overallDiscountAmount: 0,
-                roundOff: 0
+                roundOff: 0,
             };
 
-            console.log('Submitting AMC Quotation Data:', amcQuotationData);
+            console.log('Submitting AMC Invoice Data:', amcInvoiceData);
 
             if (isEditMode && quotationFromState?._id) {
-                await apiClient.amcQuotations.update(quotationFromState._id, amcQuotationData);
-                toast.success('AMC quotation updated successfully');
+                await apiClient.amcInvoices.update(quotationFromState._id, amcInvoiceData);
+                toast.success(`AMC ${invoiceType === 'proforma' ? 'proforma invoice' : 'invoice'} updated successfully`);
 
             } else {
-                await apiClient.amcQuotations.create(amcQuotationData);
-                toast.success('AMC quotation created successfully');
+                await apiClient.amcInvoices.create(amcInvoiceData);
+                toast.success(`AMC ${invoiceType === 'proforma' ? 'proforma invoice' : 'invoice'} created successfully`);
             }
-            navigate('/amc-quotations');
+            navigate('/amc-invoices');
         } catch (error: any) {
-            console.error('Error submitting quotation:', error);
-            toast.error(error.response?.data?.message || 'Failed to submit quotation');
+            console.error('Error submitting invoice:', error);
+            toast.error(error.response?.data?.message || 'Failed to submit invoice');
         } finally {
             setSubmitting(false);
         }
     };
 
     const handleCancel = () => {
-        navigate('/amc-quotations');
+        navigate('/amc-invoices');
     };
 
     const handleBack = () => {
-        navigate('/amc-quotations');
+        navigate('/amc-invoices');
     };
 
     const getFilteredCustomers = () => {
@@ -1062,7 +1228,7 @@ const AMCQuotationForm: React.FC = () => {
             // Show all products when no search term
             return products;
         }
-        
+
         const term = searchTerm.toLowerCase();
         return products.filter(product =>
             (product.name && product.name.toLowerCase().includes(term)) ||
@@ -1151,44 +1317,44 @@ const AMCQuotationForm: React.FC = () => {
     };
 
     const getFilteredAddresses = () => {
-        if (!quotationData.customer._id) return [];
-        
-        const customer = customers.find(c => c._id === quotationData.customer._id);
+        if (!invoiceData.customer._id) return [];
+
+        const customer = customers.find(c => c._id === invoiceData.customer._id);
         if (!customer || !customer.addresses) return [];
-        
+
         return customer.addresses;
     };
 
     const getSelectedAddress = () => {
         const addresses = getFilteredAddresses();
-        if (!quotationData.selectedAddressId) {
+        if (!invoiceData.selectedAddressId) {
             // Return primary address if no address is selected
             return addresses.find(addr => addr.isPrimary) || addresses[0] || null;
         }
-        return addresses.find(addr => addr.id.toString() === quotationData.selectedAddressId) || null;
+        return addresses.find(addr => addr.id.toString() === invoiceData.selectedAddressId) || null;
     };
 
     const getSelectedBillToAddress = () => {
         const addresses = getFilteredAddresses();
-        if (!quotationData.billToAddressId) {
+        if (!invoiceData.billToAddressId) {
             // Return primary address if no address is selected
             return addresses.find(addr => addr.isPrimary) || addresses[0] || null;
         }
-        return addresses.find(addr => addr.id.toString() === quotationData.billToAddressId) || null;
+        return addresses.find(addr => addr.id.toString() === invoiceData.billToAddressId) || null;
     };
 
     const getSelectedShipToAddress = () => {
         const addresses = getFilteredAddresses();
-        if (!quotationData.shipToAddressId) {
+        if (!invoiceData.shipToAddressId) {
             // Return primary address if no address is selected
             return addresses.find(addr => addr.isPrimary) || addresses[0] || null;
         }
-        return addresses.find(addr => addr.id.toString() === quotationData.shipToAddressId) || null;
+        return addresses.find(addr => addr.id.toString() === invoiceData.shipToAddressId) || null;
     };
 
     const copyBillToToShipTo = () => {
-        if (quotationData.billToAddressId) {
-            setQuotationData(prev => ({
+        if (invoiceData.billToAddressId) {
+            setInvoiceData(prev => ({
                 ...prev,
                 shipToAddressId: prev.billToAddressId
             }));
@@ -1211,6 +1377,15 @@ const AMCQuotationForm: React.FC = () => {
         return hasFieldError(field) ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500';
     };
 
+    const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('en-IN', {
+            style: 'currency',
+            currency: 'INR',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }).format(amount);
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
@@ -1225,18 +1400,18 @@ const AMCQuotationForm: React.FC = () => {
             <div className="mb-6">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
-                        
+
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900">
-                                {isEditMode ? 'Edit AMC Quotation' : 'Create AMC Quotation'}
+                                {isEditMode ? `Edit AMC ${invoiceType === 'proforma' ? 'Proforma' : 'Invoice'}` : `Create AMC ${invoiceType === 'proforma' ? 'Proforma' : 'Invoice'}`}
                             </h1>
                             <p className="text-sm text-gray-600 mt-1">
-                                {isEditMode ? 'Update existing AMC quotation details' : 'Fill in the details to create a new AMC quotation'}
+                                {isEditMode ? `Update existing AMC ${invoiceType === 'proforma' ? 'proforma invoice' : 'invoice'} details` : `Fill in the details to create a new AMC ${invoiceType === 'proforma' ? 'proforma invoice' : 'invoice'}`}
                             </p>
                         </div>
                     </div>
                     <div className="flex items-center space-x-3">
-                    <Button
+                        <Button
                             onClick={handleBack}
                             variant="outline"
                             className="flex items-center space-x-2"
@@ -1286,17 +1461,17 @@ const AMCQuotationForm: React.FC = () => {
 
             {/* Document Title */}
             <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold text-gray-900 mb-2">ANNUAL MAINTENANCE ({quotationData.amcType}) OFFER</h1>
+                <h1 className="text-2xl font-bold text-gray-900 mb-2">ANNUAL MAINTENANCE ({invoiceData.amcType}) {invoiceType === 'proforma' ? 'PROFORMA INVOICE' : 'INVOICE'}</h1>
                 <div className="flex justify-center items-center space-x-4">
                     <div className="flex items-center">
                         <select
-                            value={quotationData.amcType}
+                            value={invoiceData.amcType}
                             onChange={(e) => {
                                 const newAmcType = e.target.value as 'AMC' | 'CAMC';
                                 handleInputChange('amcType', newAmcType);
-                                
+
                                 // If switching to CAMC and no spares items exist, add one
-                                if (newAmcType === 'CAMC' && quotationData.sparesItems.length === 0) {
+                                if (newAmcType === 'CAMC' && invoiceData.sparesItems.length === 0) {
                                     addSpareItem();
                                 }
                             }}
@@ -1312,6 +1487,218 @@ const AMCQuotationForm: React.FC = () => {
                 </div>
             </div>
 
+            {/* Reference Fields Section */}
+            <div className="mb-6">
+                <div className="bg-white border border-gray-300 rounded-lg overflow-hidden">
+                    <div className="grid grid-cols-2 gap-0">
+                        {/* Row 1 */}
+                        <div className="border-r border-b border-gray-300 p-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-700">Invoice No.</span>
+                                <div className="flex-1 ml-4">
+                                    <input
+                                        type="text"
+                                        value={invoiceData.invoiceNumber}
+                                        onChange={(e) => handleInputChange('invoiceNumber', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-right font-semibold"
+                                        placeholder="Enter invoice number"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="border-b border-gray-300 p-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-700">Dated</span>
+                                <div className="flex-1 ml-4">
+                                    <input
+                                        type="date"
+                                        value={invoiceData.issueDate && !isNaN(new Date(invoiceData.issueDate).getTime()) ? new Date(invoiceData.issueDate).toISOString().split('T')[0] : ''}
+                                        onChange={(e) => handleInputChange('issueDate', new Date(e.target.value))}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-right font-semibold"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Row 2 */}
+                        <div className="border-r border-b border-gray-300 p-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-700">Delivery Note</span>
+                                <div className="flex-1 ml-4">
+                                    <input
+                                        type="text"
+                                        value={invoiceData.deliveryNote || ''}
+                                        onChange={(e) => handleInputChange('deliveryNote', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Enter delivery note"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="border-b border-gray-300 p-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-700">Mode/Terms of Payment</span>
+                                <div className="flex-1 ml-4">
+                                    <input
+                                        type="text"
+                                        value={invoiceData.termsOfPayment || ''}
+                                        onChange={(e) => handleInputChange('termsOfPayment', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Enter payment terms"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Row 3 */}
+                        <div className="border-r border-b border-gray-300 p-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-700">Reference No</span>
+                                <div className="flex-1 ml-4">
+                                    <input
+                                        type="text"
+                                        value={invoiceData.referenceNo || ''}
+                                        onChange={(e) => handleInputChange('referenceNo', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Enter reference number"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="border-b border-gray-300 p-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-700">Other References</span>
+                                <div className="flex-1 ml-4">
+                                    <input
+                                        type="text"
+                                        value={invoiceData.otherReferences || ''}
+                                        onChange={(e) => handleInputChange('otherReferences', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Enter other references"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Row 4 */}
+                        <div className="border-r border-b border-gray-300 p-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-700">Buyer's Order No.</span>
+                                <div className="flex-1 ml-4">
+                                    <input
+                                        type="text"
+                                        value={invoiceData.buyerOrderNo || ''}
+                                        onChange={(e) => handleInputChange('buyerOrderNo', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
+                                        placeholder="Enter buyer's order number"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="border-b border-gray-300 p-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-700">Buyer's Order Date</span>
+                                <div className="flex-1 ml-4">
+                                    <input
+                                        type="date"
+                                        value={invoiceData.buyerOrderDate || ''}
+                                        onChange={(e) => handleInputChange('buyerOrderDate', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-semibold"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Row 5 */}
+                        <div className="border-r border-b border-gray-300 p-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-700">Dispatch Doc No.</span>
+                                <div className="flex-1 ml-4">
+                                    <input
+                                        type="text"
+                                        value={invoiceData.dispatchDocNo || ''}
+                                        onChange={(e) => handleInputChange('dispatchDocNo', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Enter dispatch document number"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="border-b border-gray-300 p-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-700">Delivery Note Date</span>
+                                <div className="flex-1 ml-4">
+                                    <input
+                                        type="date"
+                                        value={invoiceData.deliveryNoteDate || ''}
+                                        onChange={(e) => handleInputChange('deliveryNoteDate', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Row 6 - Reference Date */}
+                        <div className="border-r border-b border-gray-300 p-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-700">Reference Date</span>
+                                <div className="flex-1 ml-4">
+                                    <input
+                                        type="date"
+                                        value={invoiceData.referenceDate || ''}
+                                        onChange={(e) => handleInputChange('referenceDate', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="border-r border-b border-gray-300 p-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-700">Dispatched through</span>
+                                <div className="flex-1 ml-4">
+                                    <input
+                                        type="text"
+                                        value={invoiceData.dispatchedThrough || ''}
+                                        onChange={(e) => handleInputChange('dispatchedThrough', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Enter dispatch method"
+                                        />
+                                </div>
+                            </div>
+                        </div>
+                        {/* Row 7 */}
+                        <div className="border-r border-b border-gray-300 p-4">
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-700">Destination</span>
+                                <div className="flex-1 ml-4">
+                                    <input
+                                        type="text"
+                                        value={invoiceData.destination || ''}
+                                        onChange={(e) => handleInputChange('destination', e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        placeholder="Enter destination"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                            <div className="border-r border-b border-gray-300 p-4">
+                                <div className="flex items-start justify-between">
+                                    <span className="text-sm font-medium text-gray-700">Terms of Delivery</span>
+                                    <div className="flex-1 ml-4">
+                                        <textarea
+                                            value={invoiceData.termsOfDelivery || ''}
+                                            onChange={(e) => handleInputChange('termsOfDelivery', e.target.value)}
+                                            rows={3}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                                            placeholder="Enter terms of delivery"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                    </div>
+                </div>
+            </div>
+
             {/* Customer and Subject Section */}
             <div className="mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1322,7 +1709,7 @@ const AMCQuotationForm: React.FC = () => {
                             <div className="relative flex-1">
                                 <input
                                     type="text"
-                                    value={customerSearchTerm !== undefined ? customerSearchTerm : (quotationData.customer.name || '')}
+                                    value={customerSearchTerm !== undefined ? customerSearchTerm : (invoiceData.customer.name || '')}
                                     onChange={(e) => {
                                         const value = e.target.value;
                                         setCustomerSearchTerm(value);
@@ -1330,7 +1717,7 @@ const AMCQuotationForm: React.FC = () => {
 
                                         // If user clears the input, clear the selected customer
                                         if (!value) {
-                                            setQuotationData(prev => ({
+                                            setInvoiceData(prev => ({
                                                 ...prev,
                                                 customer: {
                                                     _id: '',
@@ -1345,7 +1732,7 @@ const AMCQuotationForm: React.FC = () => {
                                     onFocus={() => {
                                         // Initialize search term with selected name to allow editing/backspace
                                         if (customerSearchTerm === undefined) {
-                                            setCustomerSearchTerm(quotationData.customer.name || '');
+                                            setCustomerSearchTerm(invoiceData.customer.name || '');
                                         }
                                         setShowCustomerDropdown(true);
                                     }}
@@ -1368,7 +1755,7 @@ const AMCQuotationForm: React.FC = () => {
                                                     className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
                                                     onMouseDown={(e) => {
                                                         e.preventDefault(); // Prevent input blur
-                                                        setQuotationData(prev => ({
+                                                        setInvoiceData(prev => ({
                                                             ...prev,
                                                             customer: {
                                                                 _id: customer._id,
@@ -1409,7 +1796,7 @@ const AMCQuotationForm: React.FC = () => {
                                 <div
                                     className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 cursor-pointer ${getErrorClass('billToAddressId')}`}
                                     onClick={() => {
-                                        if (quotationData.customer._id) {
+                                        if (invoiceData.customer._id) {
                                             setShowBillToAddressDropdown(!showBillToAddressDropdown);
                                         }
                                     }}
@@ -1425,7 +1812,7 @@ const AMCQuotationForm: React.FC = () => {
                                             </div>
                                         ) : (
                                             <span className="text-gray-500">
-                                                {quotationData.customer._id ? 'Select address' : 'Select customer first'}
+                                                {invoiceData.customer._id ? 'Select address' : 'Select customer first'}
                                             </span>
                                         );
                                     })()}
@@ -1433,7 +1820,7 @@ const AMCQuotationForm: React.FC = () => {
                                 {getFieldError('billToAddressId') && (
                                     <p className="mt-1 text-sm text-red-600">{getFieldError('billToAddressId')}</p>
                                 )}
-                                {showBillToAddressDropdown && quotationData.customer._id && (
+                                {showBillToAddressDropdown && invoiceData.customer._id && (
                                     <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
                                         {getFilteredAddresses().length > 0 ? (
                                             getFilteredAddresses().map((address) => (
@@ -1441,7 +1828,7 @@ const AMCQuotationForm: React.FC = () => {
                                                     key={address.id}
                                                     className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
                                                     onClick={() => {
-                                                        setQuotationData(prev => ({
+                                                        setInvoiceData(prev => ({
                                                             ...prev,
                                                             billToAddressId: address.id.toString()
                                                         }));
@@ -1480,7 +1867,7 @@ const AMCQuotationForm: React.FC = () => {
                                 <div
                                     className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 cursor-pointer ${getErrorClass('shipToAddressId')}`}
                                     onClick={() => {
-                                        if (quotationData.customer._id) {
+                                        if (invoiceData.customer._id) {
                                             setShowShipToAddressDropdown(!showShipToAddressDropdown);
                                         }
                                     }}
@@ -1496,7 +1883,7 @@ const AMCQuotationForm: React.FC = () => {
                                             </div>
                                         ) : (
                                             <span className="text-gray-500">
-                                                {quotationData.customer._id ? 'Select address' : 'Select customer first'}
+                                                {invoiceData.customer._id ? 'Select address' : 'Select customer first'}
                                             </span>
                                         );
                                     })()}
@@ -1504,7 +1891,7 @@ const AMCQuotationForm: React.FC = () => {
                                 {getFieldError('shipToAddressId') && (
                                     <p className="mt-1 text-sm text-red-600">{getFieldError('shipToAddressId')}</p>
                                 )}
-                                {showShipToAddressDropdown && quotationData.customer._id && (
+                                {showShipToAddressDropdown && invoiceData.customer._id && (
                                     <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
                                         {getFilteredAddresses().length > 0 ? (
                                             getFilteredAddresses().map((address) => (
@@ -1512,7 +1899,7 @@ const AMCQuotationForm: React.FC = () => {
                                                     key={address.id}
                                                     className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
                                                     onClick={() => {
-                                                        setQuotationData(prev => ({
+                                                        setInvoiceData(prev => ({
                                                             ...prev,
                                                             shipToAddressId: address.id.toString()
                                                         }));
@@ -1542,16 +1929,6 @@ const AMCQuotationForm: React.FC = () => {
                                     </div>
                                 )}
                             </div>
-                            {/* Copy from Bill To button */}
-                            {quotationData.billToAddressId && (
-                                <button
-                                    type="button"
-                                    onClick={copyBillToToShipTo}
-                                    className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-                                >
-                                    Copy from Bill To
-                                </button>
-                            )}
                         </div>
 
                         <div className="flex items-center space-x-4">
@@ -1559,7 +1936,7 @@ const AMCQuotationForm: React.FC = () => {
                             <div className="relative flex-1">
                                 <input
                                     type="text"
-                                    value={engineerSearchTerm !== undefined ? engineerSearchTerm : (quotationData.refOfQuote || '')}
+                                    value={engineerSearchTerm !== undefined ? engineerSearchTerm : (invoiceData.refOfQuote || '')}
                                     onChange={(e) => {
                                         const value = e.target.value;
                                         setEngineerSearchTerm(value);
@@ -1567,7 +1944,7 @@ const AMCQuotationForm: React.FC = () => {
 
                                         // If user clears the input, clear the selected engineer
                                         if (!value) {
-                                            setQuotationData(prev => ({
+                                            setInvoiceData(prev => ({
                                                 ...prev,
                                                 refOfQuote: ''
                                             }));
@@ -1575,7 +1952,7 @@ const AMCQuotationForm: React.FC = () => {
                                     }}
                                     onFocus={() => {
                                         if (engineerSearchTerm === undefined) {
-                                            setEngineerSearchTerm(quotationData.refOfQuote || '');
+                                            setEngineerSearchTerm(invoiceData.refOfQuote || '');
                                         }
                                         setShowEngineerDropdown(true);
                                     }}
@@ -1594,7 +1971,7 @@ const AMCQuotationForm: React.FC = () => {
                                                     className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
                                                     onMouseDown={(e) => {
                                                         e.preventDefault();
-                                                        setQuotationData(prev => ({
+                                                        setInvoiceData(prev => ({
                                                             ...prev,
                                                             refOfQuote: `${engineer.firstName} ${engineer.lastName}`
                                                         }));
@@ -1624,7 +2001,7 @@ const AMCQuotationForm: React.FC = () => {
                             <div className="relative flex-1">
                                 <input
                                     type="text"
-                                    value={quotationData.subject || ''}
+                                    value={invoiceData.subject || ''}
                                     onChange={(e) => handleInputChange('subject' as any, e.target.value)}
                                     placeholder="Enter subject manually"
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1633,12 +2010,12 @@ const AMCQuotationForm: React.FC = () => {
                         </div>
 
                         <div className="flex items-center space-x-4">
-                            <span className="font-medium w-20">Create Date</span>
+                            <span className="font-medium w-20">Due Date</span>
                             <div className="flex-1">
                                 <input
                                     type="date"
-                                    value={quotationData.issueDate && !isNaN(new Date(quotationData.issueDate).getTime()) ? new Date(quotationData.issueDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]}
-                                    onChange={(e) => handleInputChange('issueDate', new Date(e.target.value))}
+                                    value={invoiceData.dueDate && !isNaN(new Date(invoiceData.dueDate).getTime()) ? new Date(invoiceData.dueDate).toISOString().split('T')[0] : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}
+                                    onChange={(e) => handleInputChange('dueDate', new Date(e.target.value))}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
@@ -1649,7 +2026,7 @@ const AMCQuotationForm: React.FC = () => {
 
             {/* Offer Details Table */}
             <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Offer Details</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Invoice Details</h3>
                 <div className="overflow-x-auto overflow-y-visible">
                     <table className="w-full border border-gray-300 overflow-visible">
                         <thead className="bg-gray-50">
@@ -1659,15 +2036,17 @@ const AMCQuotationForm: React.FC = () => {
                                 <th className="border border-gray-300 px-4 py-2 text-left">DG Rating in KVA</th>
                                 <th className="border border-gray-300 px-4 py-2 text-left">No Of Visits</th>
                                 <th className="border border-gray-300 px-4 py-2 text-left">Qty</th>
-                                <th className="border border-gray-300 px-4 py-2 text-left">{quotationData.amcType} cost per DG</th>
-                                <th className="border border-gray-300 px-4 py-2 text-left">Total {quotationData.amcType} Amount per DG</th>
+                                <th className="border border-gray-300 px-4 py-2 text-left">HSN Code</th>
+                                <th className="border border-gray-300 px-4 py-2 text-left">UOM</th>
+                                <th className="border border-gray-300 px-4 py-2 text-left">{invoiceData.amcType} cost per DG</th>
+                                <th className="border border-gray-300 px-4 py-2 text-left">Total {invoiceData.amcType} Amount per DG</th>
                                 <th className="border border-gray-300 px-4 py-2 text-left">GST @ 18%</th>
-                                <th className="border border-gray-300 px-4 py-2 text-left">Total {quotationData.amcType} Cost</th>
+                                <th className="border border-gray-300 px-4 py-2 text-left">Total {invoiceData.amcType} Cost</th>
                                 <th className="border border-gray-300 px-4 py-2 text-left">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="overflow-visible">
-                            {quotationData.offerItems.map((item, index) => (
+                            {invoiceData.offerItems.map((item, index) => (
                                 <tr key={index}>
                                     <td className="border border-gray-300 px-4 py-2 relative overflow-visible z-10">
                                         <div className="relative z-50">
@@ -1705,6 +2084,85 @@ const AMCQuotationForm: React.FC = () => {
                                                 <p className="text-xs text-red-600 mt-1">{getFieldError(`offerItems[${index}].make`)}</p>
                                             )}
                                         </div>
+                                        {/* DG Dropdown Portal */}
+                                        {showDGRowDropdowns[index] && activeDGRowIndex === index && dgDropdownPosition && createPortal(
+                                            <div
+                                                className="fixed z-50 bg-white border border-gray-300 rounded-md shadow-lg overflow-hidden"
+                                                style={{
+                                                    top: `${dgDropdownPosition.top + window.scrollY + 4}px`,
+                                                    left: `${dgDropdownPosition.left + window.scrollX}px`,
+                                                    width: `${dgDropdownPosition.width}px`,
+                                                    maxHeight: '400px'
+                                                }}
+                                            >
+                                                <div className="px-3 py-2 text-xs text-gray-600 bg-gray-50 border-b border-gray-200">
+                                                    {filterDGs(dgRowSearchTerms[index] || '').length} DG sets found
+                                                    {!dgRowSearchTerms[index]?.trim() && ' (showing all DG sets)'}
+                                                </div>
+                                                <div className="max-h-80 overflow-auto">
+                                                    {filterDGs(dgRowSearchTerms[index] || '').map((dg, dgIndex) => (
+                                                        <div
+                                                            key={dgIndex}
+                                                            className="px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100"
+                                                            onMouseDown={(e) => {
+                                                                e.preventDefault();
+                                                                const makeValue = dg.dgMake || dg.make || '';
+                                                                const engineValue = getDGEngineSerial(dg);
+                                                                const kvaValue = getDGKVA(dg);
+
+                                                                // Single atomic update to avoid race conditions
+                                                                setInvoiceData(prev => ({
+                                                                    ...prev,
+                                                                    offerItems: prev.offerItems.map((item, i) =>
+                                                                        i === index
+                                                                            ? {
+                                                                                ...item,
+                                                                                make: makeValue,
+                                                                                engineSlNo: engineValue,
+                                                                                dgRatingKVA: kvaValue
+                                                                            }
+                                                                            : item
+                                                                    )
+                                                                }));
+
+                                                                setDgRowSearchTerms(prev => ({ ...prev, [index]: makeValue }));
+                                                                setShowDGRowDropdowns(prev => ({ ...prev, [index]: false }));
+                                                                setDgDropdownPosition(null);
+                                                                setActiveDGRowIndex(null);
+                                                                setActiveDGInputEl(null);
+                                                            }}
+                                                        >
+                                                            <div className="flex items-start justify-between">
+                                                                <div className="flex-1">
+                                                                    <div className="text-sm font-semibold text-gray-900">
+                                                                        {(dg.dgMake || dg.make || '') || 'Unnamed DG Set'}
+                                                                    </div>
+                                                                    <div className="text-xs text-gray-600 mt-0.5">
+                                                                        <strong>Engine:</strong> {getDGEngineSerial(dg) || 'No Serial'}
+                                                                    </div>
+                                                                    {getDGKVA(dg) > 0 && (
+                                                                        <div className="text-xs text-gray-500">
+                                                                            <strong>Rating:</strong> {getDGKVA(dg)} KVA
+                                                                        </div>
+                                                                    )}
+                                                                    {dg.dgModel && (
+                                                                        <div className="text-xs text-gray-500">
+                                                                            <strong>Model:</strong> {dg.dgModel}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    {filterDGs(dgRowSearchTerms[index] || '').length === 0 && (
+                                                        <div className="px-3 py-4 text-center text-gray-500 text-sm">
+                                                            No DG sets found matching "{dgRowSearchTerms[index]}"
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>,
+                                            document.body
+                                        )}
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
                                         <input
@@ -1762,6 +2220,40 @@ const AMCQuotationForm: React.FC = () => {
                                         />
                                         {getFieldError(`offerItems[${index}].qty`) && (
                                             <p className="text-xs text-red-600 mt-1">{getFieldError(`offerItems[${index}].qty`)}</p>
+                                        )}
+                                    </td>
+                                    <td className="border border-gray-300 px-4 py-2">
+                                        <input
+                                            type="text"
+                                            value={item.hsnCode || ''}
+                                            onChange={(e) => handleOfferItemChange(index, 'hsnCode', e.target.value)}
+                                            className={`w-full border-none focus:outline-none ${hasFieldError(`offerItems[${index}].hsnCode`) ? 'bg-red-50' : ''}`}
+                                            placeholder="Enter HSN Code"
+                                        />
+                                        {getFieldError(`offerItems[${index}].hsnCode`) && (
+                                            <p className="text-xs text-red-600 mt-1">{getFieldError(`offerItems[${index}].hsnCode`)}</p>
+                                        )}
+                                    </td>
+                                    <td className="border border-gray-300 px-4 py-2">
+                                        <select
+                                            value={item.uom || 'nos'}
+                                            onChange={(e) => handleOfferItemChange(index, 'uom', e.target.value)}
+                                            className={`w-full border-none focus:outline-none ${hasFieldError(`offerItems[${index}].uom`) ? 'bg-red-50' : ''}`}
+                                        >
+                                            <option value="nos">nos</option>
+                                            <option value="kg">kg</option>
+                                            <option value="litre">litre</option>
+                                            <option value="meter">meter</option>
+                                            <option value="sq.ft">sq.ft</option>
+                                            <option value="hour">hour</option>
+                                            <option value="set">set</option>
+                                            <option value="box">box</option>
+                                            <option value="can">can</option>
+                                            <option value="roll">roll</option>
+                                            <option value="eu">eu</option>
+                                        </select>
+                                        {getFieldError(`offerItems[${index}].uom`) && (
+                                            <p className="text-xs text-red-600 mt-1">{getFieldError(`offerItems[${index}].uom`)}</p>
                                         )}
                                     </td>
                                     <td className="border border-gray-300 px-4 py-2">
@@ -1842,7 +2334,7 @@ const AMCQuotationForm: React.FC = () => {
                             <span className="font-medium w-24">PAYMENT:</span>
                             <input
                                 type="text"
-                                value={quotationData.paymentTermsText}
+                                value={invoiceData.paymentTermsText}
                                 onChange={(e) => handleInputChange('paymentTermsText', e.target.value)}
                                 className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${getErrorClass('paymentTermsText')}`}
                                 placeholder="Manual Entry"
@@ -1855,13 +2347,13 @@ const AMCQuotationForm: React.FC = () => {
                             <span className="font-medium w-24">AMC Start Date:</span>
                             <input
                                 type="date"
-                                value={quotationData.amcPeriodFrom && !isNaN(new Date(quotationData.amcPeriodFrom).getTime()) ? new Date(quotationData.amcPeriodFrom).toISOString().split('T')[0] : ''}
+                                value={invoiceData.amcPeriodFrom && !isNaN(new Date(invoiceData.amcPeriodFrom).getTime()) ? new Date(invoiceData.amcPeriodFrom).toISOString().split('T')[0] : ''}
                                 onChange={(e) => {
                                     const newStartDate = new Date(e.target.value);
                                     handleInputChange('amcPeriodFrom', newStartDate);
-                                    
+
                                     // If end date is before new start date, update end date to be 1 year after start date
-                                    if (quotationData.amcPeriodTo && newStartDate >= quotationData.amcPeriodTo) {
+                                    if (invoiceData.amcPeriodTo && newStartDate >= invoiceData.amcPeriodTo) {
                                         const newEndDate = new Date(newStartDate);
                                         newEndDate.setFullYear(newEndDate.getFullYear() + 1);
                                         handleInputChange('amcPeriodTo', newEndDate);
@@ -1881,7 +2373,7 @@ const AMCQuotationForm: React.FC = () => {
                             <span className="font-medium w-24">VALIDITY:</span>
                             <input
                                 type="text"
-                                value={quotationData.validityText}
+                                value={invoiceData.validityText}
                                 onChange={(e) => handleInputChange('validityText', e.target.value)}
                                 className={`flex-1 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 ${getErrorClass('validityText')}`}
                                 placeholder="Manual Entry"
@@ -1894,8 +2386,8 @@ const AMCQuotationForm: React.FC = () => {
                             <span className="font-medium w-24">AMC End Date:</span>
                             <input
                                 type="date"
-                                value={quotationData.amcPeriodTo && !isNaN(new Date(quotationData.amcPeriodTo).getTime()) ? new Date(quotationData.amcPeriodTo).toISOString().split('T')[0] : ''}
-                                min={quotationData.amcPeriodFrom && !isNaN(new Date(quotationData.amcPeriodFrom).getTime()) ? new Date(quotationData.amcPeriodFrom).toISOString().split('T')[0] : ''}
+                                value={invoiceData.amcPeriodTo && !isNaN(new Date(invoiceData.amcPeriodTo).getTime()) ? new Date(invoiceData.amcPeriodTo).toISOString().split('T')[0] : ''}
+                                min={invoiceData.amcPeriodFrom && !isNaN(new Date(invoiceData.amcPeriodFrom).getTime()) ? new Date(invoiceData.amcPeriodFrom).toISOString().split('T')[0] : ''}
                                 onChange={(e) => {
                                     const newEndDate = new Date(e.target.value);
                                     handleInputChange('amcPeriodTo', newEndDate);
@@ -1914,13 +2406,13 @@ const AMCQuotationForm: React.FC = () => {
                     <div className="flex items-center space-x-4">
                         <span className="font-medium w-24">GST:</span>
                         <select
-                            value={quotationData.gstIncluded ? 'included' : 'not_included'}
+                            value={invoiceData.gstIncluded ? 'included' : 'not_included'}
                             onChange={(e) => {
                                 const gstIncluded = e.target.value === 'included';
                                 handleInputChange('gstIncluded', gstIncluded);
                                 // Recalculate totals when GST setting changes
-                                const amcTotals = calculateAMCTotals(quotationData.offerItems, gstIncluded);
-                                setQuotationData(prev => ({
+                                const amcTotals = calculateAMCTotals(invoiceData.offerItems, gstIncluded);
+                                setInvoiceData(prev => ({
                                     ...prev,
                                     gstIncluded,
                                     subtotal: amcTotals.subtotal,
@@ -1937,9 +2429,8 @@ const AMCQuotationForm: React.FC = () => {
                 </div>
             </div>
 
-
             {/* CAMC Spares Section */}
-            {quotationData.amcType === 'CAMC' && (
+            {invoiceData.amcType === 'CAMC' && (
                 <div className="mb-6">
                     <div className="flex items-center space-x-4 mb-4">
                         <h3 className="text-lg font-semibold text-gray-900">Spares replaced in this periodical service One:</h3>
@@ -1960,7 +2451,7 @@ const AMCQuotationForm: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {quotationData.sparesItems.map((item, index) => (
+                                {invoiceData.sparesItems.map((item, index) => (
                                     <tr key={index}>
                                         <td className="border border-gray-300 px-4 py-2 text-center">{index + 1}</td>
                                         {/* Part No (searchable) */}
@@ -1988,13 +2479,13 @@ const AMCQuotationForm: React.FC = () => {
                                                     <p className="text-xs text-red-600 mt-1">{getFieldError(`sparesItems[${index}].partNo`)}</p>
                                                 )}
                                                 {showSparesProductDropdowns[index] && createPortal(
-                                                    <div className="fixed z-50 bg-white border border-gray-300 rounded-md shadow-lg overflow-hidden" 
-                                                         style={{
-                                                             top: `${(document.querySelector(`input[data-spare-index="${index}"]`) as HTMLElement)?.getBoundingClientRect().bottom + window.scrollY + 4}px`,
-                                                             left: `${(document.querySelector(`input[data-spare-index="${index}"]`) as HTMLElement)?.getBoundingClientRect().left + window.scrollX}px`,
-                                                             width: `${(document.querySelector(`input[data-spare-index="${index}"]`) as HTMLElement)?.getBoundingClientRect().width}px`,
-                                                             maxHeight: '400px'
-                                                         }}>
+                                                    <div className="fixed z-50 bg-white border border-gray-300 rounded-md shadow-lg overflow-hidden"
+                                                        style={{
+                                                            top: `${(document.querySelector(`input[data-spare-index="${index}"]`) as HTMLElement)?.getBoundingClientRect().bottom + window.scrollY + 4}px`,
+                                                            left: `${(document.querySelector(`input[data-spare-index="${index}"]`) as HTMLElement)?.getBoundingClientRect().left + window.scrollX}px`,
+                                                            width: `${(document.querySelector(`input[data-spare-index="${index}"]`) as HTMLElement)?.getBoundingClientRect().width}px`,
+                                                            maxHeight: '400px'
+                                                        }}>
                                                         <div className="px-3 py-2 text-xs text-gray-600 bg-gray-50 border-b border-gray-200">
                                                             {getFilteredProducts(sparesProductSearchTerms[index] || '').length} products found
                                                             {!sparesProductSearchTerms[index]?.trim() && ' (showing all products)'}
@@ -2034,9 +2525,6 @@ const AMCQuotationForm: React.FC = () => {
                                                                             <div className="text-xs text-gray-600 mt-0.5">
                                                                                 <strong>Name:</strong> {p.name || 'Unnamed Product'}
                                                                             </div>
-                                                                            {/* <div className="text-xs text-gray-500">
-                                                                                <strong>Category:</strong> {p.category || 'Uncategorized'}
-                                                                            </div> */}
                                                                             {p.brand && (
                                                                                 <div className="text-xs text-gray-500">
                                                                                     <strong>Brand:</strong> {p.brand}
@@ -2147,112 +2635,91 @@ const AMCQuotationForm: React.FC = () => {
                 </div>
             )}
 
-            {/* Financial Summary */}
-            <div className="mb-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Financial Summary</h3>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="text-center">
-                            <div className="text-sm text-gray-600">Subtotal</div>
-                            <div className="text-lg font-semibold text-gray-900">
-                                ₹{quotationData.subtotal?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}
-                            </div>
-                        </div>
-                        <div className="text-center">
-                            <div className="text-sm text-gray-600">Total Tax (18%)</div>
-                            <div className="text-lg font-semibold text-gray-900">
-                                ₹{quotationData.totalTax?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}
-                            </div>
-                        </div>
-                        <div className="text-center">
-                            <div className="text-sm text-gray-600">Grand Total</div>
-                            <div className="text-xl font-bold text-blue-600">
-                                ₹{quotationData.grandTotal?.toLocaleString('en-IN', { minimumFractionDigits: 2 }) || '0.00'}
-                            </div>
-                        </div>
+
+
+            {/* Additional Fields */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-4">Additional Information</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Notes
+                        </label>
+                        <textarea
+                            value={invoiceData.notes || ''}
+                            onChange={(e) => handleInputChange('notes', e.target.value)}
+                            rows={3}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Terms & Conditions
+                        </label>
+                        <textarea
+                            value={invoiceData.terms || ''}
+                            onChange={(e) => handleInputChange('terms', e.target.value)}
+                            rows={3}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
                     </div>
                 </div>
             </div>
 
-            {/* Closing Statement */}
-            <div className="mb-6">
-                <p className="text-gray-700 mb-4">
-                    We trust that our offer is in line with your requirement and shall be glad to receive your valued Purchase Order.
-                </p>
-                <div className="text-right">
-                    <p className="font-medium">Authorised Signatory</p>
-                </div>
-            </div>
 
-            {/* Save Button */}
-            <div className="flex justify-end">
+            {/* Financial Summary */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-3">
+                <div></div>
+                <div></div>
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center py-2 border-b border-gray-200">
+                            <span className="text-gray-600">Subtotal:</span>
+                            <span className="font-semibold">{formatCurrency(invoiceData.subtotal)}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-2 border-b border-gray-200">
+                            <span className="text-gray-600">CGST (9%):</span>
+                            <span className="font-semibold">{formatCurrency(invoiceData.cgst)}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-2 border-b border-gray-200">
+                            <span className="text-gray-600">SGST (9%):</span>
+                            <span className="font-semibold">{formatCurrency(invoiceData.sgst)}</span>
+                        </div>
+                        {/* <div className="flex justify-between items-center py-2 border-b border-gray-200">
+                            <span className="text-gray-600">IGST (18%):</span>
+                            <span className="font-semibold">{formatCurrency(invoiceData.igst)}</span>
+                        </div> */}
+                        <div className="flex justify-between items-center py-2 border-b-2 border-gray-300">
+                            <span className="text-gray-600">Total Tax:</span>
+                            <span className="font-semibold">{formatCurrency(invoiceData.totalTax)}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-3 bg-gray-50 rounded-md px-4">
+                            <span className="text-lg font-bold text-gray-900">Grand Total:</span>
+                            <span className="text-lg font-bold text-blue-600">{formatCurrency(invoiceData.grandTotal)}</span>
+                        </div>
+                    </div>
+                </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-end space-x-4 mt-6">
                 <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => navigate('/amc-invoices')}
+                    className="px-6 py-2"
+                >
+                    Cancel
+                </Button>
+                <Button
+                    type="button"
                     onClick={handleSubmit}
                     disabled={submitting}
-                    className="flex items-center space-x-2"
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white"
                 >
-                    <Save className="w-4 h-4" />
-                    <span>{submitting ? 'Saving...' : 'Save AMC Quotation'}</span>
+                    {submitting ? 'Saving...' : (isEditMode ? 'Update Invoice' : 'Create Invoice')}
                 </Button>
             </div>
-
-            {/* Portal-based DG Dropdown */}
-            {dgDropdownPosition && activeDGRowIndex !== null && showDGRowDropdowns[activeDGRowIndex] && customerDGDetails.length > 0 && createPortal(
-                <div
-                    className="fixed z-[9999] bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"
-                    style={{
-                        top: dgDropdownPosition.top,
-                        left: dgDropdownPosition.left,
-                        width: dgDropdownPosition.width,
-                        minWidth: '300px'
-                    }}
-                >
-                    {filterDGs(dgRowSearchTerms[activeDGRowIndex] || '').length > 0 ? (
-                        filterDGs(dgRowSearchTerms[activeDGRowIndex] || '').map((dg) => (
-                            <div
-                                key={dg._id}
-                                className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100"
-                                onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    const makeValue = dg.dgMake || dg.make || '';
-                                    const engineValue = getDGEngineSerial(dg);
-                                    const kvaValue = getDGKVA(dg);
-
-                                    // Single atomic update to avoid race conditions
-                                    setQuotationData(prev => ({
-                                        ...prev,
-                                        offerItems: prev.offerItems.map((item, i) =>
-                                            i === (activeDGRowIndex ?? 0)
-                                                ? {
-                                                    ...item,
-                                                    make: makeValue,
-                                                    engineSlNo: engineValue,
-                                                    dgRatingKVA: kvaValue
-                                                }
-                                                : item
-                                        )
-                                    }));
-
-                                    setDgRowSearchTerms(prev => ({ ...prev, [activeDGRowIndex as number]: makeValue }));
-                                    setShowDGRowDropdowns(prev => ({ ...prev, [activeDGRowIndex]: false }));
-                                    setDgDropdownPosition(null);
-                                    setActiveDGRowIndex(null);
-                                }}
-                            >
-                                <div className="font-medium">{dg.dgMake || dg.make || 'N/A'} {dg.dgModel || dg.model || 'N/A'}</div>
-                                <div className="text-sm text-gray-500">Engine: {getDGEngineSerial(dg) || 'N/A'} | {getDGKVA(dg) || 'N/A'} KVA</div>
-                            </div>
-                        ))
-                    ) : (
-                        <div className="px-3 py-2 text-gray-500 text-sm">
-                            No DG sets found
-                        </div>
-                    )}
-                </div>,
-                document.body
-            )}
         </div>
     );
 };
 
-export default AMCQuotationForm;
+export default AMCInvoiceForm;

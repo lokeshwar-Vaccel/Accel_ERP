@@ -7,6 +7,39 @@ import { InventoryImportInput, InventoryImportPreview, InventoryImportResult } f
 import * as XLSX from 'xlsx';
 import mongoose from 'mongoose';
 
+// Utility: normalize any header/value coming from Excel
+const normalizeExcelText = (value: any): string => {
+  const asString = value == null ? '' : String(value);
+  return asString
+    .replace(/\u00A0/g, ' ') // non‑breaking spaces → normal space
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+// Utility: given worksheet, detect the header row robustly using a header-agnostic pass
+const detectHeaderRow = (worksheet: XLSX.WorkSheet): number => {
+  // Try a fast scan using AOA (header:1)
+  const rows: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true, defval: '' }) as any[];
+  const wanted = ['PART NO', 'DESCRIPTION', 'UOM'];
+  for (let r = 0; r < Math.min(rows.length, 30); r++) {
+    const row = Array.isArray(rows[r]) ? rows[r] : [];
+    const normalized = row.map((cell: any) => normalizeExcelText(cell).toUpperCase());
+    const hasAll = wanted.every(w => normalized.includes(w));
+    if (hasAll) return r; // 0-indexed row number
+  }
+  // Fallback: previous heuristic looking for PART NO somewhere in column B (0-indexed col 1)
+  const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:Z100');
+  for (let row = range.s.r; row <= Math.min(range.e.r, 10); row++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: row, c: 1 });
+    const cell = worksheet[cellAddress];
+    if (cell && normalizeExcelText(cell.v).toUpperCase().includes('PART NO')) {
+      return row;
+    }
+  }
+  // Last resort: assume row 3 (Excel row 4)
+  return 3;
+};
+
 // Helper function to map department to product category
 const getDepartmentCategory = (dept: string): ProductCategory => {
   const deptLower = dept.toLowerCase();
@@ -18,6 +51,38 @@ const getDepartmentCategory = (dept: string): ProductCategory => {
     return ProductCategory.SPARE_PART;
   }
   return ProductCategory.SPARE_PART; // Default category
+};
+
+// Normalize object keys from Excel to canonical headers
+const normalizeRowKeys = (input: Record<string, any>): Record<string, any> => {
+  const out: Record<string, any> = {};
+  Object.keys(input || {}).forEach((key) => {
+    const clean = normalizeExcelText(key).toUpperCase();
+    let canonical = clean;
+    if (/(^|\b)PART\s*NO\.?\b/.test(clean) || clean === 'PARTNO') canonical = 'PART NO';
+    else if (clean === 'DESC' || clean === 'DESCRIPTION') canonical = 'DESCRIPTION';
+    else if (clean === 'UOM' || clean.includes('UNIT OF MEASURE') || clean === 'UNIT') canonical = 'UOM';
+    else if (clean === 'QTY' || clean === 'QUANTITY') canonical = 'QTY';
+    else if (clean === 'DEPT' || clean === 'DEPARTMENT') canonical = 'DEPT';
+    else if (clean === 'GNDP' || clean === 'GNP' || clean === 'COST') canonical = 'GNDP';
+    else if (clean === 'MRP' || clean === 'PRICE' || clean === 'UNIT PRICE' || clean === 'Unit Price' || clean === 'UnitPrice') canonical = 'MRP';
+    else if (clean === 'GST' || clean === 'TAX') canonical = 'GST';
+    else if (clean === 'HSN' || clean === 'HSN CODE' || clean === 'HSN NO' || clean === 'HSN NUMBER') canonical = 'HSN CODE';
+    else if (clean === 'ROOM') canonical = 'ROOM';
+    else if (clean === 'RACK') canonical = 'RACK';
+    else if (clean === 'CPCB NORMS' || clean === 'CPCB' || clean === 'CPCB NO' || clean === 'CPCB#') canonical = 'CPCB Norms';
+
+    out[canonical] = input[key];
+  });
+  return out;
+};
+
+const parseNumber = (val: any): number => {
+  if (typeof val === 'number') return val;
+  const s = normalizeExcelText(val).replace(/,/g, '');
+  if (s === '') return NaN;
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : NaN;
 };
 
 // Helper function to get or create default location/room/rack
@@ -113,28 +178,16 @@ export const previewInventoryImport = async (
     // Parse Excel/CSV file
     const workbook = XLSX.read(req.file.buffer);
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    
-    // Find the header row by looking for 'PART NO' column
-    let headerRow = 0;
-    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:Z100');
-    
-    for (let row = range.s.r; row <= Math.min(range.e.r, 10); row++) {
-      const cellAddress = XLSX.utils.encode_cell({ r: row, c: 1 }); // Column B (where PART NO should be)
-      const cell = worksheet[cellAddress];
-      if (cell && cell.v && String(cell.v).includes('PART NO')) {
-        headerRow = row;
-        break;
-      }
-    }
-    
-    if (headerRow === 0) {
-      headerRow = 4; // Default to row 5 in Excel (0-indexed)
-    }
-    
-    // Parse data starting from the header row
-    const rawData: InventoryImportInput[] = XLSX.utils.sheet_to_json(worksheet, {
-      range: headerRow // Start parsing from the header row
-    });
+
+    // Robust header detection
+    const headerRow = detectHeaderRow(worksheet);
+
+    // Parse data starting from the detected header row and normalize keys
+    const rawData: InventoryImportInput[] = (XLSX.utils.sheet_to_json(worksheet, {
+      range: headerRow,
+      raw: true,
+      defval: ''
+    }) as any[]).map(normalizeRowKeys) as any;
 
     if (!rawData.length) {
       return next(new AppError('No data found in file', 400));
@@ -187,14 +240,14 @@ export const previewInventoryImport = async (
 
     // Validate and process each row
     for (let i = 0; i < rawData.length; i++) {
-      const row = rawData[i];
+      const row = rawData[i] as any;
       const rowNum = i + 2; // Excel row number (accounting for header)
 
       try {
         // Basic validation - handle potential column name variations
-        const partNo = (row as any)['PART NO'] || (row as any)['Part No'] || (row as any)['PartNo'] || (row as any)['partNo'];
-        const description = (row as any)['DESCRIPTION'] || (row as any)['Description'] || (row as any)['description'];
-        let uom = (row as any)['UOM'] || (row as any)['Uom'] || (row as any)['uom'];
+        const partNo = row['PART NO'];
+        const description = row['DESCRIPTION'];
+        let uom = row['UOM'];
         
         // Convert UOM variations to standard format
         if (uom && typeof uom === 'string') {
@@ -206,7 +259,7 @@ export const previewInventoryImport = async (
         }
         
         // Handle DEPT column - it might be missing, so provide fallbacks
-        let dept = (row as any)['DEPT'] || (row as any)['Dept'] || (row as any)['dept'] || (row as any)['Department'];
+        let dept = row['DEPT'];
         
         // If DEPT is still missing, try to infer from other patterns or use default
         if (!dept) {
@@ -243,9 +296,9 @@ export const previewInventoryImport = async (
         }
 
         // Convert and validate numeric fields
-        const qty = typeof row.QTY === 'number' ? row.QTY : parseFloat(String(row.QTY || 0));
-        const gndp = typeof row.GNDP === 'number' ? row.GNDP : parseFloat(String(row.GNDP || 0));
-        const mrp = typeof row.MRP === 'number' ? row.MRP : parseFloat(String(row.MRP || 0));
+        const qty = parseNumber(row.QTY);
+        const gndp = parseNumber(row.GNDP);
+        const mrp = parseNumber(row.MRP);
 
         if (isNaN(qty) || qty < 0) {
           preview.errors.push(`Row ${rowNum}: Invalid quantity "${row.QTY}" - must be a positive number`);
@@ -269,8 +322,8 @@ export const previewInventoryImport = async (
         }
 
         // Check for duplicate (by key)
-        let roomName = row.ROOM || (row as any)['Room'] || (row as any)['room'];
-        let rackName = row.RACK || (row as any)['Rack'] || (row as any)['rack'];
+        let roomName = row.ROOM;
+        let rackName = row.RACK;
         const key = `${partNo}|Main Office|${roomName || ''}|${rackName || ''}`;
         if (rowKeyMap[key] && rowKeyMap[key].length > 1) {
           unstoredRows.push({ row, reason: 'Duplicate row (same PART NO, ROOM, RACK)' });
@@ -389,31 +442,18 @@ export const importInventory = async (
     // Parse Excel/CSV file
     const workbook = XLSX.read(req.file.buffer);
     console.log('📋 Sheet names:', workbook.SheetNames);
-    
+
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    
-    // Find the header row by looking for 'PART NO' column
-    let headerRow = 0;
-    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:Z100');
-    
-    for (let row = range.s.r; row <= Math.min(range.e.r, 10); row++) {
-      const cellAddress = XLSX.utils.encode_cell({ r: row, c: 1 }); // Column B (where PART NO should be)
-      const cell = worksheet[cellAddress];
-      if (cell && cell.v && String(cell.v).includes('PART NO')) {
-        headerRow = row;
-        // console.log(`✅ Found header row at row ${row + 1} (Excel row ${row + 2})`);
-        break;
-      }
-    }
-    
-    if (headerRow === 0) {
-      headerRow = 4; // Row 5 in Excel (0-indexed)
-    }
-    
-    // Parse data starting from the header row
-    const rawData: InventoryImportInput[] = XLSX.utils.sheet_to_json(worksheet, {
-      range: headerRow // Start parsing from the header row
-    });
+
+    // Robust header detection
+    const headerRow = detectHeaderRow(worksheet);
+
+    // Parse data starting from the detected header row and normalize keys
+    const rawData: InventoryImportInput[] = (XLSX.utils.sheet_to_json(worksheet, {
+      range: headerRow,
+      raw: true,
+      defval: ''
+    }) as any[]).map(normalizeRowKeys) as any;
 
     // if (rawData.length > 0) {
     //   Object.keys(rawData[0]).forEach(key => {
@@ -445,7 +485,7 @@ export const importInventory = async (
 
     // Process each row
     for (let i = 0; i < rawData.length; i++) {
-      const row = rawData[i];
+      const row = rawData[i] as any;
       const rowNum = i + 2; // Excel row number
 
 
@@ -454,7 +494,7 @@ export const importInventory = async (
         const partNo = row['PART NO'];
         const description = row['DESCRIPTION'];
         let uom = row['UOM'];
-        let dept = row['DEPT'] || (row as any)['Dept'] || (row as any)['dept'] || (row as any)['Department'];
+        let dept = row['DEPT'];
         
         // Convert UOM variations to standard format
         if (uom && typeof uom === 'string') {
@@ -466,10 +506,10 @@ export const importInventory = async (
         }
         
         // Convert numeric fields
-        const qty = typeof row.QTY === 'number' ? row.QTY : parseFloat(String(row.QTY || 0));
-        const gndp = typeof row.GNDP === 'number' ? row.GNDP : parseFloat(String(row.GNDP || 0));
-        const mrp = typeof row.MRP === 'number' ? row.MRP : parseFloat(String(row.MRP || 0));
-        const gst = typeof row.GST === 'number' ? row.GST : parseFloat(String(row.GST || 0));
+        const qty = parseNumber(row.QTY);
+        const gndp = parseNumber(row.GNDP);
+        const mrp = parseNumber(row.MRP);
+        const gst = parseNumber(row.GST);
         
         
         // Handle DEPT column - provide fallback if missing
@@ -523,8 +563,8 @@ export const importInventory = async (
 
         
         // Get or create location hierarchy
-        const roomName = row.ROOM || (row as any)['Room'] || (row as any)['room'];
-        const rackName = row.RACK || (row as any)['Rack'] || (row as any)['rack'];
+        const roomName = row.ROOM;
+        const rackName = row.RACK;
         
         const { locationId, roomId, rackId } = await getOrCreateLocationHierarchy(
           'Main Office',
@@ -789,7 +829,7 @@ export const downloadInventoryTemplate = async (
         'ROOM': 'ROOM 3',
         'DEPT': 'RETAIL',
         'GNDP': 230.73,
-        'MRP': 345.00,
+        'Unit Price': 345.00,
         'HSN CODE': '84212300',
         'GST': 18
       },
@@ -804,7 +844,7 @@ export const downloadInventoryTemplate = async (
         'ROOM': 'ROOM 3',
         'DEPT': 'RETAIL',
         'GNDP': 1783.37,
-        'MRP': 2592.00,
+        'Unit Price': 2592.00,
         'HSN CODE': '84314930',
         'GST': 18
       }

@@ -1436,3 +1436,414 @@ export const printProforma = (proforma: any) => {
       console.error('Could not open print window');
     }
   };
+
+export const printAMCInvoice = (invoice: any) => {
+    if (!invoice) return;
+  
+    const formatDate = (d: any) => {
+      if (!d) return '';
+      const date = new Date(d);
+      if (isNaN(date.getTime())) return '';
+      return date.toLocaleDateString('en-GB');
+    };
+  
+    const formatDateTime = (d: any) => {
+      if (!d) return '';
+      const date = new Date(d);
+      if (isNaN(date.getTime())) return '';
+      return `${date.toLocaleDateString('en-GB')} , ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    };
+  
+    const formatMoney = (n: number) =>
+      new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
+  
+    const numberToWords = (num: number) => {
+      if (!isFinite(num)) return '';
+      const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+      const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+      const inWords = (n: number): string => {
+        if (n < 20) return a[n];
+        if (n < 100) return b[Math.floor(n / 10)] + (n % 10 ? ' ' + a[n % 10] : '');
+        if (n < 1000) return a[Math.floor(n / 100)] + ' Hundred' + (n % 100 ? ' ' + inWords(n % 100) : '');
+        if (n < 100000) return inWords(Math.floor(n / 1000)) + ' Thousand' + (n % 1000 ? ' ' + inWords(n % 1000) : '');
+        if (n < 10000000) return inWords(Math.floor(n / 100000)) + ' Lakh' + (n % 100000 ? ' ' + inWords(n % 100000) : '');
+        return inWords(Math.floor(n / 10000000)) + ' Crore' + (n % 10000000 ? ' ' + inWords(n % 10000000) : '');
+      };
+      const rupees = Math.floor(num);
+      return (inWords(rupees) || 'Zero') + ' Only';
+    };
+  
+    const consignee = invoice.shippingAddress || invoice.shipToAddress || {};
+    const buyer = invoice.billingAddress || invoice.billToAddress || {};
+  
+    const items = Array.isArray(invoice.items) ? invoice.items : [];
+    const serviceCharges = Array.isArray(invoice.serviceCharges) ? invoice.serviceCharges : [];
+    const allItems = [...items, ...serviceCharges];
+  
+    const rowsHtml = allItems.map((it: any, idx: number) => {
+      const qty = Number(it.quantity || 0);
+      const rate = Number(it.unitPrice || 0);
+      const disc = Number(it.discount || 0);
+      const taxRate = Number(it.taxRate || 0);
+      const basic = rate * qty;
+      const discAmt = (disc / 100) * basic;
+      const taxable = basic - discAmt;
+      const taxAmt = (taxRate / 100) * taxable;
+      const total = taxable + taxAmt;
+      return `
+        <tr class="item-row">
+          <td class="c no">${idx + 1}</td>
+          <td class="desc">${it.description || ''}${it.note ? `<div class="note">${it.note}</div>` : ''}</td>
+          <td class="c hsn">${it.hsnNumber || ''}</td>
+          <td class="c gst">${taxRate ? taxRate + ' %' : ''}</td>
+          <td class="c qty">${qty || ''}</td>
+          <td class="r rate">${formatMoney(rate)}</td>
+          <td class="c unit">${it.uom || 'nos'}</td>
+          <td class="c disc">${disc ? disc + ' %' : ''}</td>
+          <td class="r amount">${formatMoney(total)}</td>
+        </tr>
+      `;
+    }).join('');
+  
+    const totalTax = allItems.reduce((sum: number, it: any) => {
+      const qty = Number(it.quantity || 0);
+      const rate = Number(it.unitPrice || 0);
+      const disc = Number(it.discount || 0);
+      const taxRate = Number(it.taxRate || 0);
+      const basic = rate * qty;
+      const discAmt = (disc / 100) * basic;
+      const taxable = basic - discAmt;
+      return sum + (taxRate / 100) * taxable;
+    }, 0);
+  
+    const subtotal = allItems.reduce((sum: number, it: any) => {
+      const qty = Number(it.quantity || 0);
+      const rate = Number(it.unitPrice || 0);
+      const disc = Number(it.discount || 0);
+      const basic = rate * qty;
+      const discAmt = (disc / 100) * basic;
+      const taxable = basic - discAmt;
+      const taxRate = Number(it.taxRate || 0);
+      const taxAmt = (taxRate / 100) * taxable;
+      return sum + taxable + taxAmt;
+    }, 0);
+  
+    const grandTotal = Number(invoice.totalAmount || subtotal);
+
+    // Determine intra-state (CGST/SGST) vs inter-state (IGST)
+    const companyState = 'Tamil Nadu';
+    const buyerState = (buyer && (buyer.state || '')).toString();
+    const isIntraState = buyerState.toLowerCase().includes(companyState.toLowerCase());
+    const cgstAmountTotal = typeof invoice.cgst === 'number' ? invoice.cgst : (isIntraState ? totalTax / 2 : 0);
+    const sgstAmountTotal = typeof invoice.sgst === 'number' ? invoice.sgst : (isIntraState ? totalTax / 2 : 0);
+    const igstAmountTotal = typeof invoice.igst === 'number' ? invoice.igst : (isIntraState ? 0 : totalTax);
+  
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+  
+    const html = `
+    <html>
+    <head>
+      <meta charset="utf-8" />
+      <title>Tax Invoice - ${invoice.invoiceNumber || ''}</title>
+      <style>
+        /* Base & print */
+        @page { margin: 12mm; }
+        html,body { margin:0; padding:0; background:#fff; color:#000; }
+        body { font-family: "Times New Roman", Times, serif; font-size:11px; -webkit-print-color-adjust:exact; }
+        .page { width:210mm; padding:4mm 6mm; box-sizing:border-box; }
+  
+        .top-info { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; font-size:10px; }
+        .top-info .left { text-align:left; width:33%; }
+        .top-info .center { text-align:center; width:34%; font-weight:700; font-size:13px; }
+        .top-info .right { text-align:right; width:33%; font-size:10px; }
+  
+        /* Header grid: row 1 = IRN (left) | QR (right); row 2 = title centered spanning both columns */
+        .header-grid { display:grid; grid-template-columns: 1fr 140px; gap:8px; align-items:start; margin-bottom:6px; }
+        .irn-box { font-size:11px; line-height:1.4; }
+        .qr-block { text-align:right; }
+        .qr-label { font-size:11px; font-weight:700; margin-bottom:4px; }
+        .qr-block img { width:120px; height:120px; object-fit:contain; border:1px solid #000; padding:2px; background:#fff; display:inline-block; }
+  
+        .invoice-title-row { grid-column: 1 / -1; text-align:center; margin-top:6px; }
+        .invoice-title { font-size:20px; font-weight:700; margin:0; }
+  
+        /* main header area */
+        .header-main { display:flex; gap:8px; margin-top:8px; page-break-inside: avoid; break-inside: avoid; }
+        .company-box { flex:1 1 62%; border:1px solid #000; padding:8px; box-sizing:border-box; font-size:11px; }
+        .company-box .name { font-weight:700; margin-bottom:6px; }
+        .meta-box { width:320px; border:1px solid #000; box-sizing:border-box; font-size:11px; }
+        .meta-table { width:100%; border-collapse:collapse; }
+        .meta-table td { border:1px solid #000; padding:6px; vertical-align:top; font-size:11px; }
+        .meta-table .label { font-weight:700; font-size:11px; }
+  
+        /* stacked address boxes */
+        .addresses { margin-top:8px; page-break-inside: avoid; break-inside: avoid; }
+        .addr { border:1px solid #000; padding:8px; margin-bottom:6px; font-size:11px; box-sizing:border-box; }
+        .addr .title { font-weight:700; margin-bottom:6px; }
+  
+        /* strong divider */
+        .divider { border-top:3px solid #000; margin:2px 0 6px 0; }
+  
+        /* items table: wide description + thick vertical separator */
+        .items { width:100%; border-collapse:collapse; page-break-inside:auto; font-size:11px; }
+        .items thead th { border-bottom:1px solid #000; padding:8px; font-weight:700; background:#fff; }
+        .items tbody td { border-bottom:1px solid #999; padding:8px; vertical-align:top; }
+        .items td.desc { padding:12px; }
+        .items td.hsn, .items th.hsn { border-left:4px solid #000; padding-left:10px; } /* thick vertical separator */
+        .items td.r { text-align:right; }
+        .items td.c { text-align:center; }
+  
+        /* avoid splitting row */
+        .item-row { page-break-inside: avoid; break-inside: avoid; }
+  
+        /* reduce filler */
+        .filler { min-height:8px; }
+  
+        /* bottom area: amount words, hsn table, totals */
+        .bottom-area { display:flex; gap:8px; margin-top:8px; page-break-inside: avoid; break-inside: avoid; }
+        .words { flex:1; border:1px solid #000; padding:8px; box-sizing:border-box; font-size:11px; }
+        .words .title { font-weight:700; margin-bottom:6px; }
+        .words .value { font-weight:700; }
+  
+        .hsn-summary { width:100%; border-collapse:collapse; margin-top:8px; font-size:11px; }
+        .hsn-summary th, .hsn-summary td { border:1px solid #000; padding:6px; }
+  
+        .totals { width:340px; border:1px solid #000; box-sizing:border-box; }
+        .totals table { width:100%; border-collapse:collapse; font-size:12px; }
+        .totals td { padding:8px; border-bottom:1px solid #000; }
+        .totals .label { font-weight:700; }
+        .totals .grand { background:#f3f3f3; font-weight:700; font-size:14px; }
+  
+        .tax-in-words { margin-top:6px; font-weight:700; }
+  
+        .bank-declare { display:flex; gap:8px; margin-top:8px; page-break-inside: avoid; break-inside: avoid; }
+        .bank, .declare { border:1px solid #000; padding:8px; box-sizing:border-box; font-size:11px; }
+        .bank { flex:1; }
+        .declare { width:340px; }
+  
+        .signature { margin-top:12px; text-align:right; }
+        .signature .line { border-top:1px solid #000; display:inline-block; padding-top:6px; width:70%; }
+  
+        @media print {
+          body { -webkit-print-color-adjust:exact; }
+          .page { padding:6mm; }
+          tr, td { orphans:3; widows:3; }
+        }
+      </style>
+    </head>
+    <body onload="window.print(); window.close();">
+      <div class="page">
+  
+        <!-- tiny top info row -->
+        <div class="top-info">
+          <div class="left">${formatDateTime(new Date())}</div>
+          <div class="center">${invoice.invoiceNumber ? `Tax Invoice - ${invoice.invoiceNumber}` : 'Tax Invoice'}</div>
+          <div class="right"></div>
+        </div>
+  
+        <!-- header grid: IRN left, QR right; title row spans both -->
+        <div class="header-grid">
+          <div class="irn-box">
+            <div><strong>IRN</strong> &nbsp;: &nbsp; <span style="font-weight:700;">${invoice.irn || ''}</span></div>
+            <div><strong>Ack No.</strong> &nbsp;: &nbsp; ${invoice.ackNumber || ''}</div>
+            <div><strong>Ack Date</strong> &nbsp;: &nbsp; ${formatDate(invoice.ackDate)}</div>
+          </div>
+  
+          <div class="qr-block">
+            <div class="qr-label">e-Invoice</div>
+            ${invoice.qrCodeInvoice ? `<img src="${invoice.qrCodeInvoice}" alt="QR"/>` : `<div style="width:120px;height:120px;border:1px solid #000;"></div>`}
+          </div>
+  
+          <div class="invoice-title-row">
+            <h1 class="invoice-title">Tax Invoice</h1>
+          </div>
+        </div>
+  
+        <!-- company left, invoice meta right -->
+        <div class="header-main">
+          <div class="company-box">
+            <div class="name">Sun Power Services</div>
+            <div>D No.53, Plot No.4, 4th Street, Phase-1 Extension</div>
+            <div>Annai Velankanni Nagar, Madhananthapuram, Porur</div>
+            <div>Chennai - 600116</div>
+            <div>044-24828218, 9176660123</div>
+            <div>GSTIN/UIN: 33BLFPS9951M1ZC</div>
+            <div>State Name : Tamil Nadu, Code : 33</div>
+            <div>E-Mail : sunpowerservices@gmail.com</div>
+          </div>
+  
+          <div class="meta-box">
+            <table class="meta-table">
+              <tr>
+                <td style="width:50%"><div class="label">Invoice No.</div><div style="font-weight:700;">${invoice.invoiceNumber || ''}</div></td>
+                <td style="width:50%"><div class="label">Dated</div><div>${formatDate(invoice.invoiceDate || invoice.issueDate)}</div></td>
+              </tr>
+              <tr>
+                <td><div class="label">Delivery Note</div><div>${invoice.deliveryNotes || ''}</div></td>
+                <td><div class="label">Mode/Terms of Payment</div><div>${invoice.termsOfPayment || invoice.paymentTerms || ''}</div></td>
+              </tr>
+              <tr>
+                <td><div class="label">Reference No. & Date.</div><div>${(invoice.referenceNumber || invoice.referenceNo || '') + (invoice.referenceDate ? ' ' + formatDate(invoice.referenceDate) : '')}</div></td>
+                <td><div class="label">Other References</div><div>${invoice.otherReferences || ''}</div></td>
+              </tr>
+              <tr>
+                <td><div class="label">Buyer's Order No.</div><div>${invoice.buyersOrderNumber || ''}</div></td>
+                <td><div class="label">Dated</div><div>${formatDate(invoice.buyersOrderDate)}</div></td>
+              </tr>
+              <tr>
+                <td><div class="label">Dispatch Doc No.</div><div>${invoice.dispatchDocNo || ''}</div></td>
+                <td><div class="label">Delivery Note Date</div><div>${formatDate(invoice.deliveryNoteDate)}</div></td>
+              </tr>
+              <tr>
+                <td><div class="label">Dispatched through</div><div>${invoice.dispatchedThrough || ''}</div></td>
+                <td><div class="label">Destination</div><div>${invoice.destination || ''}</div></td>
+              </tr>
+              <tr>
+                <td colspan="2"><div class="label">Terms of Delivery</div><div>${invoice.termsOfDelivery || ''}</div></td>
+              </tr>
+            </table>
+          </div>
+        </div>
+  
+        <!-- stacked consignee / buyer -->
+        <div class="addresses">
+          <div class="addr">
+            <div class="title">Consignee (Ship to)</div>
+            <div style="font-weight:700;">${consignee.name || invoice.shippingName || ''}</div>
+            <div>${consignee.address || ''}</div>
+            <div>${consignee.district || ''} ${consignee.state ? ', ' + consignee.state : ''} ${consignee.pincode ? '- ' + consignee.pincode : ''}</div>
+            <div>GSTIN/UIN : ${consignee.gstNumber || 'N/A'}</div>
+          </div>
+  
+          <div class="addr">
+            <div class="title">Buyer (Bill to)</div>
+            <div style="font-weight:700;">${invoice.customer?.name || buyer.name || ''}</div>
+            <div>${buyer.address || ''}</div>
+            <div>${buyer.district || ''} ${buyer.state ? ', ' + buyer.state : ''} ${buyer.pincode ? '- ' + buyer.pincode : ''}</div>
+            <div>GSTIN/UIN : ${buyer.gstNumber || 'N/A'}</div>
+          </div>
+        </div>
+  
+        <div class="divider"></div>
+  
+        <table class="items">
+          <thead>
+            <tr>
+              <th style="width:4%;">Sl No.</th>
+              <th style="width:62%;">Description of Services</th>
+              <th class="hsn" style="width:8%;">HSN/SAC</th>
+              <th style="width:6%;">GST Rate</th>
+              <th style="width:5%;">Qty</th>
+              <th style="width:7%;">Rate</th>
+              <th style="width:5%;">Unit</th>
+              <th style="width:5%;">Disc. %</th>
+              <th style="width:8%;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml || `<tr><td class="c" colspan="9" style="padding:30px;text-align:center;">No items</td></tr>`}
+            <tr><td colspan="9" class="filler"></td></tr>
+          </tbody>
+        </table>
+  
+        <div class="bottom-area">
+          <div class="words">
+            <div class="title">Amount Chargeable (in words)</div>
+            <div class="value">Indian Rupees ${numberToWords(grandTotal)}</div>
+  
+            <table class="hsn-summary">
+              <thead>
+                <tr>
+                  <th>HSN/SAC</th>
+                  <th>Taxable Value</th>
+                  <th>CGST</th>
+                  <th>SGST/UTGST</th>
+                  <th>Total Tax Amount</th>
+                </tr>
+                <tr>
+                  <th></th>
+                  <th></th>
+                  <th>Rate Amount</th>
+                  <th>Rate Amount</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${allItems.length ? (() => {
+                  const groups: { [k: string]: { taxable: number; rate: number; cgstAmt: number; sgstAmt: number; totalTax: number } } = {};
+                  allItems.forEach((it: any) => {
+                    const h = it.hsnNumber || '---';
+                    const qty = Number(it.quantity || 0);
+                    const rate = Number(it.unitPrice || 0);
+                    const disc = Number(it.discount || 0);
+                    const basic = qty * rate;
+                    const discAmt = (disc / 100) * basic;
+                    const taxable = basic - discAmt;
+                    const taxRate = Number(it.taxRate || 0);
+                    const taxAmt = (taxRate / 100) * taxable;
+                    const cg = isIntraState ? taxAmt / 2 : 0;
+                    const sg = isIntraState ? taxAmt / 2 : 0;
+                    if (!groups[h]) groups[h] = { taxable: 0, rate: taxRate, cgstAmt: 0, sgstAmt: 0, totalTax: 0 };
+                    groups[h].taxable += taxable;
+                    groups[h].cgstAmt += cg;
+                    groups[h].sgstAmt += sg;
+                    groups[h].totalTax += taxAmt;
+                  });
+                  return Object.keys(groups).map(h => `<tr>
+                    <td>${h}</td>
+                    <td style="text-align:right;">${formatMoney(groups[h].taxable)}</td>
+                    <td style="text-align:center;">${isIntraState ? (groups[h].rate/2).toFixed(0) + ' %' : '0 %'} <span style="float:right;">${formatMoney(groups[h].cgstAmt)}</span></td>
+                    <td style="text-align:center;">${isIntraState ? (groups[h].rate/2).toFixed(0) + ' %' : '0 %'} <span style="float:right;">${formatMoney(groups[h].sgstAmt)}</span></td>
+                    <td style="text-align:right;">${formatMoney(groups[h].totalTax)}</td>
+                  </tr>`).join('');
+                })() : `<tr><td colspan="5" style="text-align:center;">No HSN data</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+  
+          <div class="totals">
+            <table>
+              <tr><td class="label">Total</td><td style="text-align:right;">₹ ${formatMoney(Math.max(0, grandTotal - totalTax))}</td></tr>
+              ${isIntraState ? `
+                <tr><td class="label">CGST</td><td style="text-align:right;">₹ ${formatMoney(cgstAmountTotal)}</td></tr>
+                <tr><td class="label">SGST/UTGST</td><td style="text-align:right;">₹ ${formatMoney(sgstAmountTotal)}</td></tr>
+              ` : `
+                <tr><td class="label">IGST</td><td style="text-align:right;">₹ ${formatMoney(igstAmountTotal)}</td></tr>
+              `}
+              <tr><td class="label grand">Grand Total</td><td style="text-align:right;" class="grand">₹ ${formatMoney(grandTotal)}</td></tr>
+            </table>
+          </div>
+        </div>
+  
+        <div class="tax-in-words">Tax Amount (in words) : <span style="font-weight:normal;">Indian Rupees ${numberToWords(totalTax)}</span></div>
+  
+        <div class="bank-declare">
+          <div class="bank">
+            <div style="font-weight:700; margin-bottom:6px;">Company's Bank Details</div>
+            <div>Bank Name : Hdfc Bank A/c No: ${invoice.bankAccount || '50200051862959'}</div>
+            <div>A/c No. : ${invoice.bankAccount || '50200051862959'}</div>
+            <div>Branch & IFS Code : ${invoice.branch || 'Moulivakkam & HDFC0005281'}</div>
+            <div style="margin-top:8px; font-weight:700;">Company's PAN : ${invoice.companyPan || 'BLFPS9951M'}</div>
+          </div>
+  
+          <div class="declare">
+            <div style="font-weight:700; margin-bottom:6px;">Declaration</div>
+            <div style="font-size:11px;">We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.</div>
+            <div class="signature">
+              <div>for Sun Power Services</div>
+              <div class="line">Authorised Signatory</div>
+            </div>
+          </div>
+        </div>
+  
+      </div>
+    </body>
+    </html>
+    `;
+  
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+  };
+  

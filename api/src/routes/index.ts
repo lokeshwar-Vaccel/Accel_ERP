@@ -45,6 +45,8 @@ import dgProformasRoutes from './dgProformas';
 import deliveryChallanRoutes from './deliveryChallans';
 import amcQuotationRoutes from './amcQuotationRoutes';
 import amcQuotationPaymentRoutes from './amcQuotationPaymentRoutes';
+import amcInvoiceRoutes from './amcInvoiceRoutes';
+import amcInvoicePaymentRoutes from './amcInvoicePaymentRoutes';
 import evCustomerRoutes from './evCustomers';
 
 const router = Router();
@@ -86,6 +88,8 @@ router.get('/', (req, res) => {
       deliveryChallans: '/delivery-challans',
       amcQuotations: '/amc-quotations',
       amcQuotationPayments: '/amc-quotation-payments',
+      amcInvoices: '/amc-invoices',
+      amcInvoicePayments: '/amc-invoice-payments',
       evCustomers: '/ev-customers',
     }
   });
@@ -138,6 +142,8 @@ router.use('/dg-proformas', dgProformasRoutes);
 router.use('/delivery-challans', deliveryChallanRoutes);
 router.use('/amc-quotations', amcQuotationRoutes);
 router.use('/amc-quotation-payments', amcQuotationPaymentRoutes);
+router.use('/amc-invoices', amcInvoiceRoutes);
+router.use('/amc-invoice-payments', amcInvoicePaymentRoutes);
 router.use('/ev-customers', evCustomerRoutes);
 
 export default router;

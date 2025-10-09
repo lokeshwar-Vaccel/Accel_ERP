@@ -65,6 +65,26 @@ const getSelectedAddress = (quotation: any) => {
   ) || null;
 };
 
+const getSelectedBillToAddress = (quotation: any) => {
+  if (!quotation.billToAddressId || !quotation.customer?.addresses) {
+    return null;
+  }
+  
+  return quotation.customer.addresses.find((addr: any) => 
+    addr.id.toString() === quotation.billToAddressId
+  ) || null;
+};
+
+const getSelectedShipToAddress = (quotation: any) => {
+  if (!quotation.shipToAddressId || !quotation.customer?.addresses) {
+    return null;
+  }
+  
+  return quotation.customer.addresses.find((addr: any) => 
+    addr.id.toString() === quotation.shipToAddressId
+  ) || null;
+};
+
 // Helper function to get payment method label
 const getPaymentMethodLabel = (method: string) => {
   switch (method) {
@@ -83,6 +103,7 @@ interface AMCQuotationViewModalProps {
   onClose: () => void;
   onEdit: () => void;
   onPrint: () => void;
+  onConvertToInvoice?: () => void;
   paymentHistory?: any[];
   loadingPaymentHistory?: boolean;
   onRefreshPaymentHistory?: () => void;
@@ -94,6 +115,7 @@ const AMCQuotationViewModal: React.FC<AMCQuotationViewModalProps> = ({
   onClose,
   onEdit,
   onPrint,
+  onConvertToInvoice,
   paymentHistory = [],
   loadingPaymentHistory = false,
   onRefreshPaymentHistory,
@@ -354,6 +376,16 @@ const AMCQuotationViewModal: React.FC<AMCQuotationViewModalProps> = ({
               <Printer className="w-4 h-4" />
               <span>Print</span>
             </Button>
+            {onConvertToInvoice && (
+              <Button
+                onClick={onConvertToInvoice}
+                variant="outline"
+                className="flex items-center space-x-2 bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+              >
+                <FileText className="w-4 h-4" />
+                <span>Convert to Invoice</span>
+              </Button>
+            )}
             <Button
               onClick={onEdit}
               className="flex items-center space-x-2"
@@ -394,29 +426,59 @@ const AMCQuotationViewModal: React.FC<AMCQuotationViewModalProps> = ({
                 <span className="ml-2 text-gray-900">{quotation.customer.name}</span>
               </div>
               {(() => {
-                const selectedAddress = getSelectedAddress(quotation);
-                return selectedAddress ? (
-                  <div>
-                    <span className="font-medium text-gray-700">Address:</span>
-                    <div className="ml-2 text-gray-900">
-                      <div>{selectedAddress.address}</div>
-                      <div className="text-sm text-gray-600">
-                        {selectedAddress.district}, {selectedAddress.state} - {selectedAddress.pincode}
+                const billToAddress = getSelectedBillToAddress(quotation);
+                const shipToAddress = getSelectedShipToAddress(quotation);
+                return (
+                  <div className="space-y-3">
+                    {/* Bill To Address */}
+                    {billToAddress && (
+                      <div>
+                        <span className="font-medium text-gray-700">Bill To Address:</span>
+                        <div className="ml-2 text-gray-900">
+                          <div>{billToAddress.address}</div>
+                          <div className="text-sm text-gray-600">
+                            {billToAddress.district}, {billToAddress.state} - {billToAddress.pincode}
+                          </div>
+                          {billToAddress?.gstNumber && <div className="text-sm text-gray-600">
+                            GST No : {billToAddress.gstNumber}
+                          </div>}
+                        </div>
+                        {billToAddress?.email && <div className="mt-2">
+                          <span className="font-medium text-gray-700">Email:</span>
+                          <span className="ml-2 text-gray-900">{billToAddress.email}</span>
+                        </div>}
+                        {billToAddress?.phone && <div className="mt-2">
+                          <span className="font-medium text-gray-700">Phone:</span>
+                          <span className="ml-2 text-gray-900">{billToAddress.phone}</span>
+                        </div>}
                       </div>
-                      {selectedAddress?.gstNumber && <div className="text-sm text-gray-600">
-                        GST No : {selectedAddress.gstNumber}
-                      </div>}
-                    </div>
-              {selectedAddress?.email && <div className="mt-2">
-                <span className="font-medium text-gray-700">Email:</span>
-                <span className="ml-2 text-gray-900">{selectedAddress.email}</span>
-              </div>}
-              {selectedAddress?.phone && <div className="mt-2">
-                <span className="font-medium text-gray-700">Phone:</span>
-                <span className="ml-2 text-gray-900">{selectedAddress.phone}</span>
-              </div>}
+                    )}
+                    
+                    {/* Ship To Address */}
+                    {shipToAddress && (
+                      <div>
+                        <span className="font-medium text-gray-700">Ship To Address:</span>
+                        <div className="ml-2 text-gray-900">
+                          <div>{shipToAddress.address}</div>
+                          <div className="text-sm text-gray-600">
+                            {shipToAddress.district}, {shipToAddress.state} - {shipToAddress.pincode}
+                          </div>
+                          {shipToAddress?.gstNumber && <div className="text-sm text-gray-600">
+                            GST No : {shipToAddress.gstNumber}
+                          </div>}
+                        </div>
+                        {shipToAddress?.email && <div className="mt-2">
+                          <span className="font-medium text-gray-700">Email:</span>
+                          <span className="ml-2 text-gray-900">{shipToAddress.email}</span>
+                        </div>}
+                        {shipToAddress?.phone && <div className="mt-2">
+                          <span className="font-medium text-gray-700">Phone:</span>
+                          <span className="ml-2 text-gray-900">{shipToAddress.phone}</span>
+                        </div>}
+                      </div>
+                    )}
                   </div>
-                ) : null;
+                );
               })()}
               {quotation.customer.pan && (
                 <div>
@@ -725,6 +787,16 @@ const AMCQuotationViewModal: React.FC<AMCQuotationViewModalProps> = ({
             >
               Close
             </Button>
+            {onConvertToInvoice && (
+              <Button
+                onClick={onConvertToInvoice}
+                variant="outline"
+                className="flex items-center space-x-2 bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+              >
+                <FileText className="w-4 h-4" />
+                <span>Convert to Invoice</span>
+              </Button>
+            )}
             <Button
               onClick={onEdit}
               className="flex items-center space-x-2"

@@ -31,6 +31,26 @@ const getSelectedAddress = (quotation: any) => {
   ) || null;
 };
 
+const getSelectedBillToAddress = (quotation: any) => {
+  if (!quotation.billToAddressId || !quotation.customer?.addresses) {
+    return null;
+  }
+  
+  return quotation.customer.addresses.find((addr: any) => 
+    addr.id.toString() === quotation.billToAddressId
+  ) || null;
+};
+
+const getSelectedShipToAddress = (quotation: any) => {
+  if (!quotation.shipToAddressId || !quotation.customer?.addresses) {
+    return null;
+  }
+  
+  return quotation.customer.addresses.find((addr: any) => 
+    addr.id.toString() === quotation.shipToAddressId
+  ) || null;
+};
+
 interface AMCQuotationPrintViewProps {
   quotation: any;
 }
@@ -399,16 +419,37 @@ const AMCQuotationPrintView: React.FC<AMCQuotationPrintViewProps> = ({ quotation
           <div class="info-value">
             <div>${quotation.customer?.name || 'N/A'}</div>
             ${(() => {
-              const selectedAddress = getSelectedAddress(quotation);
-              return selectedAddress ? `
-                <div style="margin-top: 4px; font-size: 10px; color: #666;">
-                  ${selectedAddress.address}<br>
-                  ${selectedAddress.district}, ${selectedAddress.state} - ${selectedAddress.pincode}
-                </div>
-                ${selectedAddress.gstNumber ? `<div style="margin-top: 4px; font-size: 10px; color: #666;">GST No: ${selectedAddress.gstNumber}</div>` : ''}
-                ${selectedAddress.email ? `<div style="margin-top: 4px; font-size: 10px; color: #666;">Email: ${selectedAddress.email}</div>` : ''}
-                ${selectedAddress.phone ? `<div style="margin-top: 4px; font-size: 10px; color: #666;">Phone: ${selectedAddress.phone}</div>` : ''}
-              ` : '';
+              const billToAddress = getSelectedBillToAddress(quotation);
+              const shipToAddress = getSelectedShipToAddress(quotation);
+              let addressHtml = '';
+              
+              if (billToAddress) {
+                addressHtml += `
+                  <div style="margin-top: 8px; font-size: 10px; color: #666;">
+                    <strong>Bill To Address:</strong><br>
+                    ${billToAddress.address}<br>
+                    ${billToAddress.district}, ${billToAddress.state} - ${billToAddress.pincode}
+                    ${billToAddress.gstNumber ? `<br>GST No: ${billToAddress.gstNumber}` : ''}
+                    ${billToAddress.email ? `<br>Email: ${billToAddress.email}` : ''}
+                    ${billToAddress.phone ? `<br>Phone: ${billToAddress.phone}` : ''}
+                  </div>
+                `;
+              }
+              
+              if (shipToAddress) {
+                addressHtml += `
+                  <div style="margin-top: 8px; font-size: 10px; color: #666;">
+                    <strong>Ship To Address:</strong><br>
+                    ${shipToAddress.address}<br>
+                    ${shipToAddress.district}, ${shipToAddress.state} - ${shipToAddress.pincode}
+                    ${shipToAddress.gstNumber ? `<br>GST No: ${shipToAddress.gstNumber}` : ''}
+                    ${shipToAddress.email ? `<br>Email: ${shipToAddress.email}` : ''}
+                    ${shipToAddress.phone ? `<br>Phone: ${shipToAddress.phone}` : ''}
+                  </div>
+                `;
+              }
+              
+              return addressHtml;
             })()}
           </div>
         </div>
@@ -680,18 +721,39 @@ const AMCQuotationPrintView: React.FC<AMCQuotationPrintViewProps> = ({ quotation
                 <div className="flex-1">
                   <div className="font-semibold text-lg print:text-base">{quotation.customer.name}</div>
                   {(() => {
-                    const selectedAddress = getSelectedAddress(quotation);
-                    return selectedAddress ? (
-                      <div className="mt-2">
-                        <div className="text-sm text-gray-600 print:text-xs">{selectedAddress.address}</div>
-                        <div className="text-sm text-gray-600 print:text-xs">
-                          {selectedAddress.district}, {selectedAddress.state} - {selectedAddress.pincode}
-                        </div>
-                        {selectedAddress.gstNumber && <div className="text-sm text-gray-600 print:text-xs">GST No : {selectedAddress.gstNumber}</div>}
-                        {selectedAddress.email && <div className="text-sm text-gray-600 print:text-xs py-1">Email : {selectedAddress.email}</div>}
-                        {selectedAddress.phone && <div className="text-sm text-gray-600 print:text-xs">Phone : {selectedAddress.phone}</div>}
+                    const billToAddress = getSelectedBillToAddress(quotation);
+                    const shipToAddress = getSelectedShipToAddress(quotation);
+                    return (
+                      <div className="mt-2 space-y-3">
+                        {/* Bill To Address */}
+                        {billToAddress && (
+                          <div>
+                            <div className="text-sm font-medium text-gray-700 print:text-xs">Bill To Address:</div>
+                            <div className="text-sm text-gray-600 print:text-xs">{billToAddress.address}</div>
+                            <div className="text-sm text-gray-600 print:text-xs">
+                              {billToAddress.district}, {billToAddress.state} - {billToAddress.pincode}
+                            </div>
+                            {billToAddress.gstNumber && <div className="text-sm text-gray-600 print:text-xs">GST No : {billToAddress.gstNumber}</div>}
+                            {billToAddress.email && <div className="text-sm text-gray-600 print:text-xs py-1">Email : {billToAddress.email}</div>}
+                            {billToAddress.phone && <div className="text-sm text-gray-600 print:text-xs">Phone : {billToAddress.phone}</div>}
+                          </div>
+                        )}
+                        
+                        {/* Ship To Address */}
+                        {shipToAddress && (
+                          <div>
+                            <div className="text-sm font-medium text-gray-700 print:text-xs">Ship To Address:</div>
+                            <div className="text-sm text-gray-600 print:text-xs">{shipToAddress.address}</div>
+                            <div className="text-sm text-gray-600 print:text-xs">
+                              {shipToAddress.district}, {shipToAddress.state} - {shipToAddress.pincode}
+                            </div>
+                            {shipToAddress.gstNumber && <div className="text-sm text-gray-600 print:text-xs">GST No : {shipToAddress.gstNumber}</div>}
+                            {shipToAddress.email && <div className="text-sm text-gray-600 print:text-xs py-1">Email : {shipToAddress.email}</div>}
+                            {shipToAddress.phone && <div className="text-sm text-gray-600 print:text-xs">Phone : {shipToAddress.phone}</div>}
+                          </div>
+                        )}
                       </div>
-                    ) : null;
+                    );
                   })()}
                 </div>
               </div>

@@ -1262,7 +1262,7 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
       if (formData.poPdf && formData.poPdf instanceof File) {
         // New file upload - upload the file and get URL
         // Check if user is authenticated
-        const token = localStorage.getItem('authToken');
+        const token = localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
         if (!token) {
           toast.error('Please log in to upload files.');
           setSubmitting(false);

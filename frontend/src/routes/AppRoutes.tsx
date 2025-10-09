@@ -37,6 +37,9 @@ import DGQuotationManagement from "pages/DGQuotationManagement";
 import AMCQuotationManagement from "pages/AMCQuotationManagement";
 import AMCQuotationForm from "components/quotations/AMCQuotationForm";
 import AMCQuotationPrintPage from "pages/AMCQuotationPrintPage";
+import AMCInvoiceManagement from "pages/AMCInvoiceManagement";
+import AMCInvoiceForm from "pages/AMCInvoiceForm";
+import AMCInvoiceView from "pages/AMCInvoiceView";
 import OEMOrderManagement from "pages/OEMOrderManagement";
 
 const AppRoutes: React.FC = () => {
@@ -75,6 +78,20 @@ const AppRoutes: React.FC = () => {
             <Route path="/amc-quotations/create" element={<AMCQuotationForm />} />
             <Route path="/amc-quotations/edit/:id" element={<AMCQuotationForm />} />
             <Route path="/amc-quotations/:id/print" element={<AMCQuotationPrintPage />} />
+
+            {/* AMC Invoice Management */}
+            <Route path="/amc-invoices" element={<AMCInvoiceManagement />} />
+            <Route path="/amc-invoices/create" element={<AMCInvoiceForm />} />
+            <Route path="/amc-invoices/edit/:id" element={<AMCInvoiceForm />} />
+            <Route path="/amc-invoices/:id" element={<AMCInvoiceView />} />
+            <Route path="/amc-invoices/:id/print" element={<AMCInvoiceView />} />
+            
+            {/* AMC Proforma Management */}
+            <Route path="/amc-proforma" element={<AMCInvoiceManagement />} />
+            <Route path="/amc-proforma/create" element={<AMCInvoiceForm />} />
+            <Route path="/amc-proforma/edit/:id" element={<AMCInvoiceForm />} />
+            <Route path="/amc-proforma/:id" element={<AMCInvoiceView />} />
+            <Route path="/amc-proforma/:id/print" element={<AMCInvoiceView />} />
 
             {/* Purchase Invoice Management */}
             <Route path="/purchase-invoice/create" element={<CreatePurchaseinvoiceForm />} />

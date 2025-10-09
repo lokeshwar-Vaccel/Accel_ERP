@@ -2347,6 +2347,54 @@ class ApiClient {
       }),
   };
 
+  // AMC Invoice APIs
+  amcInvoices = {
+    getAll: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: { invoices: any[]; pagination: any } }>(`/amc-invoices${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    getById: (id: string) =>
+      this.makeRequest<{ success: boolean; data: { invoice: any } }>(`/amc-invoices/${id}`),
+
+    create: (invoiceData: any) =>
+      this.makeRequest<{ success: boolean; data: { invoice: any } }>('/amc-invoices', {
+        method: 'POST',
+        body: JSON.stringify(invoiceData),
+      }),
+
+    createFromQuotation: (quotationId: string, additionalData?: any) =>
+      this.makeRequest<{ success: boolean; data: { invoice: any } }>(`/amc-invoices/from-quotation/${quotationId}`, {
+        method: 'POST',
+        body: JSON.stringify(additionalData || {}),
+      }),
+
+    update: (id: string, invoiceData: any) =>
+      this.makeRequest<{ success: boolean; data: { invoice: any } }>(`/amc-invoices/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(invoiceData),
+      }),
+
+    delete: (id: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/amc-invoices/${id}`, {
+        method: 'DELETE',
+      }),
+
+    recordPayment: (id: string, paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: { invoice: any; payment: any } }>(`/amc-invoices/${id}/payment`, {
+        method: 'POST',
+        body: JSON.stringify(paymentData),
+      }),
+
+    getStats: (params?: any) => {
+      const queryString = params ? `?${new URLSearchParams(params)}` : '';
+      return this.makeRequest<{ success: boolean; data: any }>(`/amc-invoices/stats${queryString}`);
+    },
+
+    sendEmail: (id: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/amc-invoices/${id}/send-email`, {
+        method: 'POST',
+      }),
+  };
+
   // AMC Quotation Payments APIs
   amcQuotationPayments = {
     getAll: (params?: any) =>
@@ -2377,6 +2425,82 @@ class ApiClient {
 
     generateReceipt: (id: string) =>
       this.makeRequest<Blob>(`/amc-quotation-payments/${id}/receipt`, {
+        responseType: 'blob',
+      }),
+  };
+
+  // AMC Invoice Payments APIs
+  amcInvoicePayments = {
+    // Get all AMC invoice payments with optional filtering
+    getAll: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: { payments: any[]; pagination: any } }>(`/amc-invoice-payments${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    // Get AMC invoice payment by ID
+    getById: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc-invoice-payments/${id}`),
+
+    // Get payments for a specific AMC invoice
+    getByInvoice: (invoiceId: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc-invoice-payments/invoice/${invoiceId}`),
+
+    // Get all payments for a specific AMC invoice (alternative route)
+    getPaymentsByInvoice: (invoiceId: string) =>
+      this.makeRequest<{ success: boolean; data: { payments: any[] } }>(`/amc-invoice-payments/${invoiceId}/payments`),
+
+    // Get payment summary for an AMC invoice
+    getPaymentSummary: (invoiceId: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc-invoice-payments/${invoiceId}/payment-summary`),
+
+    // Create a new AMC invoice payment
+    create: (paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/amc-invoice-payments', {
+        method: 'POST',
+        body: JSON.stringify(paymentData),
+      }),
+
+    // Create a new payment for an AMC invoice (alternative route)
+    createForInvoice: (invoiceId: string, paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc-invoice-payments/${invoiceId}/payments`, {
+        method: 'POST',
+        body: JSON.stringify(paymentData),
+      }),
+
+    // Update AMC invoice payment status
+    updateStatus: (id: string, statusData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc-invoice-payments/${id}/status`, {
+        method: 'PUT',
+        body: JSON.stringify(statusData),
+      }),
+
+    // Update an existing payment
+    update: (id: string, paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc-invoice-payments/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(paymentData),
+      }),
+
+    // Update an existing payment (alternative route)
+    updatePayment: (invoiceId: string, paymentId: string, paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc-invoice-payments/${invoiceId}/payments/${paymentId}`, {
+        method: 'PUT',
+        body: JSON.stringify(paymentData),
+      }),
+
+    // Delete AMC invoice payment
+    delete: (id: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/amc-invoice-payments/${id}`, {
+        method: 'DELETE',
+      }),
+
+    // Delete a payment (alternative route)
+    deletePayment: (invoiceId: string, paymentId: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/amc-invoice-payments/${invoiceId}/payments/${paymentId}`, {
+        method: 'DELETE',
+      }),
+
+    // Generate payment receipt PDF for AMC invoice payment
+    generateReceipt: (id: string) =>
+      this.makeRequest<Blob>(`/amc-invoice-payments/${id}/receipt`, {
         responseType: 'blob',
       }),
   };
